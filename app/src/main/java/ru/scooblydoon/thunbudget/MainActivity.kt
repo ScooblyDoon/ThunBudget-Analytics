@@ -79,6 +79,9 @@ private fun ThunBudgetApp() {
     var expenses by remember { mutableStateOf(store.loadExpenses()) }
     var showAdd by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showPeriodEditor by remember { mutableStateOf(false) }
+    var showCategoryManager by remember { mutableStateOf(false) }
+    var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(0) }
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
@@ -116,6 +119,7 @@ private fun ThunBudgetApp() {
                             SegmentedButton(selected=selectedPeriod==0,onClick={ selectedPeriod=0; periodStart=baseMonth.withDayOfMonth(9).toString(); periodEnd=baseMonth.withDayOfMonth(23).toString() },shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
                             SegmentedButton(selected=selectedPeriod==1,onClick={ selectedPeriod=1; periodStart=baseMonth.withDayOfMonth(24).toString(); periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString() },shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
                         }
+                        TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                     }
                     item { Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF315CBA)),shape=RoundedCornerShape(22.dp)) { Column(Modifier.fillMaxWidth().padding(20.dp)) {
@@ -128,12 +132,21 @@ private fun ThunBudgetApp() {
                         MetricCard("Доход в месяц",money(income),Modifier.weight(1f))
                         MetricCard("Средний расход/день",money(if(LocalDate.parse(periodEnd).isBefore(LocalDate.now())) 0.0 else remaining.coerceAtLeast(0.0)/(java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(),LocalDate.parse(periodEnd))+1).coerceAtLeast(1)),Modifier.weight(1f))
                     } }
-                    item { Text("Бюджет по категориям",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item {
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Text("Бюджет по категориям",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
+                            IconButton(onClick={showCategoryManager=true}) { Text("+",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary) }
+                        }
+                    }
                     items(categories) { cat ->
                         val spent=expenses.filter { it.category==cat.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
                         val cap=plannedForPeriod(income,cat.percent,periodStart,periodEnd)
                         Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                            Row(verticalAlignment=Alignment.CenterVertically) { Text(cat.name,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f)); Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text(cat.name,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                IconButton(onClick={editingCategory=cat}) { Text("✎",color=MaterialTheme.colorScheme.primary) }
+                                Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             LinearProgressIndicator(progress={ if(cap>0) (spent/cap).coerceIn(0.0,1.0).toFloat() else 0f },modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
                             Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72)) }
                         } }
@@ -272,6 +285,26 @@ private fun ThunBudgetApp() {
             }
         }
     }
+    if(showPeriodEditor) PeriodEditorDialog(periodStart,periodEnd,onDismiss={showPeriodEditor=false},onSave={from,to->
+        periodStart=from; periodEnd=to; selectedPeriod=-1; showPeriodEditor=false
+    })
+    if(showCategoryManager) CategoryManagerDialog(categories,onDismiss={showCategoryManager=false},onAdd={name,percent->
+        if(categories.none{it.name.equals(name,true)}) {
+            categories=categories+BudgetCategory(name,percent); store.saveCategories(categories)
+        }
+    },onDelete={cat->
+        categories=categories.filterNot{it.name==cat.name}; store.saveCategories(categories); showCategoryManager=false
+    },onEdit={cat->editingCategory=cat;showCategoryManager=false})
+    editingCategory?.let { oldCat ->
+        CategoryEditDialog(oldCat,onDismiss={editingCategory=null},onSave={name,percent->
+            if(categories.none{it.name.equals(name,true)&&it.name!=oldCat.name}) {
+                categories=categories.map{if(it.name==oldCat.name) it.copy(name=name,percent=percent) else it}
+                expenses=expenses.map{if(it.category==oldCat.name) it.copy(category=name) else it}
+                store.saveCategories(categories); store.saveExpenses(expenses)
+            }
+            editingCategory=null
+        })
+    }
     selectedCategory?.let { categoryName ->
         val cat=categories.firstOrNull { it.name==categoryName }
         val inPeriod=expenses.filter { it.category==categoryName && it.date>=periodStart && it.date<=periodEnd }.sortedByDescending { it.date }
@@ -377,6 +410,59 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
                 onSave(i,s,cats.map{it.copy(name=it.name.trim())},from,to,sourceNames.zip(cats).filter{it.first.isNotBlank()}.associate{it.first to it.second.name.trim()})
         },enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0) { Text("Сохранить") }
     },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+}
+
+@Composable
+private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave:(String,String)->Unit) {
+    var from by remember(start) { mutableStateOf(start) }
+    var to by remember(end) { mutableStateOf(end) }
+    val valid=runCatching { !LocalDate.parse(to).isBefore(LocalDate.parse(from)) }.getOrDefault(false)
+    AlertDialog(onDismissRequest=onDismiss,title={Text("Отчётный период")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+            Text("Укажи любые даты. Например, с 1-го по 14-е число или с 1-го по конец месяца.")
+            OutlinedTextField(from,{from=it},label={Text("Начало (ГГГГ-ММ-ДД)")},singleLine=true)
+            OutlinedTextField(to,{to=it},label={Text("Окончание (ГГГГ-ММ-ДД)")},singleLine=true)
+            if(!valid) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
+        }
+    },confirmButton={TextButton(onClick={if(valid) onSave(from,to)},enabled=valid){Text("Применить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+}
+
+@Composable
+private fun CategoryManagerDialog(categories:List<BudgetCategory>,onDismiss:()->Unit,onAdd:(String,Double)->Unit,onDelete:(BudgetCategory)->Unit,onEdit:(BudgetCategory)->Unit) {
+    var name by remember { mutableStateOf("") }
+    var percent by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest=onDismiss,title={Text("Категории бюджета")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=480.dp)) {
+            Text("Удаление категории не удаляет старые операции — они останутся в истории.")
+            categories.forEach { cat ->
+                Row(verticalAlignment=Alignment.CenterVertically) {
+                    Text(cat.name,modifier=Modifier.weight(1f))
+                    IconButton(onClick={onEdit(cat)}) { Text("✎") }
+                    IconButton(onClick={onDelete(cat)}) { Text("×",color=Color(0xFFC74444)) }
+                }
+            }
+            Divider()
+            Text("Добавить категорию",fontWeight=FontWeight.SemiBold)
+            OutlinedTextField(name,{name=it},label={Text("Название")},singleLine=true)
+            OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, %")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+        }
+    },confirmButton={
+        val value=percent.replace(',','.').toDoubleOrNull()
+        TextButton(onClick={if(name.isNotBlank()&&value!=null&&value>=0) {onAdd(name.trim(),value);name="";percent=""}},enabled=name.isNotBlank()&&value!=null&&value>=0) { Text("Добавить") }
+    },dismissButton={TextButton(onClick=onDismiss){Text("Готово")}})
+}
+
+@Composable
+private fun CategoryEditDialog(category:BudgetCategory,onDismiss:()->Unit,onSave:(String,Double)->Unit) {
+    var name by remember(category.name) { mutableStateOf(category.name) }
+    var percent by remember(category.name) { mutableStateOf(category.percent.toString()) }
+    val value=percent.replace(',','.').toDoubleOrNull()
+    AlertDialog(onDismissRequest=onDismiss,title={Text("Изменить категорию")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(name,{name=it},label={Text("Название категории")},singleLine=true)
+            OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, %")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+        }
+    },confirmButton={TextButton(onClick={if(name.isNotBlank()&&value!=null&&value>=0) onSave(name.trim(),value)},enabled=name.isNotBlank()&&value!=null&&value>=0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 private fun plannedForPeriod(income: Double, percent: Double, start: String, end: String): Double {
