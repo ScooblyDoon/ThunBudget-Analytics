@@ -23,9 +23,32 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Build debug APK
+      - name: Decode persistent release keystore
+        if: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/thunbudget-release.jks"
+      - name: Build signed release APK
+        if: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 != '' }}
+        env:
+          THUNBUDGET_KEYSTORE_FILE: ${{ runner.temp }}/thunbudget-release.jks
+          THUNBUDGET_KEYSTORE_PASSWORD: ${{ secrets.THUNBUDGET_KEYSTORE_PASSWORD }}
+          THUNBUDGET_KEY_ALIAS: ${{ secrets.THUNBUDGET_KEY_ALIAS }}
+          THUNBUDGET_KEY_PASSWORD: ${{ secrets.THUNBUDGET_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease
+      - name: Upload signed release APK
+        if: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThunBudget-Analytics-release
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Build debug APK (temporary, not suitable for upgrades)
+        if: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 == '' }}
         run: gradle :app:assembleDebug
-      - name: Upload APK
+      - name: Upload debug APK
+        if: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: ThunBudget-Analytics-debug
