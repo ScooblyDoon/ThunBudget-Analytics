@@ -68,8 +68,9 @@ object XlsxExporter {
         val from = LocalDate.of(year, 1, 1).toString(); val to = LocalDate.of(year, 12, 31).toString()
         val rows = mutableListOf<List<Any>>(listOf("Категория", "Доля бюджета, %", "План за год, ₽", "Факт за год, ₽", "Не выбрано, ₽", "Превышение, ₽"))
         cats.forEach { c ->
-            val fact = expenses.filter { it.category == c.name && it.date >= from && it.date <= to }.sumOf { it.amount }
-            val plan = income * 12 * c.percent / 100.0
+            val asOf = minOf(LocalDate.now(), LocalDate.of(year, 12, 31))
+            val fact = expenses.filter { it.category == c.name && it.date >= from && it.date <= asOf.toString() }.sumOf { it.amount }
+            val plan = planned(income, c.percent, LocalDate.of(year, 1, 1), asOf)
             rows.add(listOf(c.name, c.percent, plan, fact, (plan-fact).coerceAtLeast(0.0), (fact-plan).coerceAtLeast(0.0)))
         }
         return rows
