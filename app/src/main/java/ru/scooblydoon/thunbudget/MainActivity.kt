@@ -159,17 +159,9 @@ private fun ThunBudgetApp() {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item { Text("Текущий отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
-                        val currentStart = when {
-                            today.dayOfMonth >= 24 -> today.withDayOfMonth(24)
-                            today.dayOfMonth >= 9 -> today.withDayOfMonth(9)
-                            else -> today.minusMonths(1).withDayOfMonth(24)
-                        }
-                        val currentEnd = when {
-                            today.dayOfMonth >= 24 -> today.plusMonths(1).withDayOfMonth(8)
-                            today.dayOfMonth >= 9 -> today.withDayOfMonth(23)
-                            else -> today.withDayOfMonth(8)
-                        }
-                        val total = expenses.filter { it.date >= currentStart.toString() && it.date <= minOf(today,currentEnd).toString() }.sumOf { it.amount }
+                        val currentStart = LocalDate.parse(periodStart)
+                        val currentEnd = LocalDate.parse(periodEnd)
+                        val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
                     }
                     item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
