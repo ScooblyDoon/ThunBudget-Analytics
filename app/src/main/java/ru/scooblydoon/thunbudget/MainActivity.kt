@@ -82,7 +82,7 @@ private fun ThunBudgetApp() {
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
     var selectedPeriod by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
-    var periodStart by remember { mutableStateOf((if (today.dayOfMonth <= 8) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
+    var periodStart by remember { mutableStateOf((if (today.dayOfMonth <= 8 || today.dayOfMonth >= 24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
     var periodEnd by remember { mutableStateOf((if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
@@ -169,7 +169,12 @@ private fun ThunBudgetApp() {
                     item { Text("Структура расходов",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
                     items(categories) { cat ->
                         val amount=monthExpenses.filter { it.category==cat.name }.sumOf { it.amount }
-                        if(amount>0) Card { Column(Modifier.padding(14.dp)) { Row { Text(cat.name,modifier=Modifier.weight(1f)); Text(money(amount),fontWeight=FontWeight.SemiBold) }; LinearProgressIndicator(progress={if(monthTotal>0)(amount/monthTotal).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(top=8.dp)) } }
+                        val monthPlan=income*cat.percent/100.0
+                        if(amount>0 || monthPlan>0) Card { Column(Modifier.padding(14.dp)) {
+                            Row { Text(cat.name,modifier=Modifier.weight(1f)); Text(money(amount),fontWeight=FontWeight.SemiBold) }
+                            LinearProgressIndicator(progress={if(monthPlan>0)(amount/monthPlan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(top=8.dp),color=if(amount>monthPlan) Color(0xFFC74444) else Color(0xFF168A72))
+                            Text("План: ${money(monthPlan)} · " + if(amount>monthPlan) "Превышение: ${money(amount-monthPlan)}" else "Не выбрано: ${money(monthPlan-amount)}",style=MaterialTheme.typography.bodySmall,color=if(amount>monthPlan) Color(0xFFC74444) else Color(0xFF168A72))
+                        } }
                     }
                     item { Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(income*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge) }
                     item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") } }
