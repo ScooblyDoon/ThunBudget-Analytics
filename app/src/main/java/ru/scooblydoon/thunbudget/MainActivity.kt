@@ -170,7 +170,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,onDismiss:()->Unit,
             OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
             OutlinedTextField(amount,{amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
             ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                OutlinedTextField(category,{},{Modifier.menuAnchor()},readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
+                OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
                 ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { categories.forEach { DropdownMenuItem(text={Text(it.name)},onClick={category=it.name;expanded=false}) } }
             }
             OutlinedTextField(date,{date=it},label={Text("Дата (ГГГГ-ММ-ДД)")},singleLine=true)
