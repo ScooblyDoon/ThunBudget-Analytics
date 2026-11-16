@@ -279,7 +279,7 @@ private fun ThunBudgetApp() {
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
         Scaffold(
             topBar={ TopAppBar(title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }, actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }) },
-            floatingActionButton={ if(tab!=3) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+            floatingActionButton={ Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
                 SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
                     Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
                 }
