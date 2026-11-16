@@ -748,13 +748,13 @@ private fun startOfflineSpeechRecognition(
     onResult: (String) -> Unit,
     onError: (Int) -> Unit
 ) {
-    recognizer.setRecognitionListener(object : RecognitionListener {
+    val errorCallback = onError\n    recognizer.setRecognitionListener(object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() {}
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {}
-        override fun onError(error: Int) { onError(error) }
+        override fun onError(error: Int) { errorCallback(error) }
         override fun onResults(results: Bundle?) {
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
             if (text.isNullOrBlank()) onError(SpeechRecognizer.ERROR_NO_MATCH) else onResult(text)
