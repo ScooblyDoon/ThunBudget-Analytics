@@ -41,7 +41,7 @@ jobs:
           THUNBUDGET_KEY_PASSWORD: ${{ secrets.THUNBUDGET_KEY_PASSWORD }}
         run: gradle :app:assembleRelease
       - name: Upload signed release APK
-        if: ${{ env.THUNBUDGET_SIGNING_KEY != '' }}
+        if: ${{ env.THUNBUDGET_SIGNING_KEY != '' && steps.signed_release.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ThunBudget-Analytics-release
