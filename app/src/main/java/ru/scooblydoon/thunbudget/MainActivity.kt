@@ -34,6 +34,9 @@ private class BudgetStore(context: Context) {
     fun saveIncome(value: Double) { prefs.edit().putString("income", value.toString()).apply() }
     fun loadSavingsGoal() = prefs.getString("savings", "10")!!.toDoubleOrNull() ?: 10.0
     fun saveSavingsGoal(value: Double) { prefs.edit().putString("savings", value.toString()).apply() }
+    fun loadPeriodStart() = prefs.getString("period_start", null)
+    fun loadPeriodEnd() = prefs.getString("period_end", null)
+    fun savePeriod(start:String,end:String) { prefs.edit().putString("period_start",start).putString("period_end",end).apply() }
     fun loadCategories(): List<BudgetCategory> {
         val raw = prefs.getString("categories", null) ?: return listOf(
             BudgetCategory("Продукты", 25.0), BudgetCategory("Транспорт", 10.0),
@@ -86,8 +89,8 @@ private fun ThunBudgetApp() {
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
     var selectedPeriod by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
-    var periodStart by remember { mutableStateOf((if (today.dayOfMonth <= 8 || today.dayOfMonth >= 24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
-    var periodEnd by remember { mutableStateOf((if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
+    var periodStart by remember { mutableStateOf(store.loadPeriodStart() ?: (if (today.dayOfMonth <= 8 || today.dayOfMonth >= 24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
+    var periodEnd by remember { mutableStateOf(store.loadPeriodEnd() ?: (if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var addFromCategory by remember { mutableStateOf<String?>(null) }
@@ -116,8 +119,8 @@ private fun ThunBudgetApp() {
                 0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=96.dp)) {
                     item {
                         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                            SegmentedButton(selected=selectedPeriod==0,onClick={ selectedPeriod=0; periodStart=baseMonth.withDayOfMonth(9).toString(); periodEnd=baseMonth.withDayOfMonth(23).toString() },shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
-                            SegmentedButton(selected=selectedPeriod==1,onClick={ selectedPeriod=1; periodStart=baseMonth.withDayOfMonth(24).toString(); periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString() },shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                            SegmentedButton(selected=selectedPeriod==0,onClick={ selectedPeriod=0; periodStart=baseMonth.withDayOfMonth(9).toString(); periodEnd=baseMonth.withDayOfMonth(23).toString(); store.savePeriod(periodStart,periodEnd) },shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
+                            SegmentedButton(selected=selectedPeriod==1,onClick={ selectedPeriod=1; periodStart=baseMonth.withDayOfMonth(24).toString(); periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString(); store.savePeriod(periodStart,periodEnd) },shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
                         }
                         TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                     }
@@ -286,7 +289,7 @@ private fun ThunBudgetApp() {
         }
     }
     if(showPeriodEditor) PeriodEditorDialog(periodStart,periodEnd,onDismiss={showPeriodEditor=false},onSave={from,to->
-        periodStart=from; periodEnd=to; selectedPeriod=-1; showPeriodEditor=false
+        periodStart=from; periodEnd=to; store.savePeriod(from,to); selectedPeriod=-1; showPeriodEditor=false
     })
     if(showCategoryManager) CategoryManagerDialog(categories,onDismiss={showCategoryManager=false},onAdd={name,percent->
         if(categories.none{it.name.equals(name,true)}) {
@@ -347,7 +350,7 @@ private fun ThunBudgetApp() {
             expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
             store.saveExpenses(expenses)
         }
-        income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end
+        income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; store.savePeriod(start,end)
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
     })
 }
