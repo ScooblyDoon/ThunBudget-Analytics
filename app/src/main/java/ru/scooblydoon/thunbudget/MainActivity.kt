@@ -542,7 +542,7 @@ private fun ThunBudgetApp() {
     }
     if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,onDismiss={showSettings=false},onBackup={
         backupExportLauncher.launch("ThunBudget-backup-${LocalDate.now()}.json")
-    },onRestore={showRestoreConfirmation=true},onSave={newIncome,newSavings,newCats,start,end,renameMap->
+    },onRestore={showSettings=false;showRestoreConfirmation=true},onSave={newIncome,newSavings,newCats,start,end,renameMap->
         if (renameMap.isNotEmpty()) {
             expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
             store.saveExpenses(expenses)
