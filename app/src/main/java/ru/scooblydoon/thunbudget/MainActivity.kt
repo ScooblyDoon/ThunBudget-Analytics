@@ -655,7 +655,16 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),onDismiss={showSettings=false},onBackup={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),onDismiss={showSettings=false},onRestoreAutomatic={
+        val restored=store.restoreAutomaticBackup()
+        if(restored) {
+            income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
+            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes()
+            periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
+            selectedPeriod=-1; backupMessage="Автоматическая резервная копия восстановлена."
+        } else backupMessage="Не удалось восстановить автоматическую копию."
+        showSettings=false
+    },onBackup={
         backupExportLauncher.launch("ThunBudget-backup-${LocalDate.now()}.json")
     },onRestore={showSettings=false;showRestoreConfirmation=true},onRestorePrevious={
         val restored = store.restorePreviousBackup()
@@ -791,7 +800,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,hasPreviousRestoreBackup:Boolean,onDismiss:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
+private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
@@ -806,7 +815,8 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
             item {
                 Text("Сохрани копию всех доходов, расходов, категорий и настроек в JSON-файл. Файл можно хранить отдельно от приложения и использовать после переустановки.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию") }
-                OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из копии") }
+                if(hasAutomaticBackup) OutlinedButton(onClick=onRestoreAutomatic,modifier=Modifier.fillMaxWidth()) { Text("Восстановить автокопию приложения") }
+                OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из файла") }
                 if(hasPreviousRestoreBackup) OutlinedButton(onClick=onRestorePrevious,modifier=Modifier.fillMaxWidth()) { Text("Отменить последнее восстановление") }
             }
             item { Divider() }
