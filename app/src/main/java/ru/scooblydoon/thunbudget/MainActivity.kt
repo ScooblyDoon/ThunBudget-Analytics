@@ -1051,13 +1051,15 @@ private fun startOfflineSpeechRecognition(
 }
 
 private fun parseSpokenAmount(normalized: String): Double? {
-    // Сначала точные цифровые значения: 1500, 1 500, 54 тысячи, 2.5 млн.
+    // SpeechRecognizer may use narrow/non-breaking spaces in grouped numbers (e.g. «2 000»).
+    // A dot followed by three digits is also treated as a thousands separator («2.000»).
+    val canonical = normalized.replace(Regex("""[\s\p{Z}]+"""), " ").trim()
     val digitMatch = Regex(
-        """(?<!\d)(\d+(?:[ \u00A0]\d{3})*(?:[,.]\d{1,2})?)\s*(тысяч[а-я]*|тыс\.?|миллион[а-я]*|млн\.?|миллиард[а-я]*|млрд\.?)?"""
-    ).find(normalized)
-    if (digitMatch != null) {
+        """(?<!\d)(\d+(?:(?:[ \u00A0\u202F\u2009]|\.)\d{3})*(?:[,.]\d{1,2})?)\s*(тысяч[а-я]*|тыс\.?|миллион[а-я]*|млн\.?|миллиард[а-я]*|млрд\.?)?"""
+    ).find(canonical)
         val number = digitMatch.groupValues[1]
-            .replace(Regex("""[\s\u00A0]+"""), "")
+            .replace(Regex("""[\s\p{Z}]+"""), "")
+            .replace(".", "")
             .replace(',', '.')
             .toDoubleOrNull()
         if (number != null && number > 0.0) {
