@@ -52,10 +52,10 @@ object XlsxImporter {
             val category = row.getOrNull(2)?.trim().orEmpty()
             val amount = row.getOrNull(3)?.trim()?.replace(" ", "")?.replace(',', '.')?.toDoubleOrNull()
             require(title.isNotBlank() && category.isNotBlank() && amount != null && amount.isFinite() && amount > 0.0) {
-                "В Excel обнаружена операция с пустыми или некорректными полями (строка \${index + 2})."
+                "В Excel обнаружена операция с пустыми или некорректными полями (строка ${index + 2})."
             }
             require(runCatching { LocalDate.parse(date) }.isSuccess) {
-                "В Excel обнаружена некорректная дата операции (строка \${index + 2})."
+                "В Excel обнаружена некорректная дата операции (строка ${index + 2})."
             }
             Expense(now + index, title, category, amount, date)
         }
