@@ -142,9 +142,7 @@ private class BudgetStore(context: Context) {
             require(name.isNotBlank() && percent.isFinite() && percent >= 0.0) { "В копии найдена некорректная категория." }
             BudgetCategory(name, percent)
         }
-        require(categories.isNotEmpty()) { "В резервной копии нет категорий." }
         require(categories.map { it.name.lowercase(Locale.ROOT) }.distinct().size == categories.size) { "В копии есть повторяющиеся категории." }
-        require(categories.sumOf { it.percent } <= 100.000001) { "Сумма долей категорий превышает 100%." }
 
         val expenseArray = data.getJSONArray("expenses")
         val expenses = (0 until expenseArray.length()).map { index ->
