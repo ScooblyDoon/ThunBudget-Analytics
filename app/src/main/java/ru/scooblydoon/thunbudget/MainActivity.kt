@@ -779,8 +779,8 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
     val hasExpenseCommand = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход").any { normalized.contains(it) }
     if (!hasExpenseCommand) return null
 
-    val amountMatch = Regex("""(?<!\\d)(\\d[\\d \\u00A0]*(?:[,.]\\d{1,2})?)(?!\\d)""").find(normalized) ?: return null
-    val amount = amountMatch.value.replace(" ", "").replace("\\u00A0", "").replace(',', '.').toDoubleOrNull()
+    val amountMatch = Regex("""(?<!\d)(\d[\d \u00A0]*(?:[,.]\d{1,2})?)(?!\d)""").find(normalized) ?: return null
+    val amount = amountMatch.value.replace(" ", "").replace("\u00A0", "").replace(',', '.').toDoubleOrNull()
         ?.takeIf { it > 0.0 } ?: return null
 
     val matchedCategory = categories
