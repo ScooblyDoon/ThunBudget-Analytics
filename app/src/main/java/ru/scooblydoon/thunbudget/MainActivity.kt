@@ -1052,16 +1052,17 @@ private fun startOfflineSpeechRecognition(
 
 private fun parseSpokenAmount(normalized: String): Double? {
     // SpeechRecognizer may use narrow/non-breaking spaces in grouped numbers (e.g. «2 000»).
-    // A dot followed by three digits is also treated as a thousands separator («2.000»).
+    // A dot followed by three digits is treated as a thousands separator («2.000»).
     val canonical = normalized.replace(Regex("""[\s\p{Z}]+"""), " ").trim()
     val digitMatch = Regex(
         """(?<!\d)(\d+(?:(?:[ \u00A0\u202F\u2009]|\.)\d{3})*(?:[,.]\d{1,2})?)\s*(тысяч[а-я]*|тыс\.?|миллион[а-я]*|млн\.?|миллиард[а-я]*|млрд\.?)?"""
     ).find(canonical)
-        val number = digitMatch.groupValues[1]
-            .replace(Regex("""[\s\p{Z}]+"""), "")
-            .replace(".", "")
-            .replace(',', '.')
-            .toDoubleOrNull()
+    if (digitMatch != null) {
+        val rawNumber = digitMatch.groupValues[1].replace(Regex("""[\s\p{Z}]+"""), "")
+        val normalizedNumber = if (Regex("""^\d{1,3}(?:\.\d{3})+$""").matches(rawNumber)) {
+            rawNumber.replace(".", "")
+        } else rawNumber
+        val number = normalizedNumber.replace(',', '.').toDoubleOrNull()
         if (number != null && number > 0.0) {
             val scale = when {
                 digitMatch.groupValues[2].startsWith("миллиард") || digitMatch.groupValues[2].startsWith("млрд") -> 1_000_000_000.0
