@@ -309,8 +309,7 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,onDismiss={showSettings=false},onSave={newIncome,newSavings,newCats,start,end->
-        val renameMap = if (categories.size == newCats.size) categories.zip(newCats).associate { it.first.name to it.second.name } else emptyMap()
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,onDismiss={showSettings=false},onSave={newIncome,newSavings,newCats,start,end,renameMap->
         if (renameMap.isNotEmpty()) {
             expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
             store.saveExpenses(expenses)
@@ -343,10 +342,11 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,onDismiss:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String)->Unit) {
+private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,onDismiss:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
+    var sourceNames by remember { mutableStateOf(categories.map { it.name }) }
     var from by remember { mutableStateOf(start) }
     var to by remember { mutableStateOf(end) }
     AlertDialog(onDismissRequest=onDismiss,title={Text("Настройки бюджета")},text={
@@ -362,11 +362,11 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
                     OutlinedTextField(cats[index].name,{v->cats=cats.toMutableList().also{it[index]=it[index].copy(name=v)}},label={Text("Название категории")},singleLine=true,modifier=Modifier.fillMaxWidth())
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         OutlinedTextField(cats[index].percent.toString(),{v->cats=cats.toMutableList().also{it[index]=it[index].copy(percent=v.replace(',','.').toDoubleOrNull()?:0.0)}},label={Text("Доля, %")},modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
-                        TextButton(onClick={cats=cats.filterIndexed{idx,_->idx!=index}}) { Text("Удалить",color=Color(0xFFC74444)) }
+                        TextButton(onClick={cats=cats.filterIndexed{idx,_->idx!=index};sourceNames=sourceNames.filterIndexed{idx,_->idx!=index}}) { Text("Удалить",color=Color(0xFFC74444)) }
                     }
                 }
             }
-            item { OutlinedButton(onClick={cats=cats+BudgetCategory("",0.0)},modifier=Modifier.fillMaxWidth()) { Text("Добавить категорию") } }
+            item { OutlinedButton(onClick={cats=cats+BudgetCategory("",0.0);sourceNames=sourceNames+""},modifier=Modifier.fillMaxWidth()) { Text("Добавить категорию") } }
             item { Text("Сумма долей: ${cats.sumOf{it.percent}}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     },confirmButton={
@@ -374,7 +374,7 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
             val i=inc.replace(',','.').toDoubleOrNull(); val s=sav.replace(',','.').toDoubleOrNull()
             val validDates=runCatching{LocalDate.parse(from);LocalDate.parse(to)}.isSuccess
             if(i!=null&&i>0&&s!=null&&s>=0&&s<=100&&cats.isNotEmpty()&&cats.all{it.name.isNotBlank()&&it.percent>=0}&&cats.map{it.name.trim().lowercase()}.distinct().size==cats.size&&cats.sumOf{it.percent}<=100.0&&validDates&&!LocalDate.parse(to).isBefore(LocalDate.parse(from)))
-                onSave(i,s,cats.map{it.copy(name=it.name.trim())},from,to)
+                onSave(i,s,cats.map{it.copy(name=it.name.trim())},from,to,sourceNames.zip(cats).filter{it.first.isNotBlank()}.associate{it.first to it.second.name.trim()})
         },enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0) { Text("Сохранить") }
     },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
