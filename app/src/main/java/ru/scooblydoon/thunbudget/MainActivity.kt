@@ -250,6 +250,7 @@ private fun ThunBudgetApp() {
     var showBackupDialog by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var pendingBackupJson by remember { mutableStateOf<String?>(null) }
+    var pendingLegacyImport by remember { mutableStateOf<LegacyBudgetImport?>(null) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
     var showCategoryManager by remember { mutableStateOf(false) }
@@ -307,6 +308,13 @@ private fun ThunBudgetApp() {
                     ?: error("Не удалось прочитать выбранный файл.")
             }.onSuccess { pendingBackupJson = it }
              .onFailure { backupMessage = "Не удалось прочитать файл: ${it.message ?: "ошибка чтения"}" }
+        }
+    }
+    val legacyImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { XlsxImporter.read(context, uri) }
+                .onSuccess { pendingLegacyImport = it }
+                .onFailure { backupMessage = "Не удалось перенести данные из Excel: ${it.message ?: "ошибка чтения"}" }
         }
     }
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
@@ -625,11 +633,17 @@ private fun ThunBudgetApp() {
                 }) { Text("Сохранить копию") }
             },
             dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        showBackupDialog = false
-                        backupImportLauncher.launch(arrayOf("application/json", "text/*"))
-                    }) { Text("Восстановить") }
+                Column(horizontalAlignment = Alignment.End) {
+                    Row {
+                        TextButton(onClick = {
+                            showBackupDialog = false
+                            backupImportLauncher.launch(arrayOf("application/json", "text/*"))
+                        }) { Text("Из JSON") }
+                        TextButton(onClick = {
+                            showBackupDialog = false
+                            legacyImportLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                        }) { Text("Из старого Excel") }
+                    }
                     TextButton(onClick = { showBackupDialog = false }) { Text("Закрыть") }
                 }
             }
@@ -666,6 +680,29 @@ private fun ThunBudgetApp() {
             dismissButton = { TextButton(onClick = { pendingBackupJson = null }) { Text("Отмена") } }
         )
     }
+    pendingLegacyImport?.let { imported ->
+        AlertDialog(
+            onDismissRequest = { pendingLegacyImport = null },
+            title = { Text("Перенести данные из старой версии?") },
+            text = {
+                Text("Будет перенесено расходов: ${imported.expenses.size}. Категорий из Excel: ${imported.categories.size}. Текущая история расходов будет заменена. Месячный доход и доходы за отчётные периоды старый Excel-экспорт не содержит — их нужно будет внести заново.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    expenses = imported.expenses
+                    store.saveExpenses(expenses)
+                    if (imported.categories.isNotEmpty()) {
+                        categories = imported.categories
+                        store.saveCategories(categories)
+                    }
+                    pendingLegacyImport = null
+                    backupMessage = "Перенос завершён. Расходы: ${expenses.size}; категории: ${categories.size}. Внеси месячный и периодные доходы заново."
+                }) { Text("Перенести") }
+            },
+            dismissButton = { TextButton(onClick = { pendingLegacyImport = null }) { Text("Отмена") } }
+        )
+    }
+
     backupMessage?.let { message ->
         AlertDialog(
             onDismissRequest = { backupMessage = null },
