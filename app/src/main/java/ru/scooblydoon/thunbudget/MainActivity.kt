@@ -25,6 +25,7 @@ import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -217,6 +218,17 @@ private fun ThunBudgetApp() {
                     voiceDraft = parsed
                     voiceAmount = parsed.amount.toLong().takeIf { it.toDouble() == parsed.amount }?.toString()
                         ?: parsed.amount.toString()
+                    if (parsed.isEdit) {
+                        voiceEditCandidates = expenses.filter { it.category == parsed.category }.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
+                        voiceSelectedExpenseId = voiceEditCandidates.firstOrNull()?.id
+                        if (voiceEditCandidates.isEmpty()) {
+                            voiceDraft = null
+                            voiceMessage = "Не найдена сохранённая операция в категории «${parsed.category}». Укажи категорию, например: «Измени расход продукты на 1500 рублей»."
+                        }
+                    } else {
+                        voiceEditCandidates = emptyList()
+                        voiceSelectedExpenseId = null
+                    }
                 }
             }, onError = { code ->
                 isListening = false
@@ -230,13 +242,17 @@ private fun ThunBudgetApp() {
     var showCategoryManager by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(0) }
-    var showMonthCategories by remember { mutableStateOf(true) }
-    var showPeriodCategories by remember { mutableStateOf(true) }
-    var showYearCategories by remember { mutableStateOf(true) }
-    var showAdvice by remember { mutableStateOf(true) }
-    var showSavingsInfo by remember { mutableStateOf(true) }
-    var showPlanChart by remember { mutableStateOf(true) }
-    var showPieChart by remember { mutableStateOf(true) }
+    var showMonthCategories by rememberSaveable { mutableStateOf(true) }
+    var showPeriodCategories by rememberSaveable { mutableStateOf(true) }
+    var showYearCategories by rememberSaveable { mutableStateOf(true) }
+    var showAdvice by rememberSaveable { mutableStateOf(true) }
+    var showSavingsInfo by rememberSaveable { mutableStateOf(true) }
+    var showPlanChart by rememberSaveable { mutableStateOf(true) }
+    var showPieChart by rememberSaveable { mutableStateOf(true) }
+    var showHistoryFilters by rememberSaveable { mutableStateOf(true) }
+    var voiceEditCandidates by remember { mutableStateOf<List<Expense>>(emptyList()) }
+    var voiceSelectedExpenseId by remember { mutableStateOf<Long?>(null) }
+    var voiceEditExpanded by remember { mutableStateOf(false) }
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
     var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
@@ -477,8 +493,12 @@ private fun ThunBudgetApp() {
                 )
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
-                    item {
-                        var expandedCategory by remember { mutableStateOf(false) }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) {
+                        Text("Фильтры операций",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                        TextButton(onClick={showHistoryFilters=!showHistoryFilters}) { Text(if(showHistoryFilters) "Скрыть ▲" else "Показать ▼") }
+                    } }
+                    if(showHistoryFilters) item {
+                        var expandedCategory by rememberSaveable { mutableStateOf(false) }
                         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(value=historyQuery,onValueChange={historyQuery=it},modifier=Modifier.fillMaxWidth(),label={Text("Поиск по названию или категории")},singleLine=true,leadingIcon={Text("⌕")})
                             ExposedDropdownMenuBox(expanded=expandedCategory,onExpandedChange={expandedCategory=it}) {
@@ -548,12 +568,32 @@ private fun ThunBudgetApp() {
     voiceDraft?.let { draft ->
         AlertDialog(
             onDismissRequest={voiceDraft=null},
-            title={Text(when { draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
+            title={Text(when { draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
             text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 if (draft.isCategoryAdd || draft.isCategoryEdit) {
                     Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)
                 } else {
                     Text("Распознано: ${draft.sourcePhrase}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (draft.isEdit) {
+                        val candidates = voiceEditCandidates
+                        val selected = candidates.firstOrNull { it.id == voiceSelectedExpenseId }
+                        ExposedDropdownMenuBox(expanded=voiceEditExpanded,onExpandedChange={voiceEditExpanded=it}) {
+                            OutlinedTextField(
+                                value=selected?.let { "${it.title} · ${it.date} · ${money(it.amount)}" } ?: "Операция не выбрана",
+                                onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),
+                                label={Text("Какую операцию изменить")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(voiceEditExpanded)}
+                            )
+                            ExposedDropdownMenu(expanded=voiceEditExpanded,onDismissRequest={voiceEditExpanded=false}) {
+                                candidates.forEach { candidate ->
+                                    DropdownMenuItem(
+                                        text={Text("${candidate.title} · ${candidate.date} · ${money(candidate.amount)}")},
+                                        onClick={voiceSelectedExpenseId=candidate.id;voiceEditExpanded=false;voiceAmount=candidate.amount.toString()}
+                                    )
+                                }
+                            }
+                        }
+                        Text("Текущая сумма: ${selected?.let { money(it.amount) } ?: "не выбрана"}",style=MaterialTheme.typography.bodySmall)
+                    }
                     OutlinedTextField(
                         value=voiceAmount,
                         onValueChange={ voiceAmount=it },
@@ -568,10 +608,18 @@ private fun ThunBudgetApp() {
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
             confirmButton={TextButton(
-                enabled = draft.isCategoryAdd || draft.isCategoryEdit || (voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true),
+                enabled = draft.isCategoryAdd || draft.isCategoryEdit || ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId })),
                 onClick={
                 val confirmedAmount = voiceAmount.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
                 when {
+                    draft.isEdit -> {
+                        val amount = confirmedAmount ?: return@TextButton
+                        val targetId = voiceSelectedExpenseId ?: return@TextButton
+                        val target = expenses.firstOrNull { it.id == targetId } ?: return@TextButton
+                        expenses = expenses.map { if (it.id == targetId) it.copy(amount = amount) else it }.sortedByDescending { it.date }
+                        store.saveExpenses(expenses)
+                        voiceMessage = "Операция «${target.title}» от ${target.date} изменена: ${money(target.amount)} → ${money(amount)}."
+                    }
                     draft.isCategoryAdd -> {
                         if (categories.none { it.name.equals(draft.category,true) } && categories.sumOf { it.percent } + draft.amount <= 100.0) {
                             categories = categories + BudgetCategory(draft.category,draft.amount)
@@ -607,7 +655,7 @@ private fun ThunBudgetApp() {
                     }
                 }
                 voiceDraft=null
-            }) { Text(when { draft.isCategoryAdd -> "Добавить категорию"; draft.isCategoryEdit -> "Изменить долю"; draft.isIncome -> "Сохранить доход"; else -> "Сохранить расход" }) }},
+            }) { Text(when { draft.isCategoryAdd -> "Добавить категорию"; draft.isCategoryEdit -> "Изменить долю"; draft.isEdit -> "Сохранить изменения"; draft.isIncome -> "Сохранить доход"; else -> "Сохранить расход" }) }},
             dismissButton={TextButton(onClick={voiceDraft=null}) { Text("Отмена") }}
         )
     }
@@ -1013,7 +1061,8 @@ private data class VoiceExpenseDraft(
     val sourcePhrase: String = "",
     val isIncome: Boolean = false,
     val isCategoryAdd: Boolean = false,
-    val isCategoryEdit: Boolean = false
+    val isCategoryEdit: Boolean = false,
+    val isEdit: Boolean = false
 )
 
 private fun startOfflineSpeechRecognition(
@@ -1168,9 +1217,11 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
         "доход", "поступление", "получил", "получила", "зарплата", "зачислили",
         "внеси доход", "добавить доход", "добавь доход", "мне перевели"
     ).any { normalized.contains(it) }
+    val isEdit = listOf("измени расход", "изменить расход", "поменяй расход", "поменять расход", "отредактируй расход", "исправь расход").any { normalized.contains(it) }
     val hasExpenseCommand = listOf(
         "добавь", "добавить", "запиши", "записать", "потратил", "потратила",
-        "расход", "внеси", "купил", "купила", "оплатил", "оплатила"
+        "расход", "внеси", "купил", "купила", "оплатил", "оплатила",
+        "измени", "изменить", "поменяй", "поменять", "отредактируй", "исправь"
     ).any { normalized.contains(it) }
     if (!isIncome && !hasExpenseCommand) return null
 
@@ -1182,6 +1233,6 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
     return VoiceExpenseDraft(
         title = if (isIncome) "Голосовой доход" else matchedCategory!!.name,
         category = if (isIncome) "Доход" else matchedCategory!!.name,
-        amount = amount, date = date.toString(), isIncome = isIncome
+        amount = amount, date = date.toString(), isIncome = isIncome, isEdit = isEdit
     )
 }
