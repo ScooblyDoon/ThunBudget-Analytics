@@ -187,6 +187,7 @@ private fun ThunBudgetApp() {
     var periodIncomes by remember { mutableStateOf(store.loadPeriodIncomes()) }
     var showAdd by remember { mutableStateOf(false) }
     var voiceDraft by remember { mutableStateOf<VoiceExpenseDraft?>(null) }
+    var voiceAmount by remember { mutableStateOf("") }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
     var isListening by remember { mutableStateOf(false) }
     val offlineSpeechRecognizer = remember(context) {
@@ -209,11 +210,13 @@ private fun ThunBudgetApp() {
                 val parsed = alternatives
                     .mapNotNull { phrase -> parseVoiceExpense(phrase, categories)?.let { draft -> phrase to draft } }
                     .maxByOrNull { (phrase, _) -> voiceRecognitionScore(phrase, categories) }
-                    ?.second
+                    ?.let { (phrase, draft) -> draft.copy(sourcePhrase = phrase) }
                 if (parsed == null) {
                     voiceMessage = "Не удалось разобрать команду. Скажи сумму и назначение: «Добавь расход 1 500 рублей на продукты» или «Добавь доход 54 тысячи рублей». Распознано: ${alternatives.joinToString(" / ")}"
                 } else {
                     voiceDraft = parsed
+                    voiceAmount = parsed.amount.toLong().takeIf { it.toDouble() == parsed.amount }?.toString()
+                        ?: parsed.amount.toString()
                 }
             }, onError = { code ->
                 isListening = false
@@ -550,13 +553,24 @@ private fun ThunBudgetApp() {
                 if (draft.isCategoryAdd || draft.isCategoryEdit) {
                     Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)
                 } else {
-                    Text("${money(draft.amount)}" + if(draft.isIncome) " · доход" else " · ${draft.category}",fontWeight=FontWeight.Bold)
+                    Text("Распознано: ${draft.sourcePhrase}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value=voiceAmount,
+                        onValueChange={ voiceAmount=it },
+                        label={Text("Сумма, ₽")},
+                        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
+                        singleLine=true
+                    )
                     Text("Дата: ${LocalDate.parse(draft.date).format(formatter)}")
                     Text("Описание: ${draft.title}")
+                    Text("Если распознавание пропустило слово «тысяч», исправь сумму здесь. Неверную сумму не сохраняй.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
-            confirmButton={TextButton(onClick={
+            confirmButton={TextButton(
+                enabled = draft.isCategoryAdd || draft.isCategoryEdit || (voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true),
+                onClick={
+                val confirmedAmount = voiceAmount.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
                 when {
                     draft.isCategoryAdd -> {
                         if (categories.none { it.name.equals(draft.category,true) } && categories.sumOf { it.percent } + draft.amount <= 100.0) {
@@ -576,12 +590,16 @@ private fun ThunBudgetApp() {
                         }
                     }
                     draft.isIncome -> {
+                        val amount = confirmedAmount ?: return@TextButton
                         val existing=periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
-                        periodIncomes=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,existing+draft.amount)
-                        store.savePeriodIncomes(periodIncomes)
+                        val updated=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,existing+amount)
+                        store.savePeriodIncomes(updated)
+                        periodIncomes=store.loadPeriodIncomes()
+                        voiceMessage = "Доход ${money(amount)} сохранён за отчётный период ${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}. Общий доход за период: ${money(periodIncome + amount)}."
                     }
                     else -> {
-                        val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,draft.amount,draft.date))+expenses).sortedByDescending { it.date }
+                        val amount = confirmedAmount ?: return@TextButton
+                        val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,amount,draft.date))+expenses).sortedByDescending { it.date }
                         expenses=updated; store.saveExpenses(expenses)
                         val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
                         val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
@@ -992,6 +1010,7 @@ private data class VoiceExpenseDraft(
     val category: String,
     val amount: Double,
     val date: String,
+    val sourcePhrase: String = "",
     val isIncome: Boolean = false,
     val isCategoryAdd: Boolean = false,
     val isCategoryEdit: Boolean = false
