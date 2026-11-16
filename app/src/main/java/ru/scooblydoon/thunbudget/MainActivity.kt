@@ -297,7 +297,7 @@ private fun ThunBudgetApp() {
                 context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
                     ?: error("Не удалось открыть файл для записи.")
             }.onSuccess { backupMessage = "Резервная копия успешно сохранена." }
-             .onFailure { backupMessage = "Не удалось создать копию: \${it.message ?: "ошибка записи"}" }
+             .onFailure { backupMessage = "Не удалось создать копию: ${it.message ?: "ошибка записи"}" }
         }
     }
     val backupImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -306,7 +306,7 @@ private fun ThunBudgetApp() {
                 context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
                     ?: error("Не удалось прочитать выбранный файл.")
             }.onSuccess { pendingBackupJson = it }
-             .onFailure { backupMessage = "Не удалось прочитать файл: \${it.message ?: "ошибка чтения"}" }
+             .onFailure { backupMessage = "Не удалось прочитать файл: ${it.message ?: "ошибка чтения"}" }
         }
     }
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
@@ -621,7 +621,7 @@ private fun ThunBudgetApp() {
             confirmButton = {
                 TextButton(onClick = {
                     showBackupDialog = false
-                    backupExportLauncher.launch("ThunBudget-backup-\${LocalDate.now()}.json")
+                    backupExportLauncher.launch("ThunBudget-backup-${LocalDate.now()}.json")
                 }) { Text("Сохранить копию") }
             },
             dismissButton = {
@@ -655,11 +655,11 @@ private fun ThunBudgetApp() {
                             }
                             selectedPeriod = -1
                             pendingBackupJson = null
-                            backupMessage = "Данные восстановлены. Расходы: \${expenses.size}; категории: \${categories.size}."
+                            backupMessage = "Данные восстановлены. Расходы: ${expenses.size}; категории: ${categories.size}."
                         }
                         .onFailure {
                             pendingBackupJson = null
-                            backupMessage = "Резервная копия не восстановлена: \${it.message ?: "неизвестная ошибка"}. Текущие данные не изменены."
+                            backupMessage = "Резервная копия не восстановлена: ${it.message ?: "неизвестная ошибка"}. Текущие данные не изменены."
                         }
                 }) { Text("Восстановить") }
             },
