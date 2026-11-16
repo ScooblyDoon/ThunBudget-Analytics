@@ -310,6 +310,11 @@ private fun ThunBudgetApp() {
         })
     }
     if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,onDismiss={showSettings=false},onSave={newIncome,newSavings,newCats,start,end->
+        val renameMap = if (categories.size == newCats.size) categories.zip(newCats).associate { it.first.name to it.second.name } else emptyMap()
+        if (renameMap.isNotEmpty()) {
+            expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
+            store.saveExpenses(expenses)
+        }
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
     })
