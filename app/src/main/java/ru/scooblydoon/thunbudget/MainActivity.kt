@@ -341,6 +341,9 @@ private fun ThunBudgetApp() {
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
                     }
                     item {
+                        val currentStart = LocalDate.parse(periodStart)
+                        val currentEnd = LocalDate.parse(periodEnd)
+                        val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         val totalDays = (java.time.temporal.ChronoUnit.DAYS.between(currentStart,currentEnd)+1).coerceAtLeast(1)
                         val forecastEnd = minOf(currentEnd,today)
                         val elapsedDays = if (forecastEnd.isBefore(currentStart)) 0L else java.time.temporal.ChronoUnit.DAYS.between(currentStart,forecastEnd)+1
@@ -507,7 +510,15 @@ private fun ThunBudgetApp() {
                         "Сумма" -> if(historyAscending) filteredExpenses.sortedBy { it.amount } else filteredExpenses.sortedByDescending { it.amount }
                         else -> if(historyAscending) filteredExpenses.sortedBy { it.date } else filteredExpenses.sortedByDescending { it.date }
                     }
-                    items(sortedExpenses,key={it.id}) { e -> Card(onClick={ selectedExpense=e }) { Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(e.title,fontWeight=FontWeight.SemiBold); Text("${e.category} · ${e.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Text("−${money(e.amount)}",fontWeight=FontWeight.Bold,color=Color(0xFFC74444)) } } }
+                    if(filteredExpenses.isNotEmpty()) item {
+                        Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.55f))) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Text("Найдено: ${filteredExpenses.size}",modifier=Modifier.weight(1f),style=MaterialTheme.typography.labelLarge)
+                                Text("Итого: ${money(filteredExpenses.sumOf { it.amount })}",fontWeight=FontWeight.Bold,style=MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                    items(sortedExpenses,key={it.id}) { e -> Card(onClick={ selectedExpense=e },shape=RoundedCornerShape(16.dp)) { Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(e.title,fontWeight=FontWeight.SemiBold); Text("${e.category} · ${e.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Text("−${money(e.amount)}",fontWeight=FontWeight.Bold,color=Color(0xFFC74444)) } } }
                 }
             }
         }
