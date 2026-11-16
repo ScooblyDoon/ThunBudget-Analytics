@@ -83,6 +83,46 @@ private class BudgetStore(context: Context) {
         val a=JSONArray(); items.forEach { a.put(JSONObject().put("id",it.id).put("title",it.title).put("category",it.category).put("amount",it.amount).put("date",it.date)) }
         prefs.edit().putString("expenses",a.toString()).apply()
     }
+
+    fun exportBackup(): String {
+        val data = JSONObject()
+        prefs.all.forEach { (key, value) ->
+            if (value is String) data.put(key, value)
+        }
+        return JSONObject()
+            .put("app", "ThunBudget")
+            .put("schemaVersion", 1)
+            .put("createdAt", java.time.Instant.now().toString())
+            .put("data", data)
+            .toString(2)
+    }
+
+    fun restoreBackup(json: String): Boolean = runCatching {
+        val root = JSONObject(json)
+        require(root.getString("app") == "ThunBudget") { "Это не резервная копия ThunBudget." }
+        require(root.getInt("schemaVersion") == 1) { "Версия резервной копии не поддерживается." }
+        val data = root.getJSONObject("data")
+        require(data.has("expenses") && data.has("categories") && data.has("income") && data.has("savings")) {
+            "В резервной копии отсутствуют обязательные данные."
+        }
+        JSONArray(data.getString("expenses"))
+        JSONArray(data.getString("categories"))
+        JSONArray(data.optString("period_incomes", "[]"))
+        val income = data.getString("income").toDoubleOrNull()
+        val savings = data.getString("savings").toDoubleOrNull()
+        require(income != null && income > 0.0 && savings != null && savings in 0.0..100.0) {
+            "В резервной копии обнаружены некорректные настройки бюджета."
+        }
+        val editor = prefs.edit().clear()
+        val keys = data.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = data.get(key)
+            require(value is String) { "Некорректный формат данных резервной копии." }
+            editor.putString(key, value)
+        }
+        editor.commit()
+    }.getOrDefault(false)
 }
 
 class MainActivity : ComponentActivity() {
@@ -175,6 +215,35 @@ private fun ThunBudgetApp() {
     val monthTotal=monthExpenses.sumOf { it.amount }
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
         if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year) }
+    }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var showRestoreConfirmation by remember { mutableStateOf(false) }
+    val backupExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            backupMessage = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { it.write(store.exportBackup().toByteArray(Charsets.UTF_8)) }
+                    ?: error("Не удалось открыть файл для записи.")
+                "Резервная копия успешно сохранена."
+            }.getOrElse { "Не удалось создать копию: ${it.message ?: "ошибка записи"}" }
+        }
+    }
+    val backupImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            backupMessage = runCatching {
+                val json = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: error("Не удалось прочитать выбранный файл.")
+                check(store.restoreBackup(json)) { "Файл повреждён или имеет неподдерживаемый формат." }
+                income = store.loadIncome()
+                savingsGoal = store.loadSavingsGoal()
+                categories = store.loadCategories()
+                expenses = store.loadExpenses()
+                periodIncomes = store.loadPeriodIncomes()
+                periodStart = store.loadPeriodStart() ?: periodStart
+                periodEnd = store.loadPeriodEnd() ?: periodEnd
+                selectedPeriod = -1
+                "Данные успешно восстановлены из резервной копии."
+            }.getOrElse { "Не удалось восстановить данные: ${it.message ?: "ошибка чтения"}" }
+        }
     }
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
         Scaffold(
@@ -471,7 +540,9 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,onDismiss={showSettings=false},onSave={newIncome,newSavings,newCats,start,end,renameMap->
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,onDismiss={showSettings=false},onBackup={
+        backupExportLauncher.launch("ThunBudget-backup-${LocalDate.now()}.json")
+    },onRestore={showRestoreConfirmation=true},onSave={newIncome,newSavings,newCats,start,end,renameMap->
         if (renameMap.isNotEmpty()) {
             expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
             store.saveExpenses(expenses)
@@ -479,6 +550,16 @@ private fun ThunBudgetApp() {
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; store.savePeriod(start,end)
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
     })
+    if(showRestoreConfirmation) AlertDialog(
+        onDismissRequest={showRestoreConfirmation=false},
+        title={Text("Восстановить резервную копию?")},
+        text={Text("Текущие данные приложения будут заменены данными из выбранного файла. Перед продолжением убедись, что текущая версия бюджета сохранена отдельно.")},
+        confirmButton={TextButton(onClick={showRestoreConfirmation=false;backupImportLauncher.launch(arrayOf("application/json","text/*"))}) { Text("Выбрать файл") }},
+        dismissButton={TextButton(onClick={showRestoreConfirmation=false}) { Text("Отмена") }}
+    )
+    backupMessage?.let { message ->
+        AlertDialog(onDismissRequest={backupMessage=null},title={Text("Резервная копия")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
+    }
 
 }}
 
@@ -585,7 +666,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,onDismiss:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
+private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,onDismiss:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
@@ -596,6 +677,13 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
         LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=540.dp)) {
             item { OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
+            item { Text("Резервное копирование",fontWeight=FontWeight.Bold) }
+            item {
+                Text("Сохрани копию всех доходов, расходов, категорий и настроек в JSON-файл. Файл можно хранить отдельно от приложения и использовать после переустановки.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию") }
+                OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из копии") }
+            }
+            item { Divider() }
             item { Text("Период планирования",fontWeight=FontWeight.Bold) }
             item { OutlinedTextField(from,{from=it},label={Text("Начало (ГГГГ-ММ-ДД)")},singleLine=true) }
             item { OutlinedTextField(to,{to=it},label={Text("Окончание (ГГГГ-ММ-ДД)")},singleLine=true) }
