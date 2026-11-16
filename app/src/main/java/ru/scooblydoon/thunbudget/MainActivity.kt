@@ -85,6 +85,13 @@ private fun ThunBudgetApp() {
     var periodStart by remember { mutableStateOf((if (today.dayOfMonth <= 8 || today.dayOfMonth >= 24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
     var periodEnd by remember { mutableStateOf((if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var historySort by remember { mutableStateOf("Дата") }
+    var historyAscending by remember { mutableStateOf(false) }
+    var amountLimit by remember { mutableFloatStateOf(100000f) }
+    var analyticsMonth by remember { mutableStateOf(YearMonth.now()) }
+    var analyticsPeriodMonth by remember { mutableStateOf(YearMonth.now()) }
+    var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
@@ -123,71 +130,169 @@ private fun ThunBudgetApp() {
                     items(categories) { cat ->
                         val spent=expenses.filter { it.category==cat.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
                         val cap=plannedForPeriod(income,cat.percent,periodStart,periodEnd)
-                        Card(shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) {
                             Row(verticalAlignment=Alignment.CenterVertically) { Text(cat.name,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f)); Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                             LinearProgressIndicator(progress={ if(cap>0) (spent/cap).coerceIn(0.0,1.0).toFloat() else 0f },modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
                             Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72)) }
                         } }
                     }
                 }
-                1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
-                    item { MetricCard("Расходы за календарный месяц",money(monthTotal),Modifier.fillMaxWidth()) }
-                    item { MetricCard("Расходы с начала года",money(expenses.filter { it.date.startsWith(LocalDate.now().year.toString()) }.sumOf { it.amount }),Modifier.fillMaxWidth()) }
-                    item { Text("Статистика за год по категориям",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
-                    items(categories) { cat ->
-                        val annualSpent=expenses.filter { it.category==cat.name && it.date>=LocalDate.of(LocalDate.now().year,1,1).toString() && it.date<=LocalDate.now().toString() }.sumOf { it.amount }
-                        val annualPlan=plannedForPeriod(income,cat.percent,LocalDate.of(LocalDate.now().year,1,1).toString(),LocalDate.now().toString())
+                    item { Text("Текущий отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item {
+                        val currentStart = when {
+                            today.dayOfMonth >= 24 -> today.withDayOfMonth(24)
+                            today.dayOfMonth >= 9 -> today.withDayOfMonth(9)
+                            else -> today.minusMonths(1).withDayOfMonth(24)
+                        }
+                        val currentEnd = when {
+                            today.dayOfMonth >= 24 -> today.plusMonths(1).withDayOfMonth(8)
+                            today.dayOfMonth >= 9 -> today.withDayOfMonth(23)
+                            else -> today.withDayOfMonth(8)
+                        }
+                        val total = expenses.filter { it.date >= currentStart.toString() && it.date <= minOf(today,currentEnd).toString() }.sumOf { it.amount }
+                        MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
+                    }
+                    item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item {
+                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick={analyticsMonth=analyticsMonth.minusMonths(1)}) { Text("‹") }
+                            Text(analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU")).withLocale(Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                            TextButton(onClick={if(analyticsMonth<YearMonth.now()) analyticsMonth=analyticsMonth.plusMonths(1)}) { Text("›") }
+                        }
+                        val from=analyticsMonth.atDay(1).toString()
+                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
+                        val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
+                        MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
+                    }
+                    items(categories,key={ "month-"+it.name }) { cat ->
+                        val from=analyticsMonth.atDay(1).toString()
+                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
+                        val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
+                        val plan=plannedForPeriod(income,cat.percent,from,to)
                         Card { Column(Modifier.padding(14.dp)) {
-                            Row { Text(cat.name,modifier=Modifier.weight(1f)); Text(money(annualSpent),fontWeight=FontWeight.SemiBold) }
-                            Text("План: ${money(annualPlan)} · " + if(annualSpent>annualPlan) "Превышение: ${money(annualSpent-annualPlan)}" else "Не выбрано: ${money(annualPlan-annualSpent)}",style=MaterialTheme.typography.bodySmall,color=if(annualSpent>annualPlan) Color(0xFFC74444) else Color(0xFF168A72))
+                            Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
+                            LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
+                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
+                        } }
+                    }
+                    item { Divider(); Text("Расходы за выбранный отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item {
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected=analyticsPeriodType==0,onClick={analyticsPeriodType=0},label={Text("9–23")})
+                            FilterChip(selected=analyticsPeriodType==1,onClick={analyticsPeriodType=1},label={Text("24–8")})
+                        }
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            TextButton(onClick={analyticsPeriodMonth=analyticsPeriodMonth.minusMonths(1)}) { Text("‹") }
+                            Text(analyticsPeriodMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                            TextButton(onClick={if(analyticsPeriodMonth<YearMonth.now()) analyticsPeriodMonth=analyticsPeriodMonth.plusMonths(1)}) { Text("›") }
+                        }
+                    }
+                    item {
+                        val pStart=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(9) else analyticsPeriodMonth.atDay(24)
+                        val pEnd=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(23) else analyticsPeriodMonth.plusMonths(1).atDay(8)
+                        val visibleEnd=minOf(pEnd,today)
+                        val periodTotal=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
+                        MetricCard("${pStart.format(formatter)} — ${pEnd.format(formatter)} · потрачено",money(periodTotal),Modifier.fillMaxWidth())
+                    }
+                    items(categories,key={ "period-"+it.name }) { cat ->
+                        val pStart=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(9) else analyticsPeriodMonth.atDay(24)
+                        val pEnd=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(23) else analyticsPeriodMonth.plusMonths(1).atDay(8)
+                        val visibleEnd=minOf(pEnd,today)
+                        val fact=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.category==cat.name && it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
+                        val plan=plannedForPeriod(income,cat.percent,pStart.toString(),pEnd.toString())
+                        Card { Column(Modifier.padding(14.dp)) {
+                            Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
+                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток бюджета: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
+                        } }
+                    }
+                    item { Divider(); Text("Расходы за год",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item { MetricCard("Всего с начала года",money(expenses.filter { it.date>=LocalDate.of(today.year,1,1).toString() && it.date<=today.toString() }.sumOf { it.amount }),Modifier.fillMaxWidth()) }
+                    items(categories,key={ "year-"+it.name }) { cat ->
+                        val yearStart=LocalDate.of(today.year,1,1).toString()
+                        val fact=expenses.filter { it.category==cat.name && it.date>=yearStart && it.date<=today.toString() }.sumOf { it.amount }
+                        val plan=plannedForPeriod(income,cat.percent,yearStart,today.toString())
+                        Card { Column(Modifier.padding(14.dp)) {
+                            Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
+                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Не выбрано: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
                         } }
                     }
                     item { Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
                     item {
-                        val periodFacts=categories.associate { c -> c.name to expenses.filter { it.category==c.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount } }
-                        val deficits=categories.map { c -> c.name to (periodFacts[c.name]!!-plannedForPeriod(income,c.percent,periodStart,periodEnd)) }.filter { it.second>0 }.sortedByDescending { it.second }
-                        val donors=categories.map { c -> c.name to (plannedForPeriod(income,c.percent,periodStart,periodEnd)-periodFacts[c.name]!!) }.filter { it.second>0 && it.first != "Накопления" }.sortedByDescending { it.second }.toMutableList()
-                        if(deficits.isEmpty()) Text("Превышений за выбранный период нет.")
-                        else if(donors.isEmpty()) Text("Свободного остатка в других категориях нет. Чтобы не выйти за пределы дохода, сократите расходы или уменьшите лимит категории с превышением.")
+                        val periodFacts=categories.associate { cat -> cat.name to expenses.filter { it.category==cat.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount } }
+                        val deficits=categories.map { cat -> cat.name to (periodFacts[cat.name]!!-plannedForPeriod(income,cat.percent,periodStart,periodEnd)) }.filter { it.second>0 }.sortedByDescending { it.second }
+                        val donors=categories.map { cat -> cat.name to (plannedForPeriod(income,cat.percent,periodStart,periodEnd)-periodFacts[cat.name]!!) }.filter { it.second>0 && it.first!="Накопления" }.sortedByDescending { it.second }.toMutableList()
+                        if(deficits.isEmpty()) Text("Превышений за текущий период нет.")
                         else deficits.forEach { deficit ->
                             var left=deficit.second
-                            donors.toList().forEach { donor ->
-                                if(left>0 && donor.first!=deficit.first && donor.second>0) {
-                                    val transfer=minOf(left,donor.second)
-                                    if(transfer>0) {
-                                        Text("Для «${deficit.first}» не хватает ${money(left)}. Можно перенести ${money(transfer)} из «${donor.first}» (свободно ${money(donor.second)}).",style=MaterialTheme.typography.bodySmall)
-                                        left-=transfer
-                                        val idx=donors.indexOfFirst { it.first==donor.first }
-                                        if(idx>=0) donors[idx]=donor.first to (donor.second-transfer)
-                                    }
-                                }
-                            }
-                            if(left>0) Text("Непокрытое превышение по «${deficit.first}»: ${money(left)}.",style=MaterialTheme.typography.bodySmall,color=Color(0xFFC74444))
+                            donors.toList().forEach { donor -> if(left>0 && donor.first!=deficit.first && donor.second>0) {
+                                val transfer=minOf(left,donor.second)
+                                Text("Для «${deficit.first}» можно перенести ${money(transfer)} из «${donor.first}».",style=MaterialTheme.typography.bodySmall)
+                                left-=transfer
+                                val idx=donors.indexOfFirst { it.first==donor.first }; if(idx>=0) donors[idx]=donor.first to (donor.second-transfer)
+                            } }
+                            if(left>0) Text("Непокрытое превышение «${deficit.first}»: ${money(left)}.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
                         }
-                    }
-                    item { Text("Структура расходов",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
-                    items(categories) { cat ->
-                        val amount=monthExpenses.filter { it.category==cat.name }.sumOf { it.amount }
-                        val monthPlan=income*cat.percent/100.0
-                        if(amount>0 || monthPlan>0) Card { Column(Modifier.padding(14.dp)) {
-                            Row { Text(cat.name,modifier=Modifier.weight(1f)); Text(money(amount),fontWeight=FontWeight.SemiBold) }
-                            LinearProgressIndicator(progress={if(monthPlan>0)(amount/monthPlan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(top=8.dp),color=if(amount>monthPlan) Color(0xFFC74444) else Color(0xFF168A72))
-                            Text("План: ${money(monthPlan)} · " + if(amount>monthPlan) "Превышение: ${money(amount-monthPlan)}" else "Не выбрано: ${money(monthPlan-amount)}",style=MaterialTheme.typography.bodySmall,color=if(amount>monthPlan) Color(0xFFC74444) else Color(0xFF168A72))
-                        } }
                     }
                     item { Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(income*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge) }
                     item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") } }
                 }
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
+                    item {
+                        var expandedSort by remember { mutableStateOf(false) }
+                        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            ExposedDropdownMenuBox(expanded=expandedSort,onExpandedChange={expandedSort=it}) {
+                                OutlinedTextField(value="Сортировка: $historySort",onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedSort)})
+                                ExposedDropdownMenu(expanded=expandedSort,onDismissRequest={expandedSort=false}) {
+                                    listOf("Название","Дата","Категория","Сумма").forEach { option -> DropdownMenuItem(text={Text(option)},onClick={historySort=option;expandedSort=false}) }
+                                }
+                            }
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text("Порядок",modifier=Modifier.weight(1f))
+                                TextButton(onClick={historyAscending=!historyAscending}) { Text(if(historyAscending) "По возрастанию ↑" else "По убыванию ↓") }
+                            }
+                            Text("Показывать операции до ${money(amountLimit.toDouble())}",style=MaterialTheme.typography.bodySmall)
+                            Slider(value=amountLimit,onValueChange={amountLimit=it},valueRange=0f..(expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(1000f) ?: 100000f))
+                        }
+                    }
                     if(expenses.isEmpty()) item { Text("Пока нет расходов. Нажми +, чтобы добавить первую операцию.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    items(expenses) { e -> Card(onClick={ selectedExpense=e }) { Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(e.title,fontWeight=FontWeight.SemiBold); Text("${e.category} · ${e.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Text("−${money(e.amount)}",fontWeight=FontWeight.Bold,color=Color(0xFFC74444)) } } }
+                    val filteredExpenses=expenses.filter { it.amount<=amountLimit.toDouble() }
+                    val sortedExpenses=when(historySort) {
+                        "Название" -> if(historyAscending) filteredExpenses.sortedBy { it.title.lowercase() } else filteredExpenses.sortedByDescending { it.title.lowercase() }
+                        "Категория" -> if(historyAscending) filteredExpenses.sortedBy { it.category.lowercase() } else filteredExpenses.sortedByDescending { it.category.lowercase() }
+                        "Сумма" -> if(historyAscending) filteredExpenses.sortedBy { it.amount } else filteredExpenses.sortedByDescending { it.amount }
+                        else -> if(historyAscending) filteredExpenses.sortedBy { it.date } else filteredExpenses.sortedByDescending { it.date }
+                    }
+                    items(sortedExpenses,key={it.id}) { e -> Card(onClick={ selectedExpense=e }) { Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(e.title,fontWeight=FontWeight.SemiBold); Text("${e.category} · ${e.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Text("−${money(e.amount)}",fontWeight=FontWeight.Bold,color=Color(0xFFC74444)) } } }
                 }
             }
         }
     }
-    if(showAdd) AddExpenseDialog(categories,onDismiss={showAdd=false},onSave={title,category,amount,date->
+    selectedCategory?.let { categoryName ->
+        val cat=categories.firstOrNull { it.name==categoryName }
+        val inPeriod=expenses.filter { it.category==categoryName && it.date>=periodStart && it.date<=periodEnd }.sortedByDescending { it.date }
+        AlertDialog(onDismissRequest={selectedCategory=null},title={Text(categoryName)},text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=420.dp)) {
+                Text("Операции за отчётный период",fontWeight=FontWeight.SemiBold)
+                Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.bodySmall)
+                Text("Потрачено: ${money(inPeriod.sumOf { it.amount })} · Бюджет: ${money(cat?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0)}")
+                if(inPeriod.isEmpty()) Text("За этот период операций пока нет.")
+                else LazyColumn(Modifier.heightIn(max=230.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                    items(inPeriod,key={it.id}) { expense ->
+                        Card(onClick={selectedExpense=expense;selectedCategory=null}) {
+                            Row(Modifier.fillMaxWidth().padding(10.dp),verticalAlignment=Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) { Text(expense.title,fontWeight=FontWeight.Medium); Text(expense.date,style=MaterialTheme.typography.bodySmall) }
+                                Text("−${money(expense.amount)}",fontWeight=FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+        },confirmButton={TextButton(onClick={selectedCategory=null;showAdd=true}) { Text("Добавить расход") }},dismissButton={TextButton(onClick={selectedCategory=null}) { Text("Закрыть") }})
+    }
+    if(showAdd) AddExpenseDialog(categories,initialCategory=selectedCategory,onDismiss={showAdd=false},onSave={title,category,amount,date->
         val updated=(listOf(Expense(System.currentTimeMillis(),title,category,amount,date))+expenses).sortedByDescending { it.date }
         val spentAfter=updated.filter { it.category==category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
         val cap=categories.firstOrNull { it.name==category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
@@ -215,8 +320,8 @@ private fun MetricCard(label:String,value:String,modifier:Modifier=Modifier) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddExpenseDialog(categories:List<BudgetCategory>,onDismiss:()->Unit,onSave:(String,String,Double,String)->Unit) {
-    var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember { mutableStateOf(categories.firstOrNull()?.name ?: "Прочее") }; var date by remember { mutableStateOf(LocalDate.now().toString()) }; var expanded by remember { mutableStateOf(false) }
+private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:String?=null,onDismiss:()->Unit,onSave:(String,String,Double,String)->Unit) {
+    var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember(initialCategory,categories) { mutableStateOf(initialCategory ?: categories.firstOrNull()?.name ?: "Прочее") }; var date by remember { mutableStateOf(LocalDate.now().toString()) }; var expanded by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest=onDismiss,title={Text("Новый расход")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
@@ -232,24 +337,39 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,onDismiss:()->Unit,
 
 @Composable
 private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,onDismiss:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String)->Unit) {
-    var inc by remember { mutableStateOf(income.toString()) }; var sav by remember { mutableStateOf(savings.toString()) }; var cats by remember { mutableStateOf(categories) }; var from by remember { mutableStateOf(start) }; var to by remember { mutableStateOf(end) }
+    var inc by remember { mutableStateOf(income.toString()) }
+    var sav by remember { mutableStateOf(savings.toString()) }
+    var cats by remember { mutableStateOf(categories) }
+    var from by remember { mutableStateOf(start) }
+    var to by remember { mutableStateOf(end) }
     AlertDialog(onDismissRequest=onDismiss,title={Text("Настройки бюджета")},text={
-        LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=500.dp)) {
+        LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=540.dp)) {
             item { OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { Text("Период планирования",fontWeight=FontWeight.Bold) }
             item { OutlinedTextField(from,{from=it},label={Text("Начало (ГГГГ-ММ-ДД)")},singleLine=true) }
             item { OutlinedTextField(to,{to=it},label={Text("Окончание (ГГГГ-ММ-ДД)")},singleLine=true) }
-            item { Text("Доли бюджета по категориям, %",fontWeight=FontWeight.Bold) }
+            item { Text("Категории бюджета",fontWeight=FontWeight.Bold) }
             items(cats.size) { index ->
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Text(cats[index].name,modifier=Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(cats[index].percent.toString(),{v-> cats=cats.toMutableList().also { it[index]=it[index].copy(percent=v.replace(',','.').toDoubleOrNull() ?: 0.0) } },modifier=Modifier.width(90.dp),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+                Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                    OutlinedTextField(cats[index].name,{v->cats=cats.toMutableList().also{it[index]=it[index].copy(name=v)}},label={Text("Название категории")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        OutlinedTextField(cats[index].percent.toString(),{v->cats=cats.toMutableList().also{it[index]=it[index].copy(percent=v.replace(',','.').toDoubleOrNull()?:0.0)}},label={Text("Доля, %")},modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+                        TextButton(onClick={cats=cats.filterIndexed{idx,_->idx!=index}}) { Text("Удалить",color=Color(0xFFC74444)) }
+                    }
                 }
             }
-            item { Text("Сумма долей: ${cats.sumOf{it.percent}.toInt()}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { OutlinedButton(onClick={cats=cats+BudgetCategory("",0.0)},modifier=Modifier.fillMaxWidth()) { Text("Добавить категорию") } }
+            item { Text("Сумма долей: ${cats.sumOf{it.percent}}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-    },confirmButton={TextButton(onClick={val i=inc.replace(',','.').toDoubleOrNull();val s=sav.replace(',','.').toDoubleOrNull();if(i!=null&&i>0&&s!=null&&s>=0&&s<=100&&cats.all{it.percent>=0}&&cats.sumOf{it.percent}<=100.0&&runCatching{LocalDate.parse(from);LocalDate.parse(to)}.isSuccess&&!LocalDate.parse(to).isBefore(LocalDate.parse(from)))onSave(i,s,cats,from,to)},enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+    },confirmButton={
+        TextButton(onClick={
+            val i=inc.replace(',','.').toDoubleOrNull(); val s=sav.replace(',','.').toDoubleOrNull()
+            val validDates=runCatching{LocalDate.parse(from);LocalDate.parse(to)}.isSuccess
+            if(i!=null&&i>0&&s!=null&&s>=0&&s<=100&&cats.isNotEmpty()&&cats.all{it.name.isNotBlank()&&it.percent>=0}&&cats.map{it.name.trim().lowercase()}.distinct().size==cats.size&&cats.sumOf{it.percent}<=100.0&&validDates&&!LocalDate.parse(to).isBefore(LocalDate.parse(from)))
+                onSave(i,s,cats.map{it.copy(name=it.name.trim())},from,to)
+        },enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0) { Text("Сохранить") }
+    },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 private fun plannedForPeriod(income: Double, percent: Double, start: String, end: String): Double {
