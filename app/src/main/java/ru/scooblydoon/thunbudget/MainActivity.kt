@@ -82,11 +82,11 @@ private fun ThunBudgetApp() {
     var showAdd by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
-    var periodStart by remember { mutableStateOf(LocalDate.now().withDayOfMonth(1).toString()) }
+    var periodStart by remember { mutableStateOf(LocalDate.now().toString()) }
     var periodEnd by remember { mutableStateOf(LocalDate.now().plusDays(13).toString()) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
-    val planned=income * categories.sumOf { it.percent } / 100.0
+    val planned=plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
@@ -120,7 +120,7 @@ private fun ThunBudgetApp() {
                     item { Text("Бюджет по категориям",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     items(categories) { cat ->
                         val spent=expenses.filter { it.category==cat.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
-                        val cap=income*cat.percent/100.0
+                        val cap=plannedForPeriod(income,cat.percent,periodStart,periodEnd)
                         Card(shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) {
                             Row(verticalAlignment=Alignment.CenterVertically) { Text(cat.name,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f)); Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                             LinearProgressIndicator(progress={ if(cap>0) (spent/cap).coerceIn(0.0,1.0).toFloat() else 0f },modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
@@ -198,6 +198,19 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
             item { Text("Сумма долей: ${cats.sumOf{it.percent}.toInt()}%",style=MaterialTheme.typography.labelMedium) }
         }
     },confirmButton={TextButton(onClick={val i=inc.replace(',','.').toDoubleOrNull();val s=sav.replace(',','.').toDoubleOrNull();if(i!=null&&i>0&&s!=null&&s>=0&&s<=100&&runCatching{LocalDate.parse(from);LocalDate.parse(to)}.isSuccess&&!LocalDate.parse(to).isBefore(LocalDate.parse(from)))onSave(i,s,cats,from,to)},enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+}
+
+private fun plannedForPeriod(income: Double, percent: Double, start: String, end: String): Double {
+    val from = LocalDate.parse(start)
+    val to = LocalDate.parse(end)
+    if (to.isBefore(from)) return 0.0
+    var day = from
+    var total = 0.0
+    while (!day.isAfter(to)) {
+        total += income * percent / 100.0 / day.lengthOfMonth()
+        day = day.plusDays(1)
+    }
+    return total
 }
 
 private fun money(value:Double):String = String.format(Locale("ru","RU"),"%,.0f ₽",value)
