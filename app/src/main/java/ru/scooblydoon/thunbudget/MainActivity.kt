@@ -561,7 +561,7 @@ private fun ThunBudgetApp() {
         AlertDialog(onDismissRequest={backupMessage=null},title={Text("Резервная копия")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
     }
 
-}}
+}
 
 @Composable
 private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:()->Unit,onSave:(Double)->Unit) {
