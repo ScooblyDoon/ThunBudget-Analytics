@@ -41,16 +41,6 @@ import java.util.Locale
 
 private data class PeriodIncome(val start: String, val end: String, val amount: Double)
 
-private data class BudgetBackupSnapshot(
-    val income: Double,
-    val savingsGoal: Double,
-    val categories: List<BudgetCategory>,
-    val expenses: List<Expense>,
-    val periodIncomes: List<PeriodIncome>,
-    val periodStart: String?,
-    val periodEnd: String?
-)
-
 private class BudgetStore(context: Context) {
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     fun loadPeriodIncomes(): List<PeriodIncome> = runCatching {
@@ -93,107 +83,6 @@ private class BudgetStore(context: Context) {
         val a=JSONArray(); items.forEach { a.put(JSONObject().put("id",it.id).put("title",it.title).put("category",it.category).put("amount",it.amount).put("date",it.date)) }
         prefs.edit().putString("expenses",a.toString()).apply()
     }
-    fun exportBackupJson(): String {
-        val categoryArray = JSONArray()
-        loadCategories().forEach { category ->
-            categoryArray.put(JSONObject().put("name", category.name).put("percent", category.percent))
-        }
-        val expenseArray = JSONArray()
-        loadExpenses().forEach { expense ->
-            expenseArray.put(JSONObject().put("id", expense.id).put("title", expense.title).put("category", expense.category).put("amount", expense.amount).put("date", expense.date))
-        }
-        val periodIncomeArray = JSONArray()
-        loadPeriodIncomes().forEach { item ->
-            periodIncomeArray.put(JSONObject().put("start", item.start).put("end", item.end).put("amount", item.amount))
-        }
-        val data = JSONObject()
-            .put("income", loadIncome())
-            .put("savingsGoal", loadSavingsGoal())
-            .put("categories", categoryArray)
-            .put("expenses", expenseArray)
-            .put("periodIncomes", periodIncomeArray)
-            .put("periodStart", loadPeriodStart() ?: JSONObject.NULL)
-            .put("periodEnd", loadPeriodEnd() ?: JSONObject.NULL)
-        return JSONObject()
-            .put("format", "thunbudget-backup")
-            .put("schemaVersion", 1)
-            .put("applicationId", "ru.scooblydoon.thunbudget")
-            .put("createdAt", java.time.Instant.now().toString())
-            .put("data", data)
-            .toString(2)
-    }
-
-    fun restoreBackupJson(raw: String): BudgetBackupSnapshot {
-        val root = JSONObject(raw)
-        require(root.optString("format") == "thunbudget-backup") { "Это не файл резервной копии ThunBudget." }
-        require(root.optInt("schemaVersion", -1) == 1) { "Версия резервной копии не поддерживается." }
-        require(root.optString("applicationId") == "ru.scooblydoon.thunbudget") { "Файл создан для другого приложения." }
-        val data = root.getJSONObject("data")
-        val income = data.getDouble("income")
-        val savings = data.getDouble("savingsGoal")
-        require(income.isFinite() && income > 0.0) { "Некорректный месячный доход в копии." }
-        require(savings.isFinite() && savings in 0.0..100.0) { "Некорректная цель накоплений в копии." }
-
-        val categoryArray = data.getJSONArray("categories")
-        val categories = (0 until categoryArray.length()).map { index ->
-            val item = categoryArray.getJSONObject(index)
-            val name = item.getString("name").trim()
-            val percent = item.getDouble("percent")
-            require(name.isNotBlank() && percent.isFinite() && percent >= 0.0) { "В копии найдена некорректная категория." }
-            BudgetCategory(name, percent)
-        }
-        require(categories.map { it.name.lowercase(Locale.ROOT) }.distinct().size == categories.size) { "В копии есть повторяющиеся категории." }
-
-        val expenseArray = data.getJSONArray("expenses")
-        val expenses = (0 until expenseArray.length()).map { index ->
-            val item = expenseArray.getJSONObject(index)
-            val title = item.getString("title").trim()
-            val category = item.getString("category").trim()
-            val amount = item.getDouble("amount")
-            val date = item.getString("date")
-            require(title.isNotBlank() && category.isNotBlank() && amount.isFinite() && amount > 0.0) { "В копии найдена некорректная операция." }
-            require(runCatching { LocalDate.parse(date) }.isSuccess) { "В копии найдена операция с некорректной датой." }
-            Expense(item.getLong("id"), title, category, amount, date)
-        }
-        require(expenses.map { it.id }.distinct().size == expenses.size) { "В копии обнаружены повторяющиеся ID операций." }
-
-        val periodArray = data.getJSONArray("periodIncomes")
-        val periodIncomes = (0 until periodArray.length()).map { index ->
-            val item = periodArray.getJSONObject(index)
-            val start = item.getString("start")
-            val end = item.getString("end")
-            val amount = item.getDouble("amount")
-            require(amount.isFinite() && amount >= 0.0) { "В копии найден некорректный доход." }
-            require(runCatching { !LocalDate.parse(end).isBefore(LocalDate.parse(start)) }.getOrDefault(false)) { "В копии найден некорректный период дохода." }
-            PeriodIncome(start, end, amount)
-        }
-
-        val periodStart = if (data.isNull("periodStart")) null else data.getString("periodStart")
-        val periodEnd = if (data.isNull("periodEnd")) null else data.getString("periodEnd")
-        require((periodStart == null) == (periodEnd == null)) { "В копии неполно указаны даты отчётного периода." }
-        if (periodStart != null && periodEnd != null) {
-            require(runCatching { !LocalDate.parse(periodEnd).isBefore(LocalDate.parse(periodStart)) }.getOrDefault(false)) { "В копии некорректный отчётный период." }
-        }
-
-        val categoriesJson = JSONArray()
-        categories.forEach { categoriesJson.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
-        val expensesJson = JSONArray()
-        expenses.forEach { expensesJson.put(JSONObject().put("id", it.id).put("title", it.title).put("category", it.category).put("amount", it.amount).put("date", it.date)) }
-        val incomesJson = JSONArray()
-        periodIncomes.forEach { incomesJson.put(JSONObject().put("start", it.start).put("end", it.end).put("amount", it.amount)) }
-
-        val editor = prefs.edit()
-            .putString("income", income.toString())
-            .putString("savings", savings.toString())
-            .putString("categories", categoriesJson.toString())
-            .putString("expenses", expensesJson.toString())
-            .putString("period_incomes", incomesJson.toString())
-        if (periodStart == null) editor.remove("period_start") else editor.putString("period_start", periodStart)
-        if (periodEnd == null) editor.remove("period_end") else editor.putString("period_end", periodEnd)
-        check(editor.commit()) { "Не удалось сохранить восстановленные данные." }
-        return BudgetBackupSnapshot(income, savings, categories, expenses.sortedByDescending { it.date }, periodIncomes, periodStart, periodEnd)
-    }
-
 }
 
 class MainActivity : ComponentActivity() {
@@ -247,10 +136,6 @@ private fun ThunBudgetApp() {
         }
     }
     var showSettings by remember { mutableStateOf(false) }
-    var showBackupDialog by remember { mutableStateOf(false) }
-    var backupMessage by remember { mutableStateOf<String?>(null) }
-    var pendingBackupJson by remember { mutableStateOf<String?>(null) }
-    var pendingLegacyImport by remember { mutableStateOf<LegacyBudgetImport?>(null) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
     var showCategoryManager by remember { mutableStateOf(false) }
@@ -291,35 +176,9 @@ private fun ThunBudgetApp() {
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
         if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year) }
     }
-    val backupExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) {
-            runCatching {
-                val json = store.exportBackupJson()
-                context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-                    ?: error("Не удалось открыть файл для записи.")
-            }.onSuccess { backupMessage = "Резервная копия успешно сохранена." }
-             .onFailure { backupMessage = "Не удалось создать копию: ${it.message ?: "ошибка записи"}" }
-        }
-    }
-    val backupImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                    ?: error("Не удалось прочитать выбранный файл.")
-            }.onSuccess { pendingBackupJson = it }
-             .onFailure { backupMessage = "Не удалось прочитать файл: ${it.message ?: "ошибка чтения"}" }
-        }
-    }
-    val legacyImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching { XlsxImporter.read(context, uri) }
-                .onSuccess { pendingLegacyImport = it }
-                .onFailure { backupMessage = "Не удалось перенести данные из Excel: ${it.message ?: "ошибка чтения"}" }
-        }
-    }
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
         Scaffold(
-            topBar={ TopAppBar(title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }, actions={ Row { TextButton(onClick={showBackupDialog=true}) { Text("Копия") }; TextButton(onClick={showSettings=true}) { Text("Настройки") } } }) },
+            topBar={ TopAppBar(title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }, actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }) },
             floatingActionButton={ if(tab!=3) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
                 SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
                     Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
@@ -621,96 +480,7 @@ private fun ThunBudgetApp() {
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
     })
 
-    if (showBackupDialog) {
-        AlertDialog(
-            onDismissRequest = { showBackupDialog = false },
-            title = { Text("Резервная копия") },
-            text = { Text("Копия содержит расходы, категории, доходы за отчётные периоды, месячный доход, цель накоплений и выбранные даты периода. При восстановлении текущие данные будут заменены данными из файла.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBackupDialog = false
-                    backupExportLauncher.launch("ThunBudget-backup-${LocalDate.now()}.json")
-                }) { Text("Сохранить копию") }
-            },
-            dismissButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    Row {
-                        TextButton(onClick = {
-                            showBackupDialog = false
-                            backupImportLauncher.launch(arrayOf("application/json", "text/*"))
-                        }) { Text("Из JSON") }
-                        TextButton(onClick = {
-                            showBackupDialog = false
-                            legacyImportLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                        }) { Text("Из старого Excel") }
-                    }
-                    TextButton(onClick = { showBackupDialog = false }) { Text("Закрыть") }
-                }
-            }
-        )
-    }
-    pendingBackupJson?.let { backupJson ->
-        AlertDialog(
-            onDismissRequest = { pendingBackupJson = null },
-            title = { Text("Восстановить данные?") },
-            text = { Text("Все текущие данные приложения будут заменены данными из выбранной резервной копии. Перед продолжением убедись, что текущая версия данных сохранена отдельно.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    runCatching { store.restoreBackupJson(backupJson) }
-                        .onSuccess { restored ->
-                            income = restored.income
-                            savingsGoal = restored.savingsGoal
-                            categories = restored.categories
-                            expenses = restored.expenses
-                            periodIncomes = restored.periodIncomes
-                            if (restored.periodStart != null && restored.periodEnd != null) {
-                                periodStart = restored.periodStart
-                                periodEnd = restored.periodEnd
-                            }
-                            selectedPeriod = -1
-                            pendingBackupJson = null
-                            backupMessage = "Данные восстановлены. Расходы: ${expenses.size}; категории: ${categories.size}."
-                        }
-                        .onFailure {
-                            pendingBackupJson = null
-                            backupMessage = "Резервная копия не восстановлена: ${it.message ?: "неизвестная ошибка"}. Текущие данные не изменены."
-                        }
-                }) { Text("Восстановить") }
-            },
-            dismissButton = { TextButton(onClick = { pendingBackupJson = null }) { Text("Отмена") } }
-        )
-    }
-    pendingLegacyImport?.let { imported ->
-        AlertDialog(
-            onDismissRequest = { pendingLegacyImport = null },
-            title = { Text("Перенести данные из старой версии?") },
-            text = {
-                Text("Будет перенесено расходов: ${imported.expenses.size}. Категорий из Excel: ${imported.categories.size}. Текущая история расходов будет заменена. Месячный доход и доходы за отчётные периоды старый Excel-экспорт не содержит — их нужно будет внести заново.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    expenses = imported.expenses
-                    store.saveExpenses(expenses)
-                    if (imported.categories.isNotEmpty()) {
-                        categories = imported.categories
-                        store.saveCategories(categories)
-                    }
-                    pendingLegacyImport = null
-                    backupMessage = "Перенос завершён. Расходы: ${expenses.size}; категории: ${categories.size}. Внеси месячный и периодные доходы заново."
-                }) { Text("Перенести") }
-            },
-            dismissButton = { TextButton(onClick = { pendingLegacyImport = null }) { Text("Отмена") } }
-        )
-    }
-
-    backupMessage?.let { message ->
-        AlertDialog(
-            onDismissRequest = { backupMessage = null },
-            title = { Text("Резервная копия") },
-            text = { Text(message) },
-            confirmButton = { TextButton(onClick = { backupMessage = null }) { Text("Понятно") } }
-        )
-    }}
+}}
 
 @Composable
 private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:()->Unit,onSave:(Double)->Unit) {
