@@ -49,15 +49,16 @@ private class BudgetStore(context: Context) {
     }.getOrDefault(emptyList())
     fun savePeriodIncomes(items: List<PeriodIncome>) {
         val a=JSONArray(); items.forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount)) }
-        prefs.edit().putString("period_incomes",a.toString()).apply()
+        prefs.edit().putString("period_incomes",a.toString()).commit()
+        saveAutomaticBackup()
     }
     fun loadIncome() = prefs.getString("income", "100000")!!.toDoubleOrNull() ?: 100000.0
-    fun saveIncome(value: Double) { prefs.edit().putString("income", value.toString()).apply() }
+    fun saveIncome(value: Double) { prefs.edit().putString("income", value.toString()).commit(); saveAutomaticBackup() }
     fun loadSavingsGoal() = prefs.getString("savings", "10")!!.toDoubleOrNull() ?: 10.0
-    fun saveSavingsGoal(value: Double) { prefs.edit().putString("savings", value.toString()).apply() }
+    fun saveSavingsGoal(value: Double) { prefs.edit().putString("savings", value.toString()).commit(); saveAutomaticBackup() }
     fun loadPeriodStart() = prefs.getString("period_start", null)
     fun loadPeriodEnd() = prefs.getString("period_end", null)
-    fun savePeriod(start:String,end:String) { prefs.edit().putString("period_start",start).putString("period_end",end).apply() }
+    fun savePeriod(start:String,end:String) { prefs.edit().putString("period_start",start).putString("period_end",end).commit(); saveAutomaticBackup() }
     fun loadCategories(): List<BudgetCategory> {
         val raw = prefs.getString("categories", null) ?: return listOf(
             BudgetCategory("Продукты", 25.0), BudgetCategory("Транспорт", 10.0),
@@ -71,7 +72,8 @@ private class BudgetStore(context: Context) {
     }
     fun saveCategories(items: List<BudgetCategory>) {
         val a=JSONArray(); items.forEach { a.put(JSONObject().put("name",it.name).put("percent",it.percent)) }
-        prefs.edit().putString("categories",a.toString()).apply()
+        prefs.edit().putString("categories",a.toString()).commit()
+        saveAutomaticBackup()
     }
     fun loadExpenses(): List<Expense> {
         val raw=prefs.getString("expenses","[]") ?: "[]"
@@ -81,13 +83,14 @@ private class BudgetStore(context: Context) {
     }
     fun saveExpenses(items: List<Expense>) {
         val a=JSONArray(); items.forEach { a.put(JSONObject().put("id",it.id).put("title",it.title).put("category",it.category).put("amount",it.amount).put("date",it.date)) }
-        prefs.edit().putString("expenses",a.toString()).apply()
+        prefs.edit().putString("expenses",a.toString()).commit()
+        saveAutomaticBackup()
     }
 
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
-            if (value is String && key != "_pre_restore_backup") data.put(key, value)
+            if (value is String && key != "_pre_restore_backup" && key != "_auto_backup") data.put(key, value)
         }
         return JSONObject()
             .put("app", "ThunBudget")
@@ -144,6 +147,18 @@ private class BudgetStore(context: Context) {
         editor.commit()
     }.getOrDefault(false)
 
+    fun saveAutomaticBackup() {
+        val snapshot = exportBackup()
+        prefs.edit().putString("_auto_backup", snapshot).commit()
+    }
+
+    fun hasAutomaticBackup(): Boolean = !prefs.getString("_auto_backup", null).isNullOrBlank()
+
+    fun restoreAutomaticBackup(): Boolean {
+        val snapshot = prefs.getString("_auto_backup", null) ?: return false
+        return restoreBackup(snapshot)
+    }
+
     fun hasPreviousRestoreBackup(): Boolean = !prefs.getString("_pre_restore_backup", null).isNullOrBlank()
 
     fun restorePreviousBackup(): Boolean {
@@ -155,6 +170,7 @@ private class BudgetStore(context: Context) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        BudgetStore(applicationContext).saveAutomaticBackup()
         setContent { ThunBudgetApp() }
     }
 }
@@ -526,20 +542,27 @@ private fun ThunBudgetApp() {
     voiceDraft?.let { draft ->
         AlertDialog(
             onDismissRequest={voiceDraft=null},
-            title={Text("Проверь распознанный расход")},
+            title={Text(if(draft.isIncome) "Проверь распознанный доход" else "Проверь распознанный расход")},
             text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                Text("${money(draft.amount)} · ${draft.category}",fontWeight=FontWeight.Bold)
+                Text("${money(draft.amount)}" + if(draft.isIncome) " · доход" else " · ${draft.category}",fontWeight=FontWeight.Bold)
                 Text("Дата: ${LocalDate.parse(draft.date).format(formatter)}")
                 Text("Описание: ${draft.title}")
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
             confirmButton={TextButton(onClick={
-                val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,draft.amount,draft.date))+expenses).sortedByDescending { it.date }
-                expenses=updated; store.saveExpenses(expenses); voiceDraft=null
-                val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
-                val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
-                if(spent>cap) OverspendNotifier.notify(context,"Превышение бюджета","Категория «${draft.category}»: превышение ${money(spent-cap)} за выбранный период.")
-            }) { Text("Сохранить расход") }},
+                if(draft.isIncome) {
+                    val existing=periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
+                    periodIncomes=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,existing+draft.amount)
+                    store.savePeriodIncomes(periodIncomes)
+                } else {
+                    val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,draft.amount,draft.date))+expenses).sortedByDescending { it.date }
+                    expenses=updated; store.saveExpenses(expenses)
+                    val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
+                    val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
+                    if(spent>cap) OverspendNotifier.notify(context,"Превышение бюджета","Категория «${draft.category}»: превышение ${money(spent-cap)} за выбранный период.")
+                }
+                voiceDraft=null
+            }) { Text(if(draft.isIncome) "Сохранить доход" else "Сохранить расход") }},
             dismissButton={TextButton(onClick={voiceDraft=null}) { Text("Отмена") }}
         )
     }
@@ -931,7 +954,8 @@ private data class VoiceExpenseDraft(
     val title: String,
     val category: String,
     val amount: Double,
-    val date: String
+    val date: String,
+    val isIncome: Boolean = false
 )
 
 private fun startOfflineSpeechRecognition(
@@ -967,17 +991,18 @@ private fun startOfflineSpeechRecognition(
 
 private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
     val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+    val isIncome = listOf("доход", "поступление", "получил", "получила", "зарплата", "зачислили").any { normalized.contains(it) }
     val hasExpenseCommand = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход").any { normalized.contains(it) }
-    if (!hasExpenseCommand) return null
+    if (!isIncome && !hasExpenseCommand) return null
 
     val amountMatch = Regex("""(?<!\d)(\d[\d \u00A0]*(?:[,.]\d{1,2})?)(?!\d)""").find(normalized) ?: return null
     val amount = amountMatch.value.replace(" ", "").replace("\u00A0", "").replace(',', '.').toDoubleOrNull()
         ?.takeIf { it > 0.0 } ?: return null
 
-    val matchedCategory = categories
+    val matchedCategory = if (isIncome) null else categories
         .sortedByDescending { it.name.length }
         .firstOrNull { normalized.contains(it.name.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }
-        ?: return null
+        ?: if (isIncome) null else return null
 
     val date = when {
         normalized.contains("вчера") -> LocalDate.now().minusDays(1)
@@ -985,9 +1010,10 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
         else -> LocalDate.now()
     }
     return VoiceExpenseDraft(
-        title = matchedCategory.name,
-        category = matchedCategory.name,
+        title = if(isIncome) "Голосовой доход" else matchedCategory!!.name,
+        category = if(isIncome) "Доход" else matchedCategory!!.name,
         amount = amount,
-        date = date.toString()
+        date = date.toString(),
+        isIncome = isIncome
     )
 }
