@@ -208,7 +208,7 @@ private fun ThunBudgetApp() {
                 isListening = false
                 val parsed = parseVoiceExpense(spoken, categories)
                 if (parsed == null) {
-                    voiceMessage = "Не удалось разобрать команду. Скажи, например: «Добавь расход 500 рублей на продукты». Распознанный текст: $spoken"
+                    voiceMessage = "Команда не распознана. Примеры: «Добавь доход 54 тысячи рублей»; «Добавь категорию Питомцы 5 процентов»; «Измени категорию Продукты на 30 процентов». Распознано: $spoken"
                 } else {
                     voiceDraft = parsed
                 }
@@ -542,27 +542,51 @@ private fun ThunBudgetApp() {
     voiceDraft?.let { draft ->
         AlertDialog(
             onDismissRequest={voiceDraft=null},
-            title={Text(if(draft.isIncome) "Проверь распознанный доход" else "Проверь распознанный расход")},
+            title={Text(when { draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
             text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                Text("${money(draft.amount)}" + if(draft.isIncome) " · доход" else " · ${draft.category}",fontWeight=FontWeight.Bold)
-                Text("Дата: ${LocalDate.parse(draft.date).format(formatter)}")
-                Text("Описание: ${draft.title}")
+                if (draft.isCategoryAdd || draft.isCategoryEdit) {
+                    Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)
+                } else {
+                    Text("${money(draft.amount)}" + if(draft.isIncome) " · доход" else " · ${draft.category}",fontWeight=FontWeight.Bold)
+                    Text("Дата: ${LocalDate.parse(draft.date).format(formatter)}")
+                    Text("Описание: ${draft.title}")
+                }
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
             confirmButton={TextButton(onClick={
-                if(draft.isIncome) {
-                    val existing=periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
-                    periodIncomes=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,existing+draft.amount)
-                    store.savePeriodIncomes(periodIncomes)
-                } else {
-                    val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,draft.amount,draft.date))+expenses).sortedByDescending { it.date }
-                    expenses=updated; store.saveExpenses(expenses)
-                    val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
-                    val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
-                    if(spent>cap) OverspendNotifier.notify(context,"Превышение бюджета","Категория «${draft.category}»: превышение ${money(spent-cap)} за выбранный период.")
+                when {
+                    draft.isCategoryAdd -> {
+                        if (categories.none { it.name.equals(draft.category,true) } && categories.sumOf { it.percent } + draft.amount <= 100.0) {
+                            categories = categories + BudgetCategory(draft.category,draft.amount)
+                            store.saveCategories(categories)
+                        } else {
+                            voiceMessage = "Категория уже существует или сумма долей превысит 100%."
+                        }
+                    }
+                    draft.isCategoryEdit -> {
+                        val old = categories.firstOrNull { it.name.equals(draft.category,true) }
+                        if (old != null && categories.filterNot { it.name==old.name }.sumOf { it.percent } + draft.amount <= 100.0) {
+                            categories = categories.map { if (it.name==old.name) it.copy(percent=draft.amount) else it }
+                            store.saveCategories(categories)
+                        } else {
+                            voiceMessage = "Не удалось изменить долю: проверь категорию и сумму процентов (не более 100%)."
+                        }
+                    }
+                    draft.isIncome -> {
+                        val existing=periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
+                        periodIncomes=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,existing+draft.amount)
+                        store.savePeriodIncomes(periodIncomes)
+                    }
+                    else -> {
+                        val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,draft.amount,draft.date))+expenses).sortedByDescending { it.date }
+                        expenses=updated; store.saveExpenses(expenses)
+                        val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
+                        val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
+                        if(spent>cap) OverspendNotifier.notify(context,"Превышение бюджета","Категория «${draft.category}»: превышение ${money(spent-cap)} за выбранный период.")
+                    }
                 }
                 voiceDraft=null
-            }) { Text(if(draft.isIncome) "Сохранить доход" else "Сохранить расход") }},
+            }) { Text(when { draft.isCategoryAdd -> "Добавить категорию"; draft.isCategoryEdit -> "Изменить долю"; draft.isIncome -> "Сохранить доход"; else -> "Сохранить расход" }) }},
             dismissButton={TextButton(onClick={voiceDraft=null}) { Text("Отмена") }}
         )
     }
@@ -965,7 +989,9 @@ private data class VoiceExpenseDraft(
     val category: String,
     val amount: Double,
     val date: String,
-    val isIncome: Boolean = false
+    val isIncome: Boolean = false,
+    val isCategoryAdd: Boolean = false,
+    val isCategoryEdit: Boolean = false
 )
 
 private fun startOfflineSpeechRecognition(
@@ -1058,23 +1084,36 @@ private fun parseSpokenAmount(normalized: String): Double? {
 }
 
 private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
-    val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е')
-    val isIncome = listOf("доход", "поступление", "получил", "получила", "зарплата", "зачислили").any { normalized.contains(it) }
-    val hasExpenseCommand = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход").any { normalized.contains(it) }
-    if (!isIncome && !hasExpenseCommand) return null
-
+    val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е').replace('ё','е').trim()
     val amount = parseSpokenAmount(normalized)?.takeIf { it > 0.0 } ?: return null
+    val date = when {
+        normalized.contains("вчера") -> LocalDate.now().minusDays(1)
+        else -> LocalDate.now()
+    }
 
-    val matchedCategory = if (isIncome) null else categories
-        .sortedByDescending { it.name.length }
+    val categoryIntent = listOf("категори", "процент", "долю").any { normalized.contains(it) }
+    if (categoryIntent && listOf("добавь", "добавить", "создай", "новую").any { normalized.contains(it) }) {
+        val marker = Regex("""категори[яюи]?\s+(.+?)(?=\s+(?:\\d|ноль|один|одна|одно|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать|шестнадцать|семнадцать|восемнадцать|девятнадцать|двадцать|тридцать|сорок|пятьдесят|шестьдесят|семьдесят|восемьдесят|девяносто|сто|двести|триста|четыреста|пятьсот|шестьсот|семьсот|восемьсот|девятьсот))""").find(normalized)
+        val name = marker?.groupValues?.get(1)?.trim()?.removeSuffix("процентов")?.removeSuffix("процент")?.trim()
+        if (!name.isNullOrBlank() && amount <= 100.0) {
+            return VoiceExpenseDraft(name.replaceFirstChar { it.uppercase(Locale("ru","RU")) },name,amount,date,isCategoryAdd=true)
+        }
+    }
+
+    if (categoryIntent && listOf("измени", "изменить", "поменяй", "поменять", "установи", "поставь", "скорректируй").any { normalized.contains(it) }) {
+        val matched = categories.sortedByDescending { it.name.length }.firstOrNull {
+            normalized.contains(it.name.lowercase(Locale("ru","RU")).replace('ё','е'))
+        } ?: return null
+        if (amount <= 100.0) return VoiceExpenseDraft(matched.name,matched.name,amount,date,isCategoryEdit=true)
+    }
+
+    val isIncome = listOf("доход", "поступление", "получил", "получила", "зарплата", "зачислили", "внеси доход", "добавить доход").any { normalized.contains(it) }
+    val hasExpenseCommand = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход", "внеси").any { normalized.contains(it) }
+    if (!isIncome && !hasExpenseCommand) return null
+    val matchedCategory = if (isIncome) null else categories.sortedByDescending { it.name.length }
         .firstOrNull { normalized.contains(it.name.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }
         ?: if (isIncome) null else return null
 
-    val date = when {
-        normalized.contains("вчера") -> LocalDate.now().minusDays(1)
-        normalized.contains("сегодня") -> LocalDate.now()
-        else -> LocalDate.now()
-    }
     return VoiceExpenseDraft(
         title = if(isIncome) "Голосовой доход" else matchedCategory!!.name,
         category = if(isIncome) "Доход" else matchedCategory!!.name,
