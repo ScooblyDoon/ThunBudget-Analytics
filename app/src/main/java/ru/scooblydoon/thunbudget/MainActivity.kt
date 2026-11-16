@@ -1,7 +1,14 @@
 package ru.scooblydoon.thunbudget
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -15,6 +22,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,6 +103,38 @@ private fun ThunBudgetApp() {
     var expenses by remember { mutableStateOf(store.loadExpenses()) }
     var periodIncomes by remember { mutableStateOf(store.loadPeriodIncomes()) }
     var showAdd by remember { mutableStateOf(false) }
+    var voiceDraft by remember { mutableStateOf<VoiceExpenseDraft?>(null) }
+    var voiceMessage by remember { mutableStateOf<String?>(null) }
+    var isListening by remember { mutableStateOf(false) }
+    val offlineSpeechRecognizer = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context))
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        else null
+    }
+    DisposableEffect(offlineSpeechRecognizer) {
+        onDispose { offlineSpeechRecognizer?.destroy() }
+    }
+    val voicePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) {
+            voiceMessage = "Для голосового ввода необходимо разрешить доступ к микрофону."
+        } else if (offlineSpeechRecognizer == null) {
+            voiceMessage = "На этом устройстве не найден локальный движок распознавания русской речи. Установи офлайн-пакет распознавания речи в настройках Android или используй ручной ввод. Интернет-распознавание приложение не запускает."
+        } else {
+            isListening = true
+            startOfflineSpeechRecognition(context, offlineSpeechRecognizer, onResult = { spoken ->
+                isListening = false
+                val parsed = parseVoiceExpense(spoken, categories)
+                if (parsed == null) {
+                    voiceMessage = "Не удалось разобрать команду. Скажи, например: «Добавь расход 500 рублей на продукты». Распознанный текст: $spoken"
+                } else {
+                    voiceDraft = parsed
+                }
+            }, onError = { code ->
+                isListening = false
+                voiceMessage = "Не удалось распознать речь (код $code). Попробуй ещё раз или проверь, установлен ли офлайн-пакет русского языка."
+            })
+        }
+    }
     var showSettings by remember { mutableStateOf(false) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
@@ -138,7 +179,12 @@ private fun ThunBudgetApp() {
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
         Scaffold(
             topBar={ TopAppBar(title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }, actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }) },
-            floatingActionButton={ if(tab!=3) FloatingActionButton(onClick={showAdd=true}) { Text("+",style=MaterialTheme.typography.headlineMedium) } },
+            floatingActionButton={ if(tab!=3) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+                SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
+                    Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
+                }
+                FloatingActionButton(onClick={showAdd=true}) { Text("+",style=MaterialTheme.typography.headlineMedium) }
+            } },
             bottomBar={ NavigationBar { NavigationBarItem(selected=tab==0,onClick={tab=0},icon={},label={Text("Обзор")}); NavigationBarItem(selected=tab==1,onClick={tab=1},icon={},label={Text("Аналитика")}); NavigationBarItem(selected=tab==2,onClick={tab=2},icon={},label={Text("Графики")}); NavigationBarItem(selected=tab==3,onClick={tab=3},icon={},label={Text("История")}) } }
         ) { padding ->
             when(tab) {
@@ -315,6 +361,29 @@ private fun ThunBudgetApp() {
                 }
             }
         }
+    }
+    voiceDraft?.let { draft ->
+        AlertDialog(
+            onDismissRequest={voiceDraft=null},
+            title={Text("Проверь распознанный расход")},
+            text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                Text("${money(draft.amount)} · ${draft.category}",fontWeight=FontWeight.Bold)
+                Text("Дата: ${LocalDate.parse(draft.date).format(formatter)}")
+                Text("Описание: ${draft.title}")
+                Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }},
+            confirmButton={TextButton(onClick={
+                val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,draft.amount,draft.date))+expenses).sortedByDescending { it.date }
+                expenses=updated; store.saveExpenses(expenses); voiceDraft=null
+                val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
+                val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
+                if(spent>cap) OverspendNotifier.notify(context,"Превышение бюджета","Категория «${draft.category}»: превышение ${money(spent-cap)} за выбранный период.")
+            }) { Text("Сохранить расход") }},
+            dismissButton={TextButton(onClick={voiceDraft=null}) { Text("Отмена") }}
+        )
+    }
+    voiceMessage?.let { message ->
+        AlertDialog(onDismissRequest={voiceMessage=null},title={Text("Голосовой ввод")},text={Text(message)},confirmButton={TextButton(onClick={voiceMessage=null}) { Text("Понятно") }})
     }
     if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,periodIncome,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
         periodIncomes=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,amount)
@@ -662,5 +731,70 @@ private fun ExpenseEditDialog(
                 TextButton(onClick=onDismiss) { Text("Отмена") }
             }
         }
+    )
+}
+
+
+private data class VoiceExpenseDraft(
+    val title: String,
+    val category: String,
+    val amount: Double,
+    val date: String
+)
+
+private fun startOfflineSpeechRecognition(
+    context: Context,
+    recognizer: SpeechRecognizer,
+    onResult: (String) -> Unit,
+    onError: (Int) -> Unit
+) {
+    recognizer.setRecognitionListener(object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+        override fun onError(error: Int) { onError(error) }
+        override fun onResults(results: Bundle?) {
+            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+            if (text.isNullOrBlank()) onError(SpeechRecognizer.ERROR_NO_MATCH) else onResult(text)
+        }
+        override fun onPartialResults(partialResults: Bundle?) {}
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+    })
+    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ru-RU")
+        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+    }
+    recognizer.startListening(intent)
+}
+
+private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
+    val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+    val hasExpenseCommand = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход").any { normalized.contains(it) }
+    if (!hasExpenseCommand) return null
+
+    val amountMatch = Regex("""(?<!\\d)(\\d[\\d \\u00A0]*(?:[,.]\\d{1,2})?)(?!\\d)""").find(normalized) ?: return null
+    val amount = amountMatch.value.replace(" ", "").replace("\\u00A0", "").replace(',', '.').toDoubleOrNull()
+        ?.takeIf { it > 0.0 } ?: return null
+
+    val matchedCategory = categories
+        .sortedByDescending { it.name.length }
+        .firstOrNull { normalized.contains(it.name.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }
+        ?: return null
+
+    val date = when {
+        normalized.contains("вчера") -> LocalDate.now().minusDays(1)
+        normalized.contains("сегодня") -> LocalDate.now()
+        else -> LocalDate.now()
+    }
+    return VoiceExpenseDraft(
+        title = matchedCategory.name,
+        category = matchedCategory.name,
+        amount = amount,
+        date = date.toString()
     )
 }
