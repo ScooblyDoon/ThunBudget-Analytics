@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -86,11 +87,12 @@ private fun ThunBudgetApp() {
     var periodEnd by remember { mutableStateOf((if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var addFromCategory by remember { mutableStateOf<String?>(null) }
     var historySort by remember { mutableStateOf("Дата") }
     var historyAscending by remember { mutableStateOf(false) }
     var amountLimit by remember { mutableFloatStateOf(100000f) }
     var analyticsMonth by remember { mutableStateOf(YearMonth.now()) }
-    var analyticsPeriodMonth by remember { mutableStateOf(YearMonth.now()) }
+    var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth <= 8) YearMonth.now().minusMonths(1) else YearMonth.now()) }
     var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
@@ -254,7 +256,7 @@ private fun ThunBudgetApp() {
                                 TextButton(onClick={historyAscending=!historyAscending}) { Text(if(historyAscending) "По возрастанию ↑" else "По убыванию ↓") }
                             }
                             Text("Показывать операции до ${money(amountLimit.toDouble())}",style=MaterialTheme.typography.bodySmall)
-                            Slider(value=amountLimit,onValueChange={amountLimit=it},valueRange=0f..(expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(1000f) ?: 100000f))
+                            Slider(value=amountLimit,onValueChange={amountLimit=it},valueRange=0f..(expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f))
                         }
                     }
                     if(expenses.isEmpty()) item { Text("Пока нет расходов. Нажми +, чтобы добавить первую операцию.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -290,13 +292,13 @@ private fun ThunBudgetApp() {
                     }
                 }
             }
-        },confirmButton={TextButton(onClick={selectedCategory=null;showAdd=true}) { Text("Добавить расход") }},dismissButton={TextButton(onClick={selectedCategory=null}) { Text("Закрыть") }})
+        },confirmButton={TextButton(onClick={addFromCategory=categoryName;selectedCategory=null;showAdd=true}) { Text("Добавить расход") }},dismissButton={TextButton(onClick={selectedCategory=null}) { Text("Закрыть") }})
     }
-    if(showAdd) AddExpenseDialog(categories,initialCategory=selectedCategory,onDismiss={showAdd=false},onSave={title,category,amount,date->
+    if(showAdd) AddExpenseDialog(categories,initialCategory=addFromCategory,onDismiss={showAdd=false},onSave={title,category,amount,date->
         val updated=(listOf(Expense(System.currentTimeMillis(),title,category,amount,date))+expenses).sortedByDescending { it.date }
         val spentAfter=updated.filter { it.category==category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
         val cap=categories.firstOrNull { it.name==category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
-        expenses=updated; store.saveExpenses(expenses); showAdd=false
+        expenses=updated; store.saveExpenses(expenses); showAdd=false; addFromCategory=null
         if(spentAfter>cap) OverspendNotifier.notify(context, "Превышение бюджета", "Категория «$category»: превышение ${money(spentAfter-cap)} за выбранный период.")
     })
     selectedExpense?.let { selected ->
