@@ -190,6 +190,9 @@ private fun ThunBudgetApp() {
     var voiceDraft by remember { mutableStateOf<VoiceExpenseDraft?>(null) }
     var voiceAmount by remember { mutableStateOf("") }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
+    var voiceEditCandidates by remember { mutableStateOf<List<Expense>>(emptyList()) }
+    var voiceSelectedExpenseId by remember { mutableStateOf<Long?>(null) }
+    var voiceEditExpanded by remember { mutableStateOf(false) }
     var isListening by remember { mutableStateOf(false) }
     val offlineSpeechRecognizer = remember(context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context))
@@ -250,9 +253,6 @@ private fun ThunBudgetApp() {
     var showPlanChart by rememberSaveable { mutableStateOf(true) }
     var showPieChart by rememberSaveable { mutableStateOf(true) }
     var showHistoryFilters by rememberSaveable { mutableStateOf(true) }
-    var voiceEditCandidates by remember { mutableStateOf<List<Expense>>(emptyList()) }
-    var voiceSelectedExpenseId by remember { mutableStateOf<Long?>(null) }
-    var voiceEditExpanded by remember { mutableStateOf(false) }
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
     var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
@@ -587,7 +587,7 @@ private fun ThunBudgetApp() {
                                 candidates.forEach { candidate ->
                                     DropdownMenuItem(
                                         text={Text("${candidate.title} · ${candidate.date} · ${money(candidate.amount)}")},
-                                        onClick={voiceSelectedExpenseId=candidate.id;voiceEditExpanded=false;voiceAmount=candidate.amount.toString()}
+                                        onClick={voiceSelectedExpenseId=candidate.id;voiceEditExpanded=false}
                                     )
                                 }
                             }
