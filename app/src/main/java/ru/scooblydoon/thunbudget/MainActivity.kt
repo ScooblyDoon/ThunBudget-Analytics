@@ -27,9 +27,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private data class BudgetCategory(val name: String, val percent: Double)
-private data class Expense(val id: Long, val title: String, val category: String, val amount: Double, val date: String)
-
 private class BudgetStore(context: Context) {
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     fun loadIncome() = prefs.getString("income", "100000")!!.toDoubleOrNull() ?: 100000.0
@@ -82,22 +79,20 @@ private fun ThunBudgetApp() {
     var showAdd by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
-    var periodStart by remember { mutableStateOf(LocalDate.now().toString()) }
-    var periodEnd by remember { mutableStateOf(LocalDate.now().plusDays(13).toString()) }
+    val today = LocalDate.now()
+    val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
+    var selectedPeriod by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
+    var periodStart by remember { mutableStateOf((if (today.dayOfMonth <= 8) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
+    var periodEnd by remember { mutableStateOf((if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
+    var selectedExpense by remember { mutableStateOf<Expense?>(null) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
-    val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        if(uri!=null) runCatching {
-            val csv=buildString {
-                append("Дата;Описание;Категория;Сумма, RUB\n")
-                expenses.sortedBy { it.date }.forEach { append("${it.date};${it.title.replace("; ",", ")};${it.category};${it.amount}\n") }
-            }
-            context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write("\uFEFF"); it.write(csv) }
-        }
+    val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
+        if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year) }
     }
     MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
         Scaffold(
@@ -107,6 +102,13 @@ private fun ThunBudgetApp() {
         ) { padding ->
             when(tab) {
                 0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=96.dp)) {
+                    item {
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            SegmentedButton(selected=selectedPeriod==0,onClick={ selectedPeriod=0; periodStart=baseMonth.withDayOfMonth(9).toString(); periodEnd=baseMonth.withDayOfMonth(23).toString() },shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
+                            SegmentedButton(selected=selectedPeriod==1,onClick={ selectedPeriod=1; periodStart=baseMonth.withDayOfMonth(24).toString(); periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString() },shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                        }
+                    }
+                    item { Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF315CBA)),shape=RoundedCornerShape(22.dp)) { Column(Modifier.fillMaxWidth().padding(20.dp)) {
                         Text("Остаток планового бюджета",color=Color.White.copy(alpha=.8f))
                         Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=Color.White)
@@ -130,26 +132,71 @@ private fun ThunBudgetApp() {
                 }
                 1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
-                    item { MetricCard("Расходы за текущий месяц",money(monthTotal),Modifier.fillMaxWidth()) }
+                    item { MetricCard("Расходы за календарный месяц",money(monthTotal),Modifier.fillMaxWidth()) }
+                    item { MetricCard("Расходы с начала года",money(expenses.filter { it.date.startsWith(LocalDate.now().year.toString()) }.sumOf { it.amount }),Modifier.fillMaxWidth()) }
+                    item { Text("Статистика за год по категориям",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
+                    items(categories) { cat ->
+                        val annualSpent=expenses.filter { it.category==cat.name && it.date.startsWith(LocalDate.now().year.toString()) }.sumOf { it.amount }
+                        val annualPlan=income*12*cat.percent/100.0
+                        Card { Column(Modifier.padding(14.dp)) {
+                            Row { Text(cat.name,modifier=Modifier.weight(1f)); Text(money(annualSpent),fontWeight=FontWeight.SemiBold) }
+                            Text("План: ${money(annualPlan)} · " + if(annualSpent>annualPlan) "Превышение: ${money(annualSpent-annualPlan)}" else "Не выбрано: ${money(annualPlan-annualSpent)}",style=MaterialTheme.typography.bodySmall,color=if(annualSpent>annualPlan) Color(0xFFC74444) else Color(0xFF168A72))
+                        } }
+                    }
+                    item { Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
+                    item {
+                        val periodFacts=categories.associate { c -> c.name to expenses.filter { it.category==c.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount } }
+                        val deficits=categories.map { c -> c.name to (periodFacts[c.name]!!-plannedForPeriod(income,c.percent,periodStart,periodEnd)) }.filter { it.second>0 }.sortedByDescending { it.second }
+                        val donors=categories.map { c -> c.name to (plannedForPeriod(income,c.percent,periodStart,periodEnd)-periodFacts[c.name]!!) }.filter { it.second>0 }.sortedByDescending { it.second }.toMutableList()
+                        if(deficits.isEmpty()) Text("Превышений за выбранный период нет.")
+                        else if(donors.isEmpty()) Text("Свободного остатка в других категориях нет. Чтобы не выйти за пределы дохода, сократите расходы или уменьшите лимит категории с превышением.")
+                        else deficits.forEach { deficit ->
+                            var left=deficit.second
+                            donors.toList().forEach { donor ->
+                                if(left>0 && donor.first!=deficit.first && donor.second>0) {
+                                    val transfer=minOf(left,donor.second)
+                                    if(transfer>0) {
+                                        Text("Для «${deficit.first}» не хватает ${money(left)}. Можно перенести ${money(transfer)} из «${donor.first}» (свободно ${money(donor.second)}).",style=MaterialTheme.typography.bodySmall)
+                                        left-=transfer
+                                        val idx=donors.indexOfFirst { it.first==donor.first }
+                                        if(idx>=0) donors[idx]=donor.first to (donor.second-transfer)
+                                    }
+                                }
+                            }
+                            if(left>0) Text("Непокрытое превышение по «${deficit.first}»: ${money(left)}.",style=MaterialTheme.typography.bodySmall,color=Color(0xFFC74444))
+                        }
+                    }
                     item { Text("Структура расходов",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
                     items(categories) { cat ->
                         val amount=monthExpenses.filter { it.category==cat.name }.sumOf { it.amount }
                         if(amount>0) Card { Column(Modifier.padding(14.dp)) { Row { Text(cat.name,modifier=Modifier.weight(1f)); Text(money(amount),fontWeight=FontWeight.SemiBold) }; LinearProgressIndicator(progress={if(monthTotal>0)(amount/monthTotal).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(top=8.dp)) } }
                     }
                     item { Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(income*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge) }
-                    item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.csv")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт истории в Excel (CSV)") } }
+                    item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") } }
                 }
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     if(expenses.isEmpty()) item { Text("Пока нет расходов. Нажми +, чтобы добавить первую операцию.",color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    items(expenses) { e -> Card { Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(e.title,fontWeight=FontWeight.SemiBold); Text("${e.category} · ${e.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Text("−${money(e.amount)}",fontWeight=FontWeight.Bold,color=Color(0xFFC74444)) } } }
+                    items(expenses) { e -> Card(onClick={ selectedExpense=e }) { Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(e.title,fontWeight=FontWeight.SemiBold); Text("${e.category} · ${e.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }; Text("−${money(e.amount)}",fontWeight=FontWeight.Bold,color=Color(0xFFC74444)) } } }
                 }
             }
         }
     }
     if(showAdd) AddExpenseDialog(categories,onDismiss={showAdd=false},onSave={title,category,amount,date->
-        expenses=(listOf(Expense(System.currentTimeMillis(),title,category,amount,date))+expenses).sortedByDescending { it.date }; store.saveExpenses(expenses); showAdd=false
+        val updated=(listOf(Expense(System.currentTimeMillis(),title,category,amount,date))+expenses).sortedByDescending { it.date }
+        val spentAfter=updated.filter { it.category==category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
+        val cap=categories.firstOrNull { it.name==category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
+        expenses=updated; store.saveExpenses(expenses); showAdd=false
+        if(spentAfter>cap) OverspendNotifier.notify(context, "Превышение бюджета", "Категория «$category»: превышение ${money(spentAfter-cap)} за выбранный период.")
     })
+    selectedExpense?.let { selected ->
+        ExpenseEditDialog(selected,categories,onDismiss={selectedExpense=null},onSave={edited->
+            expenses=expenses.map { if(it.id==selected.id) edited else it }.sortedByDescending { it.date }
+            store.saveExpenses(expenses); selectedExpense=null
+        },onDelete={
+            expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
+        })
+    }
     if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,onDismiss={showSettings=false},onSave={newIncome,newSavings,newCats,start,end->
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
