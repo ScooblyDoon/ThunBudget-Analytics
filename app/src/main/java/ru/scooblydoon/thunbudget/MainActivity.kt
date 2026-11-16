@@ -44,6 +44,8 @@ private data class PeriodIncome(val start: String, val end: String, val amount: 
 
 private class BudgetStore(context: Context) {
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
+    fun loadDarkTheme(): Boolean = prefs.getBoolean("dark_theme", false)
+    fun saveDarkTheme(enabled: Boolean) { prefs.edit().putBoolean("dark_theme", enabled).apply() }
     fun loadPeriodIncomes(): List<PeriodIncome> = runCatching {
         val a = JSONArray(prefs.getString("period_incomes", "[]") ?: "[]")
         (0 until a.length()).map { val o=a.getJSONObject(it); PeriodIncome(o.getString("start"),o.getString("end"),o.getDouble("amount")) }
@@ -240,6 +242,7 @@ private fun ThunBudgetApp() {
         }
     }
     var showSettings by remember { mutableStateOf(false) }
+    var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
     var showCategoryManager by remember { mutableStateOf(false) }
@@ -314,7 +317,7 @@ private fun ThunBudgetApp() {
             }.getOrElse { "Не удалось восстановить данные: ${it.message ?: "ошибка чтения"}" }
         }
     }
-    MaterialTheme(colorScheme=lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
+    MaterialTheme(colorScheme=if (darkTheme) darkColorScheme(primary=Color(0xFF9DB8FF),secondary=Color(0xFF70D6B5),surface=Color(0xFF171A20),background=Color(0xFF101318)) else lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
         Scaffold(
             topBar={ TopAppBar(title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }, actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }) },
             floatingActionButton={ Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -748,7 +751,7 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),onDismiss={showSettings=false},onRestoreAutomatic={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),onDismiss={showSettings=false},onRestoreAutomatic={
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
@@ -893,7 +896,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
+private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
@@ -902,6 +905,14 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
     var to by remember { mutableStateOf(end) }
     AlertDialog(onDismissRequest=onDismiss,title={Text("Настройки бюджета")},text={
         LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=540.dp)) {
+            item { Text("Оформление",fontWeight=FontWeight.Bold) }
+            item {
+                Text("Тема приложения",style=MaterialTheme.typography.bodyMedium)
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    SegmentedButton(selected=!darkTheme,onClick={onThemeChange(false)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Светлая") }
+                    SegmentedButton(selected=darkTheme,onClick={onThemeChange(true)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("Тёмная") }
+                }
+            }
             item { OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { Text("Резервное копирование",fontWeight=FontWeight.Bold) }
