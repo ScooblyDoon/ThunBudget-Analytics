@@ -999,15 +999,71 @@ private fun startOfflineSpeechRecognition(
     recognizer.startListening(intent)
 }
 
+private fun parseSpokenAmount(normalized: String): Double? {
+    // Сначала обрабатываем цифры и явные множители: «54 тысячи», «1 тыс.», «54 000».
+    val digitMatch = Regex(
+        """(?<![\\d])([\\d][\\d \\u00A0]*(?:[,.]\\d{1,2})?)\\s*(тысяч[а-я]*|тыс\\.?)?"""
+    ).find(normalized)
+    if (digitMatch != null) {
+        val number = digitMatch.groupValues[1]
+            .trim()
+            .replace(" ", "")
+            .replace("\\u00A0", "")
+            .replace(',', '.')
+            .toDoubleOrNull()
+        if (number != null && number > 0.0) {
+            val multiplier = if (digitMatch.groupValues[2].isNotBlank()) 1000.0 else 1.0
+            return number * multiplier
+        }
+    }
+
+    // Поддерживаем также числительные, которые распознавание речи возвращает словами.
+    val numberWords = mapOf(
+        "ноль" to 0, "один" to 1, "одна" to 1, "одно" to 1, "одну" to 1,
+        "два" to 2, "две" to 2, "три" to 3, "четыре" to 4, "пять" to 5,
+        "шесть" to 6, "семь" to 7, "восемь" to 8, "девять" to 9,
+        "десять" to 10, "одиннадцать" to 11, "двенадцать" to 12,
+        "тринадцать" to 13, "четырнадцать" to 14, "пятнадцать" to 15,
+        "шестнадцать" to 16, "семнадцать" to 17, "восемнадцать" to 18,
+        "девятнадцать" to 19, "двадцать" to 20, "тридцать" to 30,
+        "сорок" to 40, "пятьдесят" to 50, "шестьдесят" to 60,
+        "семьдесят" to 70, "восемьдесят" to 80, "девяносто" to 90,
+        "сто" to 100, "двести" to 200, "триста" to 300, "четыреста" to 400,
+        "пятьсот" to 500, "шестьсот" to 600, "семьсот" to 700,
+        "восемьсот" to 800, "девятьсот" to 900
+    )
+    var current = 0
+    var total = 0.0
+    var found = false
+    for (token in normalized.split(Regex("""[\\s,]+"""))) {
+        val word = token.trim('.', ',', '!', '?', ':', ';')
+        when {
+            numberWords.containsKey(word) -> {
+                current += numberWords.getValue(word)
+                found = true
+            }
+            word.startsWith("тысяч") -> {
+                total += (if (current == 0) 1 else current) * 1000.0
+                current = 0
+                found = true
+            }
+            found -> break
+        }
+    }
+    if (found) {
+        val amount = total + current
+        if (amount > 0.0) return amount
+    }
+    return null
+}
+
 private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
     val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е')
     val isIncome = listOf("доход", "поступление", "получил", "получила", "зарплата", "зачислили").any { normalized.contains(it) }
     val hasExpenseCommand = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход").any { normalized.contains(it) }
     if (!isIncome && !hasExpenseCommand) return null
 
-    val amountMatch = Regex("""(?<!\d)(\d[\d \u00A0]*(?:[,.]\d{1,2})?)(?!\d)""").find(normalized) ?: return null
-    val amount = amountMatch.value.replace(" ", "").replace("\u00A0", "").replace(',', '.').toDoubleOrNull()
-        ?.takeIf { it > 0.0 } ?: return null
+    val amount = parseSpokenAmount(normalized)?.takeIf { it > 0.0 } ?: return null
 
     val matchedCategory = if (isIncome) null else categories
         .sortedByDescending { it.name.length }
