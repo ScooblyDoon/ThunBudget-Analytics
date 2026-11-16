@@ -31,6 +31,8 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
         run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/thunbudget-release.jks"
       - name: Build signed release APK
+        id: signed_release
+        continue-on-error: true
         if: ${{ env.THUNBUDGET_SIGNING_KEY != '' }}
         env:
           THUNBUDGET_KEYSTORE_FILE: ${{ runner.temp }}/thunbudget-release.jks
@@ -47,10 +49,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Build debug APK (temporary, not suitable for upgrades)
-        if: ${{ env.THUNBUDGET_SIGNING_KEY == '' }}
+        if: ${{ always() && (env.THUNBUDGET_SIGNING_KEY == '' || steps.signed_release.outcome == 'failure') }}
         run: gradle :app:assembleDebug
       - name: Upload debug APK
-        if: ${{ env.THUNBUDGET_SIGNING_KEY == '' }}
+        if: ${{ always() && (env.THUNBUDGET_SIGNING_KEY == '' || steps.signed_release.outcome == 'failure') }}
         uses: actions/upload-artifact@v4
         with:
           name: ThunBudget-Analytics-debug
