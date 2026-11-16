@@ -16,6 +16,25 @@ android {
         versionName = "0.2.0"
     }
 
+    signingConfigs {
+        create("release") {
+            val keystoreFile = System.getenv("THUNBUDGET_KEYSTORE_FILE")
+            if (!keystoreFile.isNullOrBlank()) {
+                storeFile = file(keystoreFile)
+                storePassword = System.getenv("THUNBUDGET_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("THUNBUDGET_KEY_ALIAS")
+                keyPassword = System.getenv("THUNBUDGET_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+        }
+    }
+
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
