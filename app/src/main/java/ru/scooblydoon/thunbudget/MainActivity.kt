@@ -206,7 +206,10 @@ private fun ThunBudgetApp() {
             isListening = true
             startOfflineSpeechRecognition(context, offlineSpeechRecognizer, onResult = { alternatives ->
                 isListening = false
-                val parsed = alternatives.firstNotNullOfOrNull { parseVoiceExpense(it, categories) }
+                val parsed = alternatives
+                    .mapNotNull { phrase -> parseVoiceExpense(phrase, categories)?.let { draft -> phrase to draft } }
+                    .maxByOrNull { (phrase, _) -> voiceRecognitionScore(phrase, categories) }
+                    ?.second
                 if (parsed == null) {
                     voiceMessage = "Не удалось разобрать команду. Скажи сумму и назначение: «Добавь расход 1 500 рублей на продукты» или «Добавь доход 54 тысячи рублей». Распознано: ${alternatives.joinToString(" / ")}"
                 } else {
@@ -1035,9 +1038,7 @@ private fun parseSpokenAmount(normalized: String): Double? {
     ).find(normalized)
     if (digitMatch != null) {
         val number = digitMatch.groupValues[1]
-            .replace(" ", "")
-            .replace('\u00A0', ' ')
-            .replace(" ", "")
+            .replace(Regex("""[\s\u00A0]+"""), "")
             .replace(',', '.')
             .toDoubleOrNull()
         if (number != null && number > 0.0) {
@@ -1101,6 +1102,17 @@ private fun parseSpokenAmount(normalized: String): Double? {
     }
     val result = total + current
     return result.takeIf { found && it > 0.0 }
+}
+
+private fun voiceRecognitionScore(phrase: String, categories: List<BudgetCategory>): Int {
+    val normalized = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+    var score = normalized.length.coerceAtMost(120)
+    if (Regex("""\b(тысяч[а-я]*|тыс\.?|миллион[а-я]*|млн\.?|миллиард[а-я]*|млрд\.?)\b""").containsMatchIn(normalized)) score += 100
+    if (Regex("""\d[ \u00A0]\d{3}""").containsMatchIn(normalized)) score += 80
+    if (listOf("руб", "рублей", "рубля", "р.", "р ").any { normalized.contains(it) }) score += 20
+    if (listOf("доход", "поступление", "зарплата", "получил", "получила", "добавь", "добавить", "расход", "потратил", "потратила", "купил", "купила", "оплатил", "оплатила").any { normalized.contains(it) }) score += 35
+    if (categories.any { normalized.contains(it.name.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }) score += 35
+    return score
 }
 
 private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
