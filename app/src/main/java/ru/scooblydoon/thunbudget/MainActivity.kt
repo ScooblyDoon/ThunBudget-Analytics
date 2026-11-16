@@ -261,3 +261,48 @@ private fun plannedForPeriod(income: Double, percent: Double, start: String, end
 }
 
 private fun money(value:Double):String = String.format(Locale("ru","RU"),"%,.0f ₽",value)
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExpenseEditDialog(
+    expense: Expense,
+    categories: List<BudgetCategory>,
+    onDismiss: () -> Unit,
+    onSave: (Expense) -> Unit,
+    onDelete: () -> Unit
+) {
+    var title by remember(expense.id) { mutableStateOf(expense.title) }
+    var amount by remember(expense.id) { mutableStateOf(expense.amount.toString()) }
+    var category by remember(expense.id) { mutableStateOf(expense.category) }
+    var date by remember(expense.id) { mutableStateOf(expense.date) }
+    var expanded by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest=onDismiss,
+        title={Text("Изменить расход")},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
+                OutlinedTextField(amount,{amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+                ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
+                    OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
+                    ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { categories.forEach { DropdownMenuItem(text={Text(it.name)},onClick={category=it.name;expanded=false}) } }
+                }
+                OutlinedTextField(date,{date=it},label={Text("Дата (ГГГГ-ММ-ДД)")},singleLine=true)
+            }
+        },
+        confirmButton={
+            TextButton(onClick={
+                val v=amount.replace(',','.').toDoubleOrNull()
+                if(title.isNotBlank() && v!=null && v>0 && runCatching{LocalDate.parse(date)}.isSuccess)
+                    onSave(expense.copy(title=title,category=category,amount=v,date=date))
+            },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0) { Text("Сохранить") }
+        },
+        dismissButton={
+            Row {
+                TextButton(onClick=onDelete) { Text("Удалить",color=Color(0xFFC74444)) }
+                TextButton(onClick=onDismiss) { Text("Отмена") }
+            }
+        }
+    )
+}
