@@ -1026,15 +1026,16 @@ private fun startOfflineSpeechRecognition(
 }
 
 private fun parseSpokenAmount(normalized: String): Double? {
-    // Сначала обрабатываем цифры и явные множители: «54 тысячи», «1 тыс.», «54 000».
+    // Цифры: «54 тысячи», «1 тыс.», «54 000», «1000 рублей», «25 процентов».
     val digitMatch = Regex(
-        """(?<![\\d])([\\d][\\d \\u00A0]*(?:[,.]\\d{1,2})?)\\s*(тысяч[а-я]*|тыс\\.?)?"""
+        """(?<!\d)(\d[\d \u00A0]*(?:[,.]\d{1,2})?)\s*(тысяч[а-я]*|тыс\.?)?"""
     ).find(normalized)
     if (digitMatch != null) {
         val number = digitMatch.groupValues[1]
             .trim()
             .replace(" ", "")
-            .replace("\\u00A0", "")
+            .replace('\u00A0', ' ')
+            .replace(" ", "")
             .replace(',', '.')
             .toDoubleOrNull()
         if (number != null && number > 0.0) {
@@ -1043,7 +1044,7 @@ private fun parseSpokenAmount(normalized: String): Double? {
         }
     }
 
-    // Поддерживаем также числительные, которые распознавание речи возвращает словами.
+    // Числительные словами, включая составные значения и тысячи.
     val numberWords = mapOf(
         "ноль" to 0, "один" to 1, "одна" to 1, "одно" to 1, "одну" to 1,
         "два" to 2, "две" to 2, "три" to 3, "четыре" to 4, "пять" to 5,
@@ -1061,7 +1062,7 @@ private fun parseSpokenAmount(normalized: String): Double? {
     var current = 0
     var total = 0.0
     var found = false
-    for (token in normalized.split(Regex("""[\\s,]+"""))) {
+    for (token in normalized.split(Regex("""[\s,]+"""))) {
         val word = token.trim('.', ',', '!', '?', ':', ';')
         when {
             numberWords.containsKey(word) -> {
@@ -1084,39 +1085,62 @@ private fun parseSpokenAmount(normalized: String): Double? {
 }
 
 private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
-    val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е').replace('ё','е').trim()
+    val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е').trim()
     val amount = parseSpokenAmount(normalized)?.takeIf { it > 0.0 } ?: return null
-    val date = when {
-        normalized.contains("вчера") -> LocalDate.now().minusDays(1)
-        else -> LocalDate.now()
-    }
+    val date = if (normalized.contains("вчера")) LocalDate.now().minusDays(1) else LocalDate.now()
 
     val categoryIntent = listOf("категори", "процент", "долю").any { normalized.contains(it) }
-    if (categoryIntent && listOf("добавь", "добавить", "создай", "новую").any { normalized.contains(it) }) {
-        val marker = Regex("""категори[яюи]?\s+(.+?)(?=\s+(?:\\d|ноль|один|одна|одно|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать|шестнадцать|семнадцать|восемнадцать|девятнадцать|двадцать|тридцать|сорок|пятьдесят|шестьдесят|семьдесят|восемьдесят|девяносто|сто|двести|триста|четыреста|пятьсот|шестьсот|семьсот|восемьсот|девятьсот))""").find(normalized)
-        val name = marker?.groupValues?.get(1)?.trim()?.removeSuffix("процентов")?.removeSuffix("процент")?.trim()
-        if (!name.isNullOrBlank() && amount <= 100.0) {
-            return VoiceExpenseDraft(name.replaceFirstChar { it.uppercase(Locale("ru","RU")) },name,amount,date,isCategoryAdd=true)
+    val categoryAddIntent = categoryIntent &&
+        listOf("добавь", "добавить", "создай", "новую").any { normalized.contains(it) }
+    if (categoryAddIntent && amount <= 100.0) {
+        val marker = Regex(
+            """категори[яюи]?\s+(.+?)\s+(?=(?:\d|ноль|один|одна|одно|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать|шестнадцать|семнадцать|восемнадцать|девятнадцать|двадцать|тридцать|сорок|пятьдесят|шестьдесят|семьдесят|восемьдесят|девяносто|сто|двести|триста|четыреста|пятьсот|шестьсот|семьсот|восемьсот|девятьсот))"""
+        ).find(normalized)
+        val name = marker?.groupValues?.get(1)?.trim()?.removePrefix("на ")?.trim()
+        if (!name.isNullOrBlank()) {
+            return VoiceExpenseDraft(
+                title = name.replaceFirstChar { it.uppercase(Locale("ru", "RU")) },
+                category = name.replaceFirstChar { it.uppercase(Locale("ru", "RU")) },
+                amount = amount,
+                date = date.toString(),
+                isCategoryAdd = true
+            )
         }
     }
 
-    if (categoryIntent && listOf("измени", "изменить", "поменяй", "поменять", "установи", "поставь", "скорректируй").any { normalized.contains(it) }) {
+    val categoryEditIntent = categoryIntent &&
+        listOf("измени", "изменить", "поменяй", "поменять", "установи", "поставь", "скорректируй").any { normalized.contains(it) }
+    if (categoryEditIntent && amount <= 100.0) {
         val matched = categories.sortedByDescending { it.name.length }.firstOrNull {
-            normalized.contains(it.name.lowercase(Locale("ru","RU")).replace('ё','е'))
+            normalized.contains(it.name.lowercase(Locale("ru", "RU")).replace('ё', 'е'))
         } ?: return null
-        if (amount <= 100.0) return VoiceExpenseDraft(matched.name,matched.name,amount,date,isCategoryEdit=true)
+        return VoiceExpenseDraft(
+            title = matched.name,
+            category = matched.name,
+            amount = amount,
+            date = date.toString(),
+            isCategoryEdit = true
+        )
     }
 
-    val isIncome = listOf("доход", "поступление", "получил", "получила", "зарплата", "зачислили", "внеси доход", "добавить доход").any { normalized.contains(it) }
-    val hasExpenseCommand = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход", "внеси").any { normalized.contains(it) }
+    val isIncome = listOf(
+        "доход", "поступление", "получил", "получила", "зарплата",
+        "зачислили", "внеси доход", "добавить доход", "добавь доход"
+    ).any { normalized.contains(it) }
+    val hasExpenseCommand = listOf(
+        "добавь", "добавить", "запиши", "записать", "потратил",
+        "потратила", "расход", "внеси", "купил", "купила"
+    ).any { normalized.contains(it) }
     if (!isIncome && !hasExpenseCommand) return null
-    val matchedCategory = if (isIncome) null else categories.sortedByDescending { it.name.length }
+
+    val matchedCategory = if (isIncome) null else categories
+        .sortedByDescending { it.name.length }
         .firstOrNull { normalized.contains(it.name.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }
         ?: if (isIncome) null else return null
 
     return VoiceExpenseDraft(
-        title = if(isIncome) "Голосовой доход" else matchedCategory!!.name,
-        category = if(isIncome) "Доход" else matchedCategory!!.name,
+        title = if (isIncome) "Голосовой доход" else matchedCategory!!.name,
+        category = if (isIncome) "Доход" else matchedCategory!!.name,
         amount = amount,
         date = date.toString(),
         isIncome = isIncome
