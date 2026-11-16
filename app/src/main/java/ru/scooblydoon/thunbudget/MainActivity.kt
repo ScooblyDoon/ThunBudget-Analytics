@@ -136,8 +136,8 @@ private fun ThunBudgetApp() {
                     item { MetricCard("Расходы с начала года",money(expenses.filter { it.date.startsWith(LocalDate.now().year.toString()) }.sumOf { it.amount }),Modifier.fillMaxWidth()) }
                     item { Text("Статистика за год по категориям",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
                     items(categories) { cat ->
-                        val annualSpent=expenses.filter { it.category==cat.name && it.date.startsWith(LocalDate.now().year.toString()) }.sumOf { it.amount }
-                        val annualPlan=income*12*cat.percent/100.0
+                        val annualSpent=expenses.filter { it.category==cat.name && it.date>=LocalDate.of(LocalDate.now().year,1,1).toString() && it.date<=LocalDate.now().toString() }.sumOf { it.amount }
+                        val annualPlan=plannedForPeriod(income,cat.percent,LocalDate.of(LocalDate.now().year,1,1).toString(),LocalDate.now().toString())
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f)); Text(money(annualSpent),fontWeight=FontWeight.SemiBold) }
                             Text("План: ${money(annualPlan)} · " + if(annualSpent>annualPlan) "Превышение: ${money(annualSpent-annualPlan)}" else "Не выбрано: ${money(annualPlan-annualSpent)}",style=MaterialTheme.typography.bodySmall,color=if(annualSpent>annualPlan) Color(0xFFC74444) else Color(0xFF168A72))
@@ -147,7 +147,7 @@ private fun ThunBudgetApp() {
                     item {
                         val periodFacts=categories.associate { c -> c.name to expenses.filter { it.category==c.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount } }
                         val deficits=categories.map { c -> c.name to (periodFacts[c.name]!!-plannedForPeriod(income,c.percent,periodStart,periodEnd)) }.filter { it.second>0 }.sortedByDescending { it.second }
-                        val donors=categories.map { c -> c.name to (plannedForPeriod(income,c.percent,periodStart,periodEnd)-periodFacts[c.name]!!) }.filter { it.second>0 }.sortedByDescending { it.second }.toMutableList()
+                        val donors=categories.map { c -> c.name to (plannedForPeriod(income,c.percent,periodStart,periodEnd)-periodFacts[c.name]!!) }.filter { it.second>0 && it.first != "Накопления" }.sortedByDescending { it.second }.toMutableList()
                         if(deficits.isEmpty()) Text("Превышений за выбранный период нет.")
                         else if(donors.isEmpty()) Text("Свободного остатка в других категориях нет. Чтобы не выйти за пределы дохода, сократите расходы или уменьшите лимит категории с превышением.")
                         else deficits.forEach { deficit ->
@@ -247,9 +247,9 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
                     OutlinedTextField(cats[index].percent.toString(),{v-> cats=cats.toMutableList().also { it[index]=it[index].copy(percent=v.replace(',','.').toDoubleOrNull() ?: 0.0) } },modifier=Modifier.width(90.dp),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
                 }
             }
-            item { Text("Сумма долей: ${cats.sumOf{it.percent}.toInt()}%",style=MaterialTheme.typography.labelMedium) }
+            item { Text("Сумма долей: ${cats.sumOf{it.percent}.toInt()}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-    },confirmButton={TextButton(onClick={val i=inc.replace(',','.').toDoubleOrNull();val s=sav.replace(',','.').toDoubleOrNull();if(i!=null&&i>0&&s!=null&&s>=0&&s<=100&&runCatching{LocalDate.parse(from);LocalDate.parse(to)}.isSuccess&&!LocalDate.parse(to).isBefore(LocalDate.parse(from)))onSave(i,s,cats,from,to)},enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+    },confirmButton={TextButton(onClick={val i=inc.replace(',','.').toDoubleOrNull();val s=sav.replace(',','.').toDoubleOrNull();if(i!=null&&i>0&&s!=null&&s>=0&&s<=100&&cats.all{it.percent>=0}&&cats.sumOf{it.percent}<=100.0&&runCatching{LocalDate.parse(from);LocalDate.parse(to)}.isSuccess&&!LocalDate.parse(to).isBefore(LocalDate.parse(from)))onSave(i,s,cats,from,to)},enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 private fun plannedForPeriod(income: Double, percent: Double, start: String, end: String): Double {
