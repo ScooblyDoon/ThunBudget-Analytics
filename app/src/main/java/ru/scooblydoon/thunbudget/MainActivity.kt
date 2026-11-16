@@ -126,7 +126,7 @@ private fun ThunBudgetApp() {
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.amount }
     val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
-    val budgetBase = if(periodIncome>0.0) periodIncome else income
+    val analyticsMonthIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==analyticsMonth }.getOrDefault(false) }.sumOf { it.amount }.let { if(it>0.0) it else income }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(periodIncome>0.0) periodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
@@ -208,7 +208,7 @@ private fun ThunBudgetApp() {
                         val from=analyticsMonth.atDay(1).toString()
                         val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
-                        val plan=plannedForPeriod(income,cat.percent,from,to)
+                        val plan=plannedForPeriod(analyticsMonthIncome,cat.percent,from,to)
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
@@ -240,7 +240,8 @@ private fun ThunBudgetApp() {
                         val pEnd=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(23) else analyticsPeriodMonth.plusMonths(1).atDay(8)
                         val visibleEnd=minOf(pEnd,today)
                         val fact=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.category==cat.name && it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
-                        val plan=plannedForPeriod(income,cat.percent,pStart.toString(),pEnd.toString())
+                        val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
+                        val plan=if(pIncome>0.0) pIncome*cat.percent/100.0 else plannedForPeriod(analyticsMonthIncome,cat.percent,pStart.toString(),pEnd.toString())
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток бюджета: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
@@ -275,7 +276,7 @@ private fun ThunBudgetApp() {
                             if(left>0) Text("Непокрытое превышение «${deficit.first}»: ${money(left)}.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
                         }
                     }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
                     item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") } }
                 }
                 2 -> ChartsScreen(
