@@ -5,6 +5,10 @@ on:
     branches: [ "main", "feature/next-update-ux" ]
   workflow_dispatch:
 
+concurrency:
+  group: thunbudget-android-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
