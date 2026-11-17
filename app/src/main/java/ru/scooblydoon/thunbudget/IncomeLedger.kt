@@ -1,0 +1,181 @@
+package ru.scooblydoon.thunbudget
+
+import android.content.SharedPreferences
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.LocalDate
+import java.util.UUID
+
+/**
+ * A single, dated income operation. Legacy rows are kept visible as one
+ * explicitly-labelled aggregate because the old format did not store details.
+ */
+data class IncomeEntry(
+    val id: String,
+    val title: String,
+    val amount: Double,
+    val date: String,
+    val periodStart: String,
+    val periodEnd: String,
+    val isLegacyAggregate: Boolean = false
+)
+
+data class LegacyPeriodIncome(
+    val start: String,
+    val end: String,
+    val amount: Double
+)
+
+object IncomeLedgerMigration {
+    fun migrate(
+        legacy: List<LegacyPeriodIncome>,
+        existing: List<IncomeEntry> = emptyList()
+    ): List<IncomeEntry> {
+        val result = existing.toMutableList()
+        val knownIds = result.mapTo(mutableSetOf()) { it.id }
+        legacy.forEachIndexed { index, row ->
+            val start = LocalDate.parse(row.start)
+            val end = LocalDate.parse(row.end)
+            require(!end.isBefore(start)) { "Некорректный отчётный период." }
+            require(row.amount.isFinite() && row.amount >= 0.0) { "Некорректная сумма дохода." }
+            val id = "legacy-${row.start}-${row.end}-${index}"
+            if (row.amount > 0.0 && knownIds.add(id)) {
+                result += IncomeEntry(
+                    id = id,
+                    title = "Перенесённый доход за период",
+                    amount = row.amount,
+                    date = row.end,
+                    periodStart = row.start,
+                    periodEnd = row.end,
+                    isLegacyAggregate = true
+                )
+            }
+        }
+        return result
+    }
+}
+
+/**
+ * SharedPreferences-backed ledger. Migration is validated before the single
+ * commit; legacy keys are deliberately retained for rollback/old-version safety.
+ */
+class IncomeLedgerRepository(private val preferences: SharedPreferences) {
+    companion object {
+        const val ENTRIES_KEY = "income_entries"
+        const val MIGRATION_KEY = "income_ledger_migration_v1"
+        private const val LEGACY_KEY = "period_incomes"
+    }
+
+    fun load(): List<IncomeEntry> = decodeEntries(preferences.getString(ENTRIES_KEY, "[]") ?: "[]")
+
+    fun migrateLegacyIfNeeded(): Boolean {
+        if (preferences.getBoolean(MIGRATION_KEY, false)) return true
+        return runCatching {
+            val legacyRaw = preferences.getString(LEGACY_KEY, "[]") ?: "[]"
+            val legacyJson = JSONArray(legacyRaw)
+            val legacy = (0 until legacyJson.length()).map { index ->
+                val item = legacyJson.getJSONObject(index)
+                LegacyPeriodIncome(
+                    start = item.getString("start"),
+                    end = item.getString("end"),
+                    amount = item.getDouble("amount")
+                )
+            }
+            val currentRaw = preferences.getString(ENTRIES_KEY, "[]") ?: "[]"
+            val current = decodeEntries(currentRaw)
+            val migrated = IncomeLedgerMigration.migrate(legacy, current)
+            val editor = preferences.edit()
+                .putString(ENTRIES_KEY, encodeEntries(migrated))
+                .putBoolean(MIGRATION_KEY, true)
+            require(editor.commit()) { "Не удалось сохранить новый журнал доходов." }
+            true
+        }.getOrDefault(false)
+    }
+
+    fun save(entries: List<IncomeEntry>): Boolean = runCatching {
+        validate(entries)
+        preferences.edit().putString(ENTRIES_KEY, encodeEntries(entries)).commit()
+    }.getOrDefault(false)
+
+    fun add(
+        title: String,
+        amount: Double,
+        date: LocalDate,
+        periodStart: LocalDate,
+        periodEnd: LocalDate
+    ): IncomeEntry {
+        require(title.isNotBlank())
+        require(amount.isFinite() && amount > 0.0)
+        require(!periodEnd.isBefore(periodStart))
+        require(!date.isBefore(periodStart) && !date.isAfter(periodEnd))
+        val entry = IncomeEntry(
+            id = UUID.randomUUID().toString(),
+            title = title.trim(),
+            amount = amount,
+            date = date.toString(),
+            periodStart = periodStart.toString(),
+            periodEnd = periodEnd.toString()
+        )
+        check(save(load() + entry)) { "Не удалось сохранить доход." }
+        return entry
+    }
+
+    fun update(entry: IncomeEntry): Boolean {
+        val entries = load()
+        if (entries.none { it.id == entry.id }) return false
+        return save(entries.map { if (it.id == entry.id) entry else it })
+    }
+
+    fun delete(id: String): Boolean {
+        val entries = load()
+        if (entries.none { it.id == id }) return false
+        return save(entries.filterNot { it.id == id })
+    }
+
+    fun totalForPeriod(start: String, end: String): Double =
+        load().filter { it.periodStart == start && it.periodEnd == end }.sumOf { it.amount }
+
+    private fun validate(entries: List<IncomeEntry>) {
+        require(entries.map { it.id }.distinct().size == entries.size) { "Повторяется идентификатор дохода." }
+        entries.forEach {
+            require(it.id.isNotBlank() && it.title.isNotBlank())
+            require(it.amount.isFinite() && it.amount > 0.0)
+            val date = LocalDate.parse(it.date)
+            val start = LocalDate.parse(it.periodStart)
+            val end = LocalDate.parse(it.periodEnd)
+            require(!end.isBefore(start) && !date.isBefore(start) && !date.isAfter(end))
+        }
+    }
+
+    private fun decodeEntries(raw: String): List<IncomeEntry> {
+        val array = JSONArray(raw)
+        return (0 until array.length()).map { index ->
+            val item = array.getJSONObject(index)
+            IncomeEntry(
+                id = item.getString("id"),
+                title = item.getString("title"),
+                amount = item.getDouble("amount"),
+                date = item.getString("date"),
+                periodStart = item.getString("periodStart"),
+                periodEnd = item.getString("periodEnd"),
+                isLegacyAggregate = item.optBoolean("isLegacyAggregate", false)
+            )
+        }.also(::validate)
+    }
+
+    private fun encodeEntries(entries: List<IncomeEntry>): String {
+        validate(entries)
+        val array = JSONArray()
+        entries.forEach { entry ->
+            array.put(JSONObject()
+                .put("id", entry.id)
+                .put("title", entry.title)
+                .put("amount", entry.amount)
+                .put("date", entry.date)
+                .put("periodStart", entry.periodStart)
+                .put("periodEnd", entry.periodEnd)
+                .put("isLegacyAggregate", entry.isLegacyAggregate))
+        }
+        return array.toString()
+    }
+}
