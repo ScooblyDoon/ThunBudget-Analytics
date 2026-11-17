@@ -1317,7 +1317,7 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
     val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е').trim()
     val date = if (normalized.contains("вчера")) LocalDate.now().minusDays(1) else LocalDate.now()
 
-    val renameMatch = Regex("""(?:переименуй|переименовать|назови|назвать)\\s+категори(?:ю|и)\\s+(.+?)\\s+(?:в|на)\\s+(.+)$""").find(normalized)
+    val renameMatch = Regex("""(?:переименуй|переименовать|назови|назвать)\s+категори(?:ю|и)\s+(.+?)\s+(?:в|на)\s+(.+)$""").find(normalized)
     if (renameMatch != null) {
         val oldName = renameMatch.groupValues[1].trim()
         val newName = renameMatch.groupValues[2].trim().removeSuffix(".")
