@@ -403,6 +403,7 @@ private fun ThunBudgetApp() {
                 categories = store.loadCategories()
                 expenses = store.loadExpenses()
                 periodIncomes = store.loadPeriodIncomes()
+                incomeEntries = store.loadIncomeEntries()
                 periodStart = store.loadPeriodStart() ?: periodStart
                 periodEnd = store.loadPeriodEnd() ?: periodEnd
                 selectedPeriod = -1
@@ -956,7 +957,7 @@ private fun ThunBudgetApp() {
         val restored = store.restorePreviousBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
-            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes()
+            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1
             backupMessage="Предыдущее состояние данных восстановлено."
@@ -985,7 +986,7 @@ private fun ThunBudgetApp() {
             showUndoConfirmation=false
             if (store.restoreUndoSnapshot()) {
                 expenses=store.loadExpenses(); categories=store.loadCategories()
-                periodIncomes=store.loadPeriodIncomes(); income=store.loadIncome()
+                periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); income=store.loadIncome()
                 savingsGoal=store.loadSavingsGoal()
                 periodStart=store.loadPeriodStart() ?: periodStart
                 periodEnd=store.loadPeriodEnd() ?: periodEnd
