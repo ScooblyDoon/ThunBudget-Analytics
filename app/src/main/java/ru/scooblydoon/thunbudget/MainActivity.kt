@@ -579,7 +579,7 @@ private fun ThunBudgetApp() {
                         val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
                         MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
                     }
-                    item { TextButton(onClick={showMonthCategories=!showMonthCategories},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
+                    item { TextButton(onClick={showMonthCategories=!showMonthCategories; persistUiExpanded(context,"month_categories",showMonthCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showMonthCategories) items(categories,key={ "month-"+it.name }) { cat ->
                         val from=analyticsMonth.atDay(1).toString()
                         val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
@@ -610,7 +610,7 @@ private fun ThunBudgetApp() {
                         val periodTotal=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
                         MetricCard("${pStart.format(formatter)} — ${pEnd.format(formatter)} · потрачено",money(periodTotal),Modifier.fillMaxWidth())
                     }
-                    item { TextButton(onClick={showPeriodCategories=!showPeriodCategories},modifier=Modifier.fillMaxWidth()) { Text(if(showPeriodCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
+                    item { TextButton(onClick={showPeriodCategories=!showPeriodCategories; persistUiExpanded(context,"period_categories",showPeriodCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showPeriodCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showPeriodCategories) items(categories,key={ "period-"+it.name }) { cat ->
                         val pStart=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(9) else analyticsPeriodMonth.atDay(24)
                         val pEnd=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(23) else analyticsPeriodMonth.plusMonths(1).atDay(8)
@@ -625,7 +625,7 @@ private fun ThunBudgetApp() {
                     }
                     item { Divider(); Text("Расходы за год",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item { MetricCard("Всего с начала года",money(expenses.filter { it.date>=LocalDate.of(today.year,1,1).toString() && it.date<=today.toString() }.sumOf { it.amount }),Modifier.fillMaxWidth()) }
-                    item { TextButton(onClick={showYearCategories=!showYearCategories},modifier=Modifier.fillMaxWidth()) { Text(if(showYearCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
+                    item { TextButton(onClick={showYearCategories=!showYearCategories; persistUiExpanded(context,"year_categories",showYearCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showYearCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showYearCategories) items(categories,key={ "year-"+it.name }) { cat ->
                         val yearStart=LocalDate.of(today.year,1,1).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=yearStart && it.date<=today.toString() }.sumOf { it.amount }
@@ -635,7 +635,7 @@ private fun ThunBudgetApp() {
                             Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Не выбрано: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
                         } }
                     }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={showAdvice=!showAdvice}) { Text(if(showAdvice) "Скрыть" else "Показать") } } }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={showAdvice=!showAdvice; persistUiExpanded(context,"analytics_advice",showAdvice)}) { Text(if(showAdvice) "Скрыть" else "Показать") } } }
                     if(showAdvice) item {
                         val periodFacts=categories.associate { cat -> cat.name to expenses.filter { it.category==cat.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount } }
                         val deficits=categories.map { cat -> cat.name to (periodFacts[cat.name]!!-plannedForPeriod(income,cat.percent,periodStart,periodEnd)) }.filter { it.second>0 }.sortedByDescending { it.second }
@@ -652,13 +652,13 @@ private fun ThunBudgetApp() {
                             if(left>0) Text("Непокрытое превышение «${deficit.first}»: ${money(left)}.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
                         }
                     }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
                     item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") } }
                 }
                 2 -> Box(Modifier.padding(padding).fillMaxSize()) {
                     ChartsScreen(
                         expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
-                        showPlan=showPlanChart,onShowPlanChange={showPlanChart=it},showPie=showPieChart,onShowPieChange={showPieChart=it},
+                        showPlan=showPlanChart,onShowPlanChange={showPlanChart=it; persistUiExpanded(context,"chart_plan",it)},showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
                         selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
                         fallbackIncome=income,periodIncomes=periodIncomes
                     )
@@ -670,7 +670,7 @@ private fun ThunBudgetApp() {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item { Row(verticalAlignment=Alignment.CenterVertically) {
                         Text("Фильтры операций",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
-                        TextButton(onClick={showHistoryFilters=!showHistoryFilters}) { Text(if(showHistoryFilters) "Скрыть ▲" else "Показать ▼") }
+                        TextButton(onClick={showHistoryFilters=!showHistoryFilters; persistUiExpanded(context,"history_filters",showHistoryFilters)}) { Text(if(showHistoryFilters) "Скрыть ▲" else "Показать ▼") }
                     } }
                     if(showHistoryFilters) item {
                         var expandedCategory by rememberSaveable { mutableStateOf(false) }
@@ -1311,6 +1311,11 @@ private fun SpendingBreakdownCard(
             }
         }
     }
+}
+
+private fun persistUiExpanded(context: Context, key: String, expanded: Boolean) {
+    context.getSharedPreferences("thunbudget_ui_state", Context.MODE_PRIVATE)
+        .edit().putBoolean(key, expanded).commit()
 }
 
 @Composable
