@@ -178,7 +178,12 @@ private class BudgetStore(context: Context) {
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
-            if (value is String && key != "_pre_restore_backup" && key != "_auto_backup" && key != "_undo_snapshot") data.put(key, value)
+            if (key != "_pre_restore_backup" && key != "_auto_backup" && key != "_undo_snapshot") {
+                when (value) {
+                    is String -> data.put(key, value)
+                    is Boolean -> data.put(key, value)
+                }
+            }
         }
         return JSONObject()
             .put("app", "ThunBudget")
@@ -229,8 +234,11 @@ private class BudgetStore(context: Context) {
         while (keys.hasNext()) {
             val key = keys.next()
             val value = data.get(key)
-            require(value is String) { "Некорректный формат данных резервной копии." }
-            if (key != "_pre_restore_backup") editor.putString(key, value)
+            when (value) {
+                is String -> if (key != "_pre_restore_backup") editor.putString(key, value)
+                is Boolean -> if (key == "dark_theme") editor.putBoolean(key, value)
+                else -> error("Некорректный формат данных резервной копии.")
+            }
         }
         editor.commit()
     }.getOrDefault(false)
