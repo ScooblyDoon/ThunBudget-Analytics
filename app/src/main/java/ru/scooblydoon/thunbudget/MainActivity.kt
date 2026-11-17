@@ -411,9 +411,41 @@ private fun ThunBudgetApp() {
             }.getOrElse { "Не удалось восстановить данные: ${it.message ?: "ошибка чтения"}" }
         }
     }
-    MaterialTheme(colorScheme=if (darkTheme) darkColorScheme(primary=Color(0xFF9DB8FF),secondary=Color(0xFF70D6B5),surface=Color(0xFF171A20),background=Color(0xFF101318)) else lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
+    val appColors = if (darkTheme) {
+        darkColorScheme(
+            primary = Color(0xFFB7A6FF), onPrimary = Color(0xFF21164A),
+            secondary = Color(0xFF75D9CF), tertiary = Color(0xFFFFC979),
+            background = Color(0xFF111321), surface = Color(0xFF1B1D31),
+            surfaceVariant = Color(0xFF292B43), onSurface = Color(0xFFF4F2FF),
+            onSurfaceVariant = Color(0xFFB8B6CC), onBackground = Color(0xFFF4F2FF)
+        )
+    } else {
+        lightColorScheme(
+            primary = Color(0xFF6556D9), onPrimary = Color.White,
+            primaryContainer = Color(0xFFE8E4FF), onPrimaryContainer = Color(0xFF30266F),
+            secondary = Color(0xFF36AFA8), onSecondary = Color.White,
+            secondaryContainer = Color(0xFFE0F6F2), onSecondaryContainer = Color(0xFF174F4B),
+            tertiary = Color(0xFF8B7AE8), background = Color(0xFFF6F5FC),
+            surface = Color(0xFFFFFEFF), surfaceVariant = Color(0xFFF0EEFA),
+            onSurface = Color(0xFF22213A), onSurfaceVariant = Color(0xFF77758F),
+            onBackground = Color(0xFF22213A), error = Color(0xFFD95770)
+        )
+    }
+    MaterialTheme(
+        colorScheme = appColors,
+        shapes = Shapes(
+            extraSmall = RoundedCornerShape(10.dp), small = RoundedCornerShape(14.dp),
+            medium = RoundedCornerShape(20.dp), large = RoundedCornerShape(26.dp),
+            extraLarge = RoundedCornerShape(30.dp)
+        )
+    ) {
         Scaffold(
-            topBar={ TopAppBar(title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }, actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }) },
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar={ TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } },
+                actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }
+            ) },
             floatingActionButton={ if(tab != 2) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
                 SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
                     Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
@@ -423,7 +455,16 @@ private fun ThunBudgetApp() {
                 }
                 FloatingActionButton(onClick={showAdd=true}) { Text("+",style=MaterialTheme.typography.headlineMedium) }
             } },
-            bottomBar={ NavigationBar { NavigationBarItem(selected=tab==0,onClick={tab=0},icon={},label={Text("Обзор")}); NavigationBarItem(selected=tab==1,onClick={tab=1},icon={},label={Text("Аналитика")}); NavigationBarItem(selected=tab==2,onClick={tab=2},icon={},label={Text("Графики")}); NavigationBarItem(selected=tab==3,onClick={tab=3},icon={},label={Text("История")}) } }
+            bottomBar={ NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 8.dp
+            ) {
+                NavigationBarItem(selected=tab==0,onClick={tab=0},icon={ Text("⌂",style=MaterialTheme.typography.titleLarge) },label={Text("Обзор")})
+                NavigationBarItem(selected=tab==1,onClick={tab=1},icon={ Text("◒",style=MaterialTheme.typography.titleLarge) },label={Text("Аналитика")})
+                NavigationBarItem(selected=tab==2,onClick={tab=2},icon={ Text("▥",style=MaterialTheme.typography.titleLarge) },label={Text("Графики")})
+                NavigationBarItem(selected=tab==3,onClick={tab=3},icon={ Text("≡",style=MaterialTheme.typography.titleLarge) },label={Text("История")})
+            } }
         ) { padding ->
             when(tab) {
                 0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=96.dp)) {
