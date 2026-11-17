@@ -107,7 +107,7 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
         require(title.isNotBlank())
         require(amount.isFinite() && amount > 0.0)
         require(!periodEnd.isBefore(periodStart))
-        require(!date.isBefore(periodStart) && !date.isAfter(periodEnd))
+        // The transaction date is independent from the selected reporting-period association.
         val entry = IncomeEntry(
             id = UUID.randomUUID().toString(),
             title = title.trim(),
