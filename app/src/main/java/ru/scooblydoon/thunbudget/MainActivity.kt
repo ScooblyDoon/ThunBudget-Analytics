@@ -370,6 +370,8 @@ private fun ThunBudgetApp() {
     var historyToDate by remember { mutableStateOf("") }
     var amountLimit by remember { mutableFloatStateOf(100000f) }
     var analyticsMonth by remember { mutableStateOf(YearMonth.now()) }
+    var annualChartYear by rememberSaveable { mutableIntStateOf(LocalDate.now().year) }
+    var selectedAnnualChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth <= 8) YearMonth.now().minusMonths(1) else YearMonth.now()) }
     var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
@@ -472,7 +474,8 @@ private fun ThunBudgetApp() {
                 NavigationBarItem(selected=tab==0,onClick={tab=0},icon={ Text("⌂",style=MaterialTheme.typography.titleLarge) },label={Text("Обзор")})
                 NavigationBarItem(selected=tab==1,onClick={tab=1},icon={ Text("◒",style=MaterialTheme.typography.titleLarge) },label={Text("Аналитика")})
                 NavigationBarItem(selected=tab==2,onClick={tab=2},icon={ Text("▥",style=MaterialTheme.typography.titleLarge) },label={Text("Графики")})
-                NavigationBarItem(selected=tab==3,onClick={tab=3},icon={ Text("≡",style=MaterialTheme.typography.titleLarge) },label={Text("История")})
+                NavigationBarItem(selected=tab==3,onClick={tab=3},icon={ Text("▤",style=MaterialTheme.typography.titleLarge) },label={Text("За год")})
+                NavigationBarItem(selected=tab==4,onClick={tab=4},icon={ Text("≡",style=MaterialTheme.typography.titleLarge) },label={Text("История")})
             } }
         ) { padding ->
             when(tab) {
@@ -530,29 +533,6 @@ private fun ThunBudgetApp() {
                                             Text(money(entry.amount), fontWeight=FontWeight.SemiBold)
                                             TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
                                         }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item {
-                        Text("Последние расходы",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
-                        val latestExpenses = expenses.filter { it.date >= periodStart && it.date <= periodEnd }
-                            .sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id }).take(3)
-                        if (latestExpenses.isEmpty()) {
-                            Text("Операции появятся здесь после добавления расходов.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        } else {
-                            Card(shape=RoundedCornerShape(20.dp)) {
-                                Column(Modifier.fillMaxWidth().padding(horizontal=14.dp)) {
-                                    latestExpenses.forEachIndexed { index, expense ->
-                                        Row(Modifier.fillMaxWidth().padding(vertical=11.dp),verticalAlignment=Alignment.CenterVertically) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(expense.title.ifBlank { expense.category },fontWeight=FontWeight.SemiBold)
-                                                Text("${expense.category} · ${expense.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
-                                            Text("−${money(expense.amount)}",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
-                                        }
-                                        if(index != latestExpenses.lastIndex) Divider(color=MaterialTheme.colorScheme.surfaceVariant)
                                     }
                                 }
                             }
@@ -682,6 +662,9 @@ private fun ThunBudgetApp() {
                         selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
                         fallbackIncome=income,periodIncomes=periodIncomes
                     )
+                }
+                3 -> Box(Modifier.padding(padding).fillMaxSize()) {
+                    AnnualChartsScreen(expenses=expenses,categories=categories,year=annualChartYear,onYearChange={annualChartYear=it},selectedCategoryNames=selectedAnnualChartCategoryNames,onSelectedCategoryNamesChange={selectedAnnualChartCategoryNames=it})
                 }
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
@@ -1204,6 +1187,67 @@ private fun ChartsScreen(
                     }
                 } }
             }
+        }
+    }
+}
+
+@Composable
+private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCategory>,year:Int,onYearChange:(Int)->Unit,selectedCategoryNames:String,onSelectedCategoryNamesChange:(String)->Unit) {
+    val selected=selectedCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
+    val yearExpenses=expenses.filter { it.date.startsWith("$year-") }
+    val totals=(1..12).map { m -> yearExpenses.filter { runCatching { LocalDate.parse(it.date).monthValue==m }.getOrDefault(false) }.sumOf { it.amount } }
+    val total=totals.sum()
+    val labels=listOf("Я","Ф","М","А","М","И","И","А","С","О","Н","Д")
+    val palette=listOf(Color(0xFF315CBA),Color(0xFF168A72),Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+        item { Text("Графики за год",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
+        item { Row(verticalAlignment=Alignment.CenterVertically) {
+            TextButton(onClick={onYearChange(year-1)}) { Text("‹") }
+            Text(year.toString(),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.titleMedium)
+            TextButton(onClick={if(year<LocalDate.now().year) onYearChange(year+1)}) { Text("›") }
+        } }
+        item { MetricCard("Расходы за год",money(total),Modifier.fillMaxWidth()) }
+        item { Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Text("Расходы по месяцам",fontWeight=FontWeight.Bold)
+            if(total==0.0) Text("За этот год расходов пока нет.",color=MaterialTheme.colorScheme.onSurfaceVariant) else {
+                val max=totals.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+                Canvas(Modifier.fillMaxWidth().height(145.dp)) {
+                    val slot=size.width/12f; val w=slot*.58f
+                    totals.forEachIndexed { i,v -> val h=(v/max).toFloat()*size.height; drawRect(Color(0xFF6556D9),androidx.compose.ui.geometry.Offset(i*slot+(slot-w)/2f,size.height-h),androidx.compose.ui.geometry.Size(w,h)) }
+                }
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { labels.forEach { Text(it,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
+            }
+        } } }
+        item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Text("Графики по категориям",fontWeight=FontWeight.Bold)
+            Text("Выберите категории для сравнения расходов по месяцам.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            categories.chunked(2).forEach { group -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                group.forEach { cat -> FilterChip(selected=selected.contains(cat.name),onClick={
+                    val next=if(selected.contains(cat.name)) selected-cat.name else selected+cat.name
+                    onSelectedCategoryNamesChange(next.joinToString("|"))
+                },label={Text(cat.name)}) }
+            } }
+        } }
+        items(selected.filter { name -> categories.any { it.name==name } }.toList(),key={"annual-"+it}) { name ->
+            val values=(1..12).map { m -> yearExpenses.filter { it.category==name && runCatching { LocalDate.parse(it.date).monthValue==m }.getOrDefault(false) }.sumOf { it.amount } }
+            val sum=values.sum()
+            Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment=Alignment.CenterVertically) {
+                    Text(name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                    Text(money(sum),fontWeight=FontWeight.Bold)
+                    TextButton(onClick={onSelectedCategoryNamesChange((selected-name).joinToString("|"))}) { Text("Убрать") }
+                }
+                if(sum==0.0) Text("Расходов по категории за год нет.",style=MaterialTheme.typography.bodySmall) else {
+                    val max=values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+                    val color=palette[(categories.indexOfFirst { it.name==name }.coerceAtLeast(0))%palette.size]
+                    Canvas(Modifier.fillMaxWidth().height(120.dp)) {
+                        val slot=size.width/12f; val w=slot*.58f
+                        values.forEachIndexed { i,v -> val h=(v/max).toFloat()*size.height; drawRect(color,androidx.compose.ui.geometry.Offset(i*slot+(slot-w)/2f,size.height-h),androidx.compose.ui.geometry.Size(w,h)) }
+                    }
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { labels.forEach { Text(it,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
+                    values.forEachIndexed { i,v -> if(v>0.0) Text(java.time.Month.of(i+1).getDisplayName(java.time.format.TextStyle.FULL,Locale("ru","RU"))+": "+money(v),style=MaterialTheme.typography.bodySmall) }
+                }
+            } }
         }
     }
 }
