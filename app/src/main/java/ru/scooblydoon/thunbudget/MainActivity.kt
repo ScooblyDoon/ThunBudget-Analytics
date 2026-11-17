@@ -126,7 +126,7 @@ private class BudgetStore(context: Context) {
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
-            if (value is String && key != "_pre_restore_backup" && key != "_auto_backup") data.put(key, value)
+            if (value is String && key != "_pre_restore_backup" && key != "_auto_backup" && key != "_undo_snapshot") data.put(key, value)
         }
         return JSONObject()
             .put("app", "ThunBudget")
@@ -729,6 +729,7 @@ private fun ThunBudgetApp() {
         AlertDialog(onDismissRequest={voiceMessage=null},title={Text("Голосовой ввод")},text={Text(message)},confirmButton={TextButton(onClick={voiceMessage=null}) { Text("Понятно") }})
     }
     if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,periodIncome,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
+        store.prepareUndoSnapshot(); canUndo=true
         periodIncomes=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,amount)
         store.savePeriodIncomes(periodIncomes)
         showPeriodIncomeEditor=false
@@ -741,11 +742,13 @@ private fun ThunBudgetApp() {
             categories=categories+BudgetCategory(name,percent); store.saveCategories(categories)
         }
     },onDelete={cat->
+        store.prepareUndoSnapshot(); canUndo=true
         categories=categories.filterNot{it.name==cat.name}; store.saveCategories(categories); showCategoryManager=false
     },onEdit={cat->editingCategory=cat;showCategoryManager=false})
     editingCategory?.let { oldCat ->
         CategoryEditDialog(oldCat,onDismiss={editingCategory=null},onSave={name,percent->
             if(categories.none{it.name.equals(name,true)&&it.name!=oldCat.name}) {
+                store.prepareUndoSnapshot(); canUndo=true
                 categories=categories.map{if(it.name==oldCat.name) it.copy(name=name,percent=percent) else it}
                 expenses=expenses.map{if(it.category==oldCat.name) it.copy(category=name) else it}
                 store.saveCategories(categories); store.saveExpenses(expenses)
