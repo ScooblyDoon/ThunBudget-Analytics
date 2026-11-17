@@ -345,15 +345,15 @@ private fun ThunBudgetApp() {
     var showCategoryManager by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(0) }
-    var showMonthCategories by rememberSaveable { mutableStateOf(true) }
-    var showPeriodCategories by rememberSaveable { mutableStateOf(true) }
-    var showYearCategories by rememberSaveable { mutableStateOf(true) }
-    var showAdvice by rememberSaveable { mutableStateOf(true) }
-    var showSavingsInfo by rememberSaveable { mutableStateOf(true) }
-    var showPlanChart by rememberSaveable { mutableStateOf(true) }
-    var showPieChart by rememberSaveable { mutableStateOf(true) }
+    var showMonthCategories by rememberUiExpanded(context, "month_categories")
+    var showPeriodCategories by rememberUiExpanded(context, "period_categories")
+    var showYearCategories by rememberUiExpanded(context, "year_categories")
+    var showAdvice by rememberUiExpanded(context, "analytics_advice")
+    var showSavingsInfo by rememberUiExpanded(context, "savings_info")
+    var showPlanChart by rememberUiExpanded(context, "chart_plan")
+    var showPieChart by rememberUiExpanded(context, "chart_pie")
     var selectedChartCategoryNames by rememberSaveable { mutableStateOf("") }
-    var showHistoryFilters by rememberSaveable { mutableStateOf(true) }
+    var showHistoryFilters by rememberUiExpanded(context, "history_filters")
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
     var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
@@ -1311,6 +1311,20 @@ private fun SpendingBreakdownCard(
             }
         }
     }
+}
+
+@Composable
+private fun rememberUiExpanded(context: Context, key: String, defaultValue: Boolean = true): MutableState<Boolean> {
+    val preferences = remember(context) {
+        context.getSharedPreferences("thunbudget_ui_state", Context.MODE_PRIVATE)
+    }
+    val state = rememberSaveable(key) {
+        mutableStateOf(preferences.getBoolean(key, defaultValue))
+    }
+    SideEffect {
+        preferences.edit().putBoolean(key, state.value).apply()
+    }
+    return state
 }
 
 @Composable
