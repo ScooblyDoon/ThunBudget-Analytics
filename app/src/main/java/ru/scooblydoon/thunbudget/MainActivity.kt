@@ -352,6 +352,7 @@ private fun ThunBudgetApp() {
     var showSavingsInfo by rememberSaveable { mutableStateOf(true) }
     var showPlanChart by rememberSaveable { mutableStateOf(true) }
     var showPieChart by rememberSaveable { mutableStateOf(true) }
+    var selectedChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var showHistoryFilters by rememberSaveable { mutableStateOf(true) }
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
@@ -493,32 +494,16 @@ private fun ThunBudgetApp() {
                                 Text("Доступно в бюджете",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
                                 Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onPrimary)
                                 Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=MaterialTheme.colorScheme.onPrimary)
+                                val elapsedEnd = minOf(today, LocalDate.parse(periodEnd))
+                                val elapsedDays = if (elapsedEnd.isBefore(LocalDate.parse(periodStart))) 0L else java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(periodStart), elapsedEnd) + 1
+                                val averagePerDay = if (elapsedDays > 0) totalSpent / elapsedDays else 0.0
+                                Text("В среднем за день: ${money(averagePerDay)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.92f),style=MaterialTheme.typography.bodyMedium)
+                                Text("Сегодня потрачено: ${money(spentToday)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.bodySmall)
                                 LinearProgressIndicator(
                                     progress={ if(planned>0) (totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f },
                                     modifier=Modifier.fillMaxWidth().padding(top=4.dp),
                                     color=MaterialTheme.colorScheme.onPrimary,
                                     trackColor=MaterialTheme.colorScheme.onPrimary.copy(alpha=.22f)
-                                )
-                            }
-                        }
-                    }
-                    item {
-                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            MetricCard("Доходы",money(periodIncome),Modifier.weight(1f))
-                            MetricCard("Расходы",money(totalSpent),Modifier.weight(1f))
-                            MetricCard("Остаток",money(remaining),Modifier.weight(1f))
-                        }
-                    }
-                    item {
-                        Card(shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
-                            Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                                Text("Лимит расходов на сегодня",fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSecondaryContainer)
-                                Text(money(dailySpendingLimit),style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSecondaryContainer)
-                                Text("Потрачено сегодня: ${money(spentToday)}",style=MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    if (dailyDaysRemaining == 0L) "Отчётный период завершён."
-                                    else "Ориентир на день рассчитан из остатка бюджета на ${dailyDaysRemaining} дн. (включая сегодня).",
-                                    style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                             }
                         }
@@ -606,15 +591,6 @@ private fun ThunBudgetApp() {
                         val currentEnd = LocalDate.parse(periodEnd)
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
-                    }
-                    item {
-                        SpendingBreakdownCard(
-                            expenses=expenses,
-                            categories=categories,
-                            from=periodStart,
-                            to=periodEnd,
-                            title="Структура расходов за период"
-                        )
                     }
                     item {
                         val currentStart = LocalDate.parse(periodStart)
@@ -728,6 +704,7 @@ private fun ThunBudgetApp() {
                     ChartsScreen(
                         expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
                         showPlan=showPlanChart,onShowPlanChange={showPlanChart=it},showPie=showPieChart,onShowPieChange={showPieChart=it},
+                        selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
                         fallbackIncome=income,periodIncomes=periodIncomes
                     )
                 }
@@ -1149,8 +1126,10 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
 private fun ChartsScreen(
     expenses:List<Expense>,categories:List<BudgetCategory>,month:YearMonth,onMonthChange:(YearMonth)->Unit,
     showPlan:Boolean,onShowPlanChange:(Boolean)->Unit,showPie:Boolean,onShowPieChange:(Boolean)->Unit,
+    selectedChartCategoryNames:String,onSelectedChartCategoryNamesChange:(String)->Unit,
     fallbackIncome:Double,periodIncomes:List<PeriodIncome>
 ) {
+    val selectedChartCategories=selectedChartCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
     val from=month.atDay(1).toString(); val to=month.atEndOfMonth().toString()
     val monthExpenses=expenses.filter { it.date>=from && it.date<=to }
     val total=monthExpenses.sumOf { it.amount }
@@ -1164,6 +1143,50 @@ private fun ChartsScreen(
             TextButton(onClick={if(month<YearMonth.now()) onMonthChange(month.plusMonths(1))}) { Text("›") }
         } }
         item { MetricCard("Фактические расходы за месяц",money(total),Modifier.fillMaxWidth()) }
+        item {
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text("Графики по категориям",fontWeight=FontWeight.Bold)
+                Text("Выберите категории, чтобы добавить или убрать их графики.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                categories.chunked(2).forEach { rowCategories ->
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        rowCategories.forEach { category ->
+                            FilterChip(selected=selectedChartCategories.contains(category.name),onClick={
+                                val updated=if(selectedChartCategories.contains(category.name)) selectedChartCategories-category.name else selectedChartCategories+category.name
+                                onSelectedChartCategoryNamesChange(updated.joinToString("|"))
+                            },label={Text(category.name)})
+                        }
+                    }
+                }
+            }
+        }
+        items(selectedChartCategories.filter { name -> categories.any { it.name==name } }.toList(),key={"category-daily-"+it}) { categoryName ->
+            val dailyValues=(1..month.lengthOfMonth()).map { day ->
+                val date=month.atDay(day).toString()
+                monthExpenses.filter { it.category==categoryName && it.date==date }.sumOf { it.amount }
+            }
+            val maxValue=dailyValues.maxOrNull()?.takeIf { it>0.0 } ?: 1.0
+            Card {
+                Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Text(categoryName,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                        Text(money(dailyValues.sum()),fontWeight=FontWeight.Bold)
+                        TextButton(onClick={onSelectedChartCategoryNamesChange((selectedChartCategories-categoryName).joinToString("|"))}) { Text("Убрать") }
+                    }
+                    Canvas(Modifier.fillMaxWidth().height(112.dp)) {
+                        val slot=size.width/dailyValues.size.coerceAtLeast(1)
+                        val barWidth=(slot*.62f).coerceAtLeast(2f)
+                        dailyValues.forEachIndexed { index,value ->
+                            val barHeight=(value/maxValue).toFloat()*size.height
+                            drawRect(color=Color(0xFF6556D9),topLeft=androidx.compose.ui.geometry.Offset(index*slot+(slot-barWidth)/2f,size.height-barHeight),size=androidx.compose.ui.geometry.Size(barWidth,barHeight))
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                        Text("1",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${month.lengthOfMonth()} число",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
         item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Плановые и фактические расходы",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={onShowPlanChange(!showPlan)}) { Text(if(showPlan) "Скрыть" else "Показать") } } }
         if(showPlan) {
             items(categories,key={"chart-plan-"+it.name}) { cat ->
