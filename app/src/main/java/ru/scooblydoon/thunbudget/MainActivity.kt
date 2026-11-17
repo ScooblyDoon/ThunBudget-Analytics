@@ -318,9 +318,9 @@ private fun ThunBudgetApp() {
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(periodIncome>0.0) periodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
-    val dailyDaysRemaining = if (LocalDate.parse(periodEnd).isBefore(today)) 0L else
-        java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(periodStart)), LocalDate.parse(periodEnd)) + 1L
-    val dailySpendingLimit = if (dailyDaysRemaining > 0) remaining.coerceAtLeast(0.0) / dailyDaysRemaining else 0.0
+    val dailyLimit = calculateDailyLimit(remaining, LocalDate.parse(periodStart), LocalDate.parse(periodEnd), today)
+    val dailyDaysRemaining = dailyLimit.daysRemaining
+    val dailySpendingLimit = dailyLimit.amountPerDay
     val spentToday = expenses.filter { it.date == today.toString() }.sumOf { it.amount }
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
