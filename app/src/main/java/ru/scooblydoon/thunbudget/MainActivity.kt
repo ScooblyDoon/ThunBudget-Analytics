@@ -494,11 +494,10 @@ private fun ThunBudgetApp() {
                                 Text("Доступно в бюджете",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
                                 Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onPrimary)
                                 Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=MaterialTheme.colorScheme.onPrimary)
-                                val elapsedEnd = minOf(today, LocalDate.parse(periodEnd))
-                                val elapsedDays = if (elapsedEnd.isBefore(LocalDate.parse(periodStart))) 0L else java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(periodStart), elapsedEnd) + 1
-                                val averagePerDay = if (elapsedDays > 0) totalSpent / elapsedDays else 0.0
-                                Text("В среднем за день: ${money(averagePerDay)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.92f),style=MaterialTheme.typography.bodyMedium)
-                                Text("Сегодня потрачено: ${money(spentToday)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.bodySmall)
+                                val periodEndDate = LocalDate.parse(periodEnd)
+                                val remainingDays = if (today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(periodStart)), periodEndDate) + 1
+                                val averageRemainingPerDay = if (remainingDays > 0) remaining.coerceAtLeast(0.0) / remainingDays else 0.0
+                                Text("Средний остаток на день: ${money(averageRemainingPerDay)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.92f),style=MaterialTheme.typography.bodyMedium)
                                 LinearProgressIndicator(
                                     progress={ if(planned>0) (totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f },
                                     modifier=Modifier.fillMaxWidth().padding(top=4.dp),
@@ -513,11 +512,7 @@ private fun ThunBudgetApp() {
                             Text("Отменить последнее действие")
                         }
                     }
-                    item { Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Card(onClick={showPeriodIncomeEditor=true},modifier=Modifier.weight(1f),shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) { Text("Доход за отчётный период",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(6.dp)); Text(money(periodIncome),fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleLarge); Text(if(periodIncome>0) "Нажмите, чтобы изменить" else "Нажмите, чтобы внести",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary) } }
-                        MetricCard("Доход в месяц",money(displayedMonthlyIncome),Modifier.weight(1f))
-                        MetricCard("Средний расход/день",money(if(LocalDate.parse(periodEnd).isBefore(LocalDate.now())) 0.0 else remaining.coerceAtLeast(0.0)/(java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(),LocalDate.parse(periodEnd))+1).coerceAtLeast(1)),Modifier.weight(1f))
-                    } }
+
                     item {
                         Card(shape=RoundedCornerShape(16.dp)) {
                             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -591,26 +586,6 @@ private fun ThunBudgetApp() {
                         val currentEnd = LocalDate.parse(periodEnd)
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
-                    }
-                    item {
-                        val currentStart = LocalDate.parse(periodStart)
-                        val currentEnd = LocalDate.parse(periodEnd)
-                        val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
-                        val totalDays = (java.time.temporal.ChronoUnit.DAYS.between(currentStart,currentEnd)+1).coerceAtLeast(1)
-                        val forecastEnd = minOf(currentEnd,today)
-                        val elapsedDays = if (forecastEnd.isBefore(currentStart)) 0L else java.time.temporal.ChronoUnit.DAYS.between(currentStart,forecastEnd)+1
-                        val forecast = if (elapsedDays > 0 && !currentEnd.isBefore(today)) total * totalDays.toDouble() / elapsedDays.toDouble() else total
-                        val planForPeriod = if(periodIncome>0.0) periodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income,categories.sumOf { it.percent },periodStart,periodEnd)
-                        val dailyAverage = if(elapsedDays>0) total/elapsedDays else 0.0
-                        Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer),shape=RoundedCornerShape(18.dp)) {
-                            Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                                Text("Прогноз до конца периода",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSecondaryContainer)
-                                Text("Средний расход: ${money(dailyAverage)} в день",style=MaterialTheme.typography.bodyMedium)
-                                Text("Ожидаемые расходы: ${money(forecast)}",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
-                                Text(if(forecast>planForPeriod) "Прогнозируемое превышение: ${money(forecast-planForPeriod)}" else "Ожидаемый остаток: ${money(planForPeriod-forecast)}",color=if(forecast>planForPeriod) Color(0xFFC74444) else Color(0xFF168A72),style=MaterialTheme.typography.bodySmall)
-                                if(elapsedDays==0L) Text("Прогноз появится после начала отчётного периода.",style=MaterialTheme.typography.bodySmall)
-                            }
-                        }
                     }
                     item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
