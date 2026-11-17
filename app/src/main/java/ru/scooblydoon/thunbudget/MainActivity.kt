@@ -414,7 +414,7 @@ private fun ThunBudgetApp() {
     MaterialTheme(colorScheme=if (darkTheme) darkColorScheme(primary=Color(0xFF9DB8FF),secondary=Color(0xFF70D6B5),surface=Color(0xFF171A20),background=Color(0xFF101318)) else lightColorScheme(primary=Color(0xFF315CBA),secondary=Color(0xFF168A72),background=Color(0xFFF5F6FA),surface=Color.White)) {
         Scaffold(
             topBar={ TopAppBar(title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }, actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }) },
-            floatingActionButton={ Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+            floatingActionButton={ if(tab != 2) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
                 SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
                     Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
                 }
@@ -624,11 +624,13 @@ private fun ThunBudgetApp() {
                     item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
                     item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") } }
                 }
-                2 -> ChartsScreen(
-                    expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
-                    showPlan=showPlanChart,onShowPlanChange={showPlanChart=it},showPie=showPieChart,onShowPieChange={showPieChart=it},
-                    fallbackIncome=income,periodIncomes=periodIncomes
-                )
+                2 -> Box(Modifier.padding(padding).fillMaxSize()) {
+                    ChartsScreen(
+                        expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
+                        showPlan=showPlanChart,onShowPlanChange={showPlanChart=it},showPie=showPieChart,onShowPieChange={showPieChart=it},
+                        fallbackIncome=income,periodIncomes=periodIncomes
+                    )
+                }
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item { Row(verticalAlignment=Alignment.CenterVertically) {
