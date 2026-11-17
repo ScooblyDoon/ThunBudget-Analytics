@@ -476,12 +476,31 @@ private fun ThunBudgetApp() {
                         TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                     }
                     item { Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    item { Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF315CBA)),shape=RoundedCornerShape(22.dp)) { Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                        Text("Остаток планового бюджета",color=Color.White.copy(alpha=.8f))
-                        Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=Color.White)
-                        Spacer(Modifier.height(8.dp)); Text("Потрачено: ${money(totalSpent)} из ${money(planned)}",color=Color.White)
-                        LinearProgressIndicator(progress={ if(planned>0) (totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f },modifier=Modifier.fillMaxWidth().padding(top=12.dp),color=Color.White,trackColor=Color.White.copy(alpha=.25f))
-                    } } }
+                    item {
+                        Card(
+                            colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primary),
+                            shape=RoundedCornerShape(26.dp)
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                Text("Доступно в бюджете",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
+                                Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onPrimary)
+                                Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=MaterialTheme.colorScheme.onPrimary)
+                                LinearProgressIndicator(
+                                    progress={ if(planned>0) (totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f },
+                                    modifier=Modifier.fillMaxWidth().padding(top=4.dp),
+                                    color=MaterialTheme.colorScheme.onPrimary,
+                                    trackColor=MaterialTheme.colorScheme.onPrimary.copy(alpha=.22f)
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            MetricCard("Доходы",money(periodIncome),Modifier.weight(1f))
+                            MetricCard("Расходы",money(totalSpent),Modifier.weight(1f))
+                            MetricCard("Остаток",money(remaining),Modifier.weight(1f))
+                        }
+                    }
                     item {
                         Card(shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
@@ -529,6 +548,29 @@ private fun ThunBudgetApp() {
                         }
                     }
                     item {
+                        Text("Последние расходы",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
+                        val latestExpenses = expenses.filter { it.date >= periodStart && it.date <= periodEnd }
+                            .sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id }).take(3)
+                        if (latestExpenses.isEmpty()) {
+                            Text("Операции появятся здесь после добавления расходов.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Card(shape=RoundedCornerShape(20.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(horizontal=14.dp)) {
+                                    latestExpenses.forEachIndexed { index, expense ->
+                                        Row(Modifier.fillMaxWidth().padding(vertical=11.dp),verticalAlignment=Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(expense.title.ifBlank { expense.category },fontWeight=FontWeight.SemiBold)
+                                                Text("${expense.category} · ${expense.date}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            Text("−${money(expense.amount)}",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
+                                        }
+                                        if(index != latestExpenses.lastIndex) Divider(color=MaterialTheme.colorScheme.surfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("Бюджет по категориям",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
                             IconButton(onClick={showCategoryManager=true}) { Text("+",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary) }
@@ -556,6 +598,15 @@ private fun ThunBudgetApp() {
                         val currentEnd = LocalDate.parse(periodEnd)
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
+                    }
+                    item {
+                        SpendingBreakdownCard(
+                            expenses=expenses,
+                            categories=categories,
+                            from=periodStart,
+                            to=periodEnd,
+                            title="Структура расходов за период"
+                        )
                     }
                     item {
                         val currentStart = LocalDate.parse(periodStart)
@@ -1146,6 +1197,67 @@ private fun ChartsScreen(
                         }
                     }
                 } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpendingBreakdownCard(
+    expenses:List<Expense>,
+    categories:List<BudgetCategory>,
+    from:String,
+    to:String,
+    title:String
+) {
+    val palette=listOf(
+        Color(0xFF6556D9),Color(0xFF36AFA8),Color(0xFFF2B84B),Color(0xFF8B7AE8),
+        Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290)
+    )
+    val values=categories.map { cat ->
+        cat to expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
+    }.filter { it.second>0.0 }.sortedByDescending { it.second }
+    val total=values.sumOf { it.second }
+    Card(shape=RoundedCornerShape(24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Text(title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium)
+            if(total<=0.0) {
+                Text("За выбранный период расходов пока нет.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                    Box(Modifier.size(142.dp),contentAlignment=Alignment.Center) {
+                        Canvas(Modifier.fillMaxSize()) {
+                            var angle=-90f
+                            values.forEachIndexed { index,pair ->
+                                val sweep=(pair.second/total*360.0).toFloat()
+                                drawArc(color=palette[index%palette.size],startAngle=angle,sweepAngle=sweep,useCenter=false,style=Stroke(width=size.minDimension*.22f))
+                                angle+=sweep
+                            }
+                        }
+                        Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                            Text(money(total),fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium)
+                            Text("Всего",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        values.take(6).forEachIndexed { index,pair ->
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Box(Modifier.size(9.dp).background(palette[index%palette.size],RoundedCornerShape(50)))
+                                Spacer(Modifier.width(7.dp))
+                                Text(pair.first.name,modifier=Modifier.weight(1f),style=MaterialTheme.typography.labelMedium,maxLines=1)
+                                Text("${(pair.second/total*100).toInt()}%",style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+                values.forEachIndexed { index,pair ->
+                    if(index<values.size) {
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Text(pair.first.name,modifier=Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
+                            Text(money(pair.second),style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold)
+                        }
+                    }
+                }
             }
         }
     }
