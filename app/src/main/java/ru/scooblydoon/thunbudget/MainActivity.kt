@@ -44,12 +44,51 @@ private data class PeriodIncome(val start: String, val end: String, val amount: 
 
 private class BudgetStore(context: Context) {
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
+    private val incomeLedger = IncomeLedgerRepository(prefs)
+
+    init { incomeLedger.migrateLegacyIfNeeded() }
+
     fun loadDarkTheme(): Boolean = prefs.getBoolean("dark_theme", false)
     fun saveDarkTheme(enabled: Boolean) { prefs.edit().putBoolean("dark_theme", enabled).apply() }
-    fun loadPeriodIncomes(): List<PeriodIncome> = runCatching {
-        val a = JSONArray(prefs.getString("period_incomes", "[]") ?: "[]")
-        (0 until a.length()).map { val o=a.getJSONObject(it); PeriodIncome(o.getString("start"),o.getString("end"),o.getDouble("amount")) }
-    }.getOrDefault(emptyList())
+
+    fun loadIncomeEntries(): List<IncomeEntry> = runCatching { incomeLedger.load() }.getOrDefault(emptyList())
+
+    fun loadPeriodIncomes(): List<PeriodIncome> {
+        if (incomeLedger.migrateLegacyIfNeeded()) {
+            val entries = runCatching { incomeLedger.load() }.getOrNull()
+            if (entries != null) return entries.groupBy { it.periodStart to it.periodEnd }
+                .map { (period, rows) -> PeriodIncome(period.first, period.second, rows.sumOf { it.amount }) }
+                .sortedBy { it.start }
+        }
+        return runCatching {
+            val a = JSONArray(prefs.getString("period_incomes", "[]") ?: "[]")
+            (0 until a.length()).map { val o=a.getJSONObject(it); PeriodIncome(o.getString("start"),o.getString("end"),o.getDouble("amount")) }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun writeLegacyIncomeMirror() {
+        val a = JSONArray()
+        loadPeriodIncomes().forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount)) }
+        prefs.edit().putString("period_incomes",a.toString()).commit()
+    }
+
+    fun addIncomeEntry(title: String, amount: Double, date: String, start: String, end: String) {
+        incomeLedger.add(title, amount, LocalDate.parse(date), LocalDate.parse(start), LocalDate.parse(end))
+        writeLegacyIncomeMirror()
+        saveAutomaticBackup()
+    }
+
+    fun setPeriodIncomeTotal(start: String, end: String, amount: Double) {
+        val retained = incomeLedger.load().filterNot { it.periodStart == start && it.periodEnd == end }
+        val replacement = if (amount > 0.0) retained + IncomeEntry(
+            id = "manual-$start-$end", title = "Доход за период", amount = amount,
+            date = end, periodStart = start, periodEnd = end
+        ) else retained
+        check(incomeLedger.save(replacement)) { "Не удалось обновить доход за период." }
+        writeLegacyIncomeMirror()
+        saveAutomaticBackup()
+    }
+
     fun savePeriodIncomes(items: List<PeriodIncome>) {
         val a=JSONArray(); items.forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount)) }
         prefs.edit().putString("period_incomes",a.toString()).commit()
@@ -91,7 +130,7 @@ private class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income", "savings", "period_start", "period_end")
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end")
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -221,6 +260,7 @@ private fun ThunBudgetApp() {
     var categories by remember { mutableStateOf(store.loadCategories()) }
     var expenses by remember { mutableStateOf(store.loadExpenses()) }
     var periodIncomes by remember { mutableStateOf(store.loadPeriodIncomes()) }
+    var incomeEntries by remember { mutableStateOf(store.loadIncomeEntries()) }
     var showAdd by remember { mutableStateOf(false) }
     var voiceDraft by remember { mutableStateOf<VoiceExpenseDraft?>(null) }
     var voiceAmount by remember { mutableStateOf("") }
@@ -691,11 +731,10 @@ private fun ThunBudgetApp() {
                     draft.isIncomeEdit -> {
                         val amount = confirmedAmount ?: return@TextButton
                         store.prepareUndoSnapshot(); canUndo=true
-                        val updated = periodIncomes.filterNot { it.start == periodStart && it.end == periodEnd } +
-                            PeriodIncome(periodStart, periodEnd, amount)
-                        store.savePeriodIncomes(updated)
+                        store.setPeriodIncomeTotal(periodStart, periodEnd, amount)
                         periodIncomes = store.loadPeriodIncomes()
-                        voiceMessage = "Доход за текущий отчётный период изменён на ${money(amount)}."
+                        incomeEntries = store.loadIncomeEntries()
+                        voiceMessage = "Общая сумма дохода за период установлена: ${money(amount)}."
                     }
                     draft.isEdit -> {
                         val amount = confirmedAmount ?: return@TextButton
@@ -728,11 +767,10 @@ private fun ThunBudgetApp() {
                     draft.isIncome -> {
                         val amount = confirmedAmount ?: return@TextButton
                         store.prepareUndoSnapshot(); canUndo=true
-                        val existing=periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
-                        val updated=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,existing+amount)
-                        store.savePeriodIncomes(updated)
-                        periodIncomes=store.loadPeriodIncomes()
-                        voiceMessage = "Доход ${money(amount)} сохранён за отчётный период ${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}. Общий доход за период: ${money(periodIncome + amount)}."
+                        store.addIncomeEntry(draft.title, amount, draft.date, periodStart, periodEnd)
+                        periodIncomes = store.loadPeriodIncomes()
+                        incomeEntries = store.loadIncomeEntries()
+                        voiceMessage = "Доход ${money(amount)} сохранён отдельной операцией за отчётный период. Общий доход за период: ${money(periodIncome + amount)}."
                     }
                     else -> {
                         val amount = confirmedAmount ?: return@TextButton
@@ -754,8 +792,9 @@ private fun ThunBudgetApp() {
     }
     if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,periodIncome,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
         store.prepareUndoSnapshot(); canUndo=true
-        periodIncomes=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,amount)
-        store.savePeriodIncomes(periodIncomes)
+        store.setPeriodIncomeTotal(periodStart, periodEnd, amount)
+        periodIncomes = store.loadPeriodIncomes()
+        incomeEntries = store.loadIncomeEntries()
         showPeriodIncomeEditor=false
     })
     if(showPeriodEditor) PeriodEditorDialog(periodStart,periodEnd,onDismiss={showPeriodEditor=false},onSave={from,to->
@@ -848,7 +887,7 @@ private fun ThunBudgetApp() {
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
-            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes()
+            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); incomeEntries=store.loadIncomeEntries()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1; backupMessage="Автоматическая резервная копия восстановлена."
         } else backupMessage="Не удалось восстановить автоматическую копию."
