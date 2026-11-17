@@ -629,9 +629,11 @@ private fun ThunBudgetApp() {
     voiceDraft?.let { draft ->
         AlertDialog(
             onDismissRequest={voiceDraft=null},
-            title={Text(when { draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
+            title={Text(when { draft.isCategoryRename -> "Проверь переименование категории"; draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncomeEdit -> "Проверь изменение дохода"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
             text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                if (draft.isCategoryAdd || draft.isCategoryEdit) {
+                if (draft.isCategoryRename) {
+                    Text("Категория: «${draft.category}» → «${draft.title}»",fontWeight=FontWeight.Bold)
+                } else if (draft.isCategoryAdd || draft.isCategoryEdit) {
                     Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)
                 } else {
                     Text("Распознано: ${draft.sourcePhrase}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -669,10 +671,32 @@ private fun ThunBudgetApp() {
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
             confirmButton={TextButton(
-                enabled = draft.isCategoryAdd || draft.isCategoryEdit || ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId })),
+                enabled = draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit || ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId })),
                 onClick={
                 val confirmedAmount = voiceAmount.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
                 when {
+                    draft.isCategoryRename -> {
+                        val oldName = draft.category
+                        val newName = draft.title.trim()
+                        if (newName.isNotBlank() && categories.none { it.name.equals(newName, true) }) {
+                            store.prepareUndoSnapshot(); canUndo=true
+                            categories = categories.map { if (it.name == oldName) it.copy(name = newName) else it }
+                            expenses = expenses.map { if (it.category == oldName) it.copy(category = newName) else it }
+                            store.saveCategories(categories); store.saveExpenses(expenses)
+                            voiceMessage = "Категория «$oldName» переименована в «$newName»."
+                        } else {
+                            voiceMessage = "Новое название пустое или такая категория уже существует."
+                        }
+                    }
+                    draft.isIncomeEdit -> {
+                        val amount = confirmedAmount ?: return@TextButton
+                        store.prepareUndoSnapshot(); canUndo=true
+                        val updated = periodIncomes.filterNot { it.start == periodStart && it.end == periodEnd } +
+                            PeriodIncome(periodStart, periodEnd, amount)
+                        store.savePeriodIncomes(updated)
+                        periodIncomes = store.loadPeriodIncomes()
+                        voiceMessage = "Доход за текущий отчётный период изменён на ${money(amount)}."
+                    }
                     draft.isEdit -> {
                         val amount = confirmedAmount ?: return@TextButton
                         store.prepareUndoSnapshot(); canUndo=true
@@ -721,7 +745,7 @@ private fun ThunBudgetApp() {
                     }
                 }
                 voiceDraft=null
-            }) { Text(when { draft.isCategoryAdd -> "Добавить категорию"; draft.isCategoryEdit -> "Изменить долю"; draft.isEdit -> "Сохранить изменения"; draft.isIncome -> "Сохранить доход"; else -> "Сохранить расход" }) }},
+            }) { Text(when { draft.isCategoryRename -> "Переименовать категорию"; draft.isCategoryAdd -> "Добавить категорию"; draft.isCategoryEdit -> "Изменить долю"; draft.isIncomeEdit -> "Изменить доход"; draft.isEdit -> "Сохранить изменения"; draft.isIncome -> "Сохранить доход"; else -> "Сохранить расход" }) }},
             dismissButton={TextButton(onClick={voiceDraft=null}) { Text("Отмена") }}
         )
     }
@@ -1163,7 +1187,9 @@ private data class VoiceExpenseDraft(
     val isIncome: Boolean = false,
     val isCategoryAdd: Boolean = false,
     val isCategoryEdit: Boolean = false,
-    val isEdit: Boolean = false
+    val isEdit: Boolean = false,
+    val isCategoryRename: Boolean = false,
+    val isIncomeEdit: Boolean = false
 )
 
 private fun startOfflineSpeechRecognition(
@@ -1289,9 +1315,37 @@ private fun voiceRecognitionScore(phrase: String, categories: List<BudgetCategor
 
 private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
     val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е').trim()
-    val amount = parseSpokenAmount(normalized) ?: return null
     val date = if (normalized.contains("вчера")) LocalDate.now().minusDays(1) else LocalDate.now()
 
+    val renameMatch = Regex("""(?:переименуй|переименовать|назови|назвать)\\s+категори(?:ю|и)\\s+(.+?)\\s+(?:в|на)\\s+(.+)$""").find(normalized)
+    if (renameMatch != null) {
+        val oldName = renameMatch.groupValues[1].trim()
+        val newName = renameMatch.groupValues[2].trim().removeSuffix(".")
+        val existing = categories.firstOrNull { it.name.equals(oldName, true) }
+        if (existing != null && newName.isNotBlank()) {
+            return VoiceExpenseDraft(
+                title = newName.replaceFirstChar { it.uppercase(Locale("ru", "RU")) },
+                category = existing.name,
+                amount = 0.0,
+                date = date.toString(),
+                isCategoryRename = true
+            )
+        }
+        return null
+    }
+
+    val isIncomeEdit = listOf("измени доход", "изменить доход", "поменяй доход", "поменять доход", "исправь доход", "отредактируй доход")
+        .any { normalized.contains(it) }
+    val amount = parseSpokenAmount(normalized) ?: return null
+    if (isIncomeEdit) {
+        return VoiceExpenseDraft(
+            title = "Доход за отчётный период",
+            category = "Доход",
+            amount = amount,
+            date = date.toString(),
+            isIncomeEdit = true
+        )
+    }
     val categoryIntent = listOf("категори", "процент", "долю").any { normalized.contains(it) }
     val categoryAddIntent = categoryIntent &&
         listOf("добавь", "добавить", "создай", "новую").any { normalized.contains(it) }
