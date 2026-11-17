@@ -90,6 +90,39 @@ private class BudgetStore(context: Context) {
         saveAutomaticBackup()
     }
 
+    fun prepareUndoSnapshot() {
+        val keys = listOf("expenses", "categories", "period_incomes", "income", "savings", "period_start", "period_end")
+        val snapshot = JSONObject()
+        keys.forEach { key ->
+            val value = prefs.getString(key, null)
+            if (value != null) snapshot.put(key, value)
+            else snapshot.put(key, JSONObject.NULL)
+        }
+        prefs.edit().putString("_undo_snapshot", snapshot.toString()).commit()
+    }
+
+    fun hasUndoSnapshot(): Boolean = !prefs.getString("_undo_snapshot", null).isNullOrBlank()
+
+    fun restoreUndoSnapshot(): Boolean = runCatching {
+        val raw = prefs.getString("_undo_snapshot", null) ?: return false
+        val snapshot = JSONObject(raw)
+        val editor = prefs.edit()
+        val keys = snapshot.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = snapshot.get(key)
+            if (value == JSONObject.NULL) editor.remove(key)
+            else {
+                require(value is String) { "Некорректная запись отмены." }
+                editor.putString(key, value)
+            }
+        }
+        editor.remove("_undo_snapshot")
+        require(editor.commit()) { "Не удалось восстановить предыдущее состояние." }
+        saveAutomaticBackup()
+        true
+    }.getOrDefault(false)
+
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
@@ -241,6 +274,8 @@ private fun ThunBudgetApp() {
             })
         }
     }
+    var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
+    var showUndoConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
     var showPeriodEditor by remember { mutableStateOf(false) }
@@ -283,6 +318,10 @@ private fun ThunBudgetApp() {
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(periodIncome>0.0) periodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
+    val dailyDaysRemaining = if (LocalDate.parse(periodEnd).isBefore(today)) 0L else
+        java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(periodStart)), LocalDate.parse(periodEnd)) + 1L
+    val dailySpendingLimit = if (dailyDaysRemaining > 0) remaining.coerceAtLeast(0.0) / dailyDaysRemaining else 0.0
+    val spentToday = expenses.filter { it.date == today.toString() }.sumOf { it.amount }
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
@@ -347,6 +386,25 @@ private fun ThunBudgetApp() {
                         Spacer(Modifier.height(8.dp)); Text("Потрачено: ${money(totalSpent)} из ${money(planned)}",color=Color.White)
                         LinearProgressIndicator(progress={ if(planned>0) (totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f },modifier=Modifier.fillMaxWidth().padding(top=12.dp),color=Color.White,trackColor=Color.White.copy(alpha=.25f))
                     } } }
+                    item {
+                        Card(shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.secondaryContainer)) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                Text("Лимит расходов на сегодня",fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSecondaryContainer)
+                                Text(money(dailySpendingLimit),style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSecondaryContainer)
+                                Text("Потрачено сегодня: ${money(spentToday)}",style=MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    if (dailyDaysRemaining == 0L) "Отчётный период завершён."
+                                    else "Ориентир на день рассчитан из остатка бюджета на ${dailyDaysRemaining} дн. (включая сегодня).",
+                                    style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+                    if (canUndo) item {
+                        OutlinedButton(onClick={showUndoConfirmation=true},modifier=Modifier.fillMaxWidth()) {
+                            Text("Отменить последнее действие")
+                        }
+                    }
                     item { Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                         Card(onClick={showPeriodIncomeEditor=true},modifier=Modifier.weight(1f),shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) { Text("Доход за отчётный период",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(6.dp)); Text(money(periodIncome),fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleLarge); Text(if(periodIncome>0) "Нажмите, чтобы изменить" else "Нажмите, чтобы внести",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary) } }
                         MetricCard("Доход в месяц",money(displayedMonthlyIncome),Modifier.weight(1f))
@@ -617,6 +675,7 @@ private fun ThunBudgetApp() {
                 when {
                     draft.isEdit -> {
                         val amount = confirmedAmount ?: return@TextButton
+                        store.prepareUndoSnapshot(); canUndo=true
                         val targetId = voiceSelectedExpenseId ?: return@TextButton
                         val target = expenses.firstOrNull { it.id == targetId } ?: return@TextButton
                         expenses = expenses.map { if (it.id == targetId) it.copy(amount = amount) else it }.sortedByDescending { it.date }
@@ -624,6 +683,7 @@ private fun ThunBudgetApp() {
                         voiceMessage = "Операция «${target.title}» от ${target.date} изменена: ${money(target.amount)} → ${money(amount)}."
                     }
                     draft.isCategoryAdd -> {
+                        store.prepareUndoSnapshot(); canUndo=true
                         if (categories.none { it.name.equals(draft.category,true) } && categories.sumOf { it.percent } + draft.amount <= 100.0) {
                             categories = categories + BudgetCategory(draft.category,draft.amount)
                             store.saveCategories(categories)
@@ -632,6 +692,7 @@ private fun ThunBudgetApp() {
                         }
                     }
                     draft.isCategoryEdit -> {
+                        store.prepareUndoSnapshot(); canUndo=true
                         val old = categories.firstOrNull { it.name.equals(draft.category,true) }
                         if (old != null && categories.filterNot { it.name==old.name }.sumOf { it.percent } + draft.amount <= 100.0) {
                             categories = categories.map { if (it.name==old.name) it.copy(percent=draft.amount) else it }
@@ -642,6 +703,7 @@ private fun ThunBudgetApp() {
                     }
                     draft.isIncome -> {
                         val amount = confirmedAmount ?: return@TextButton
+                        store.prepareUndoSnapshot(); canUndo=true
                         val existing=periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
                         val updated=periodIncomes.filterNot { it.start==periodStart && it.end==periodEnd } + PeriodIncome(periodStart,periodEnd,existing+amount)
                         store.savePeriodIncomes(updated)
@@ -650,6 +712,7 @@ private fun ThunBudgetApp() {
                     }
                     else -> {
                         val amount = confirmedAmount ?: return@TextButton
+                        store.prepareUndoSnapshot(); canUndo=true
                         val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,amount,draft.date))+expenses).sortedByDescending { it.date }
                         expenses=updated; store.saveExpenses(expenses)
                         val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
@@ -737,6 +800,7 @@ private fun ThunBudgetApp() {
         },confirmButton={TextButton(onClick={addFromCategory=categoryName;selectedCategory=null;showAdd=true}) { Text("Добавить расход") }},dismissButton={TextButton(onClick={selectedCategory=null}) { Text("Закрыть") }})
     }
     if(showAdd) AddExpenseDialog(categories,initialCategory=addFromCategory,onDismiss={showAdd=false},onSave={title,category,amount,date->
+        store.prepareUndoSnapshot(); canUndo=true
         val updated=(listOf(Expense(System.currentTimeMillis(),title,category,amount,date))+expenses).sortedByDescending { it.date }
         val spentAfter=updated.filter { it.category==category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
         val cap=categories.firstOrNull { it.name==category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
@@ -745,9 +809,11 @@ private fun ThunBudgetApp() {
     })
     selectedExpense?.let { selected ->
         ExpenseEditDialog(selected,categories,onDismiss={selectedExpense=null},onSave={edited->
+            store.prepareUndoSnapshot(); canUndo=true
             expenses=expenses.map { if(it.id==selected.id) edited else it }.sortedByDescending { it.date }
             store.saveExpenses(expenses); selectedExpense=null
         },onDelete={
+            store.prepareUndoSnapshot(); canUndo=true
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
@@ -786,6 +852,27 @@ private fun ThunBudgetApp() {
         text={Text("Текущие данные приложения будут заменены данными из выбранного файла. Перед продолжением убедись, что текущая версия бюджета сохранена отдельно.")},
         confirmButton={TextButton(onClick={showRestoreConfirmation=false;backupImportLauncher.launch(arrayOf("application/json","text/*"))}) { Text("Выбрать файл") }},
         dismissButton={TextButton(onClick={showRestoreConfirmation=false}) { Text("Отмена") }}
+    )
+    if(showUndoConfirmation) AlertDialog(
+        onDismissRequest={showUndoConfirmation=false},
+        title={Text("Отменить последнее действие?")},
+        text={Text("Будут восстановлены расходы, категории и настройки бюджета до последнего поддерживаемого изменения.")},
+        confirmButton={TextButton(onClick={
+            showUndoConfirmation=false
+            if (store.restoreUndoSnapshot()) {
+                expenses=store.loadExpenses(); categories=store.loadCategories()
+                periodIncomes=store.loadPeriodIncomes(); income=store.loadIncome()
+                savingsGoal=store.loadSavingsGoal()
+                periodStart=store.loadPeriodStart() ?: periodStart
+                periodEnd=store.loadPeriodEnd() ?: periodEnd
+                canUndo=false
+                backupMessage="Последнее действие отменено."
+            } else {
+                canUndo=false
+                backupMessage="Не удалось отменить последнее действие."
+            }
+        }) { Text("Отменить") }},
+        dismissButton={TextButton(onClick={showUndoConfirmation=false}) { Text("Оставить") }}
     )
     backupMessage?.let { message ->
         AlertDialog(onDismissRequest={backupMessage=null},title={Text("Резервная копия")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
