@@ -79,12 +79,25 @@ private class BudgetStore(context: Context) {
     }
 
     fun setPeriodIncomeTotal(start: String, end: String, amount: Double) {
+        require(amount.isFinite() && amount >= 0.0)
         val retained = incomeLedger.load().filterNot { it.periodStart == start && it.periodEnd == end }
         val replacement = if (amount > 0.0) retained + IncomeEntry(
             id = "manual-$start-$end", title = "Доход за период", amount = amount,
             date = end, periodStart = start, periodEnd = end
         ) else retained
         check(incomeLedger.save(replacement)) { "Не удалось обновить доход за период." }
+        writeLegacyIncomeMirror()
+        saveAutomaticBackup()
+    }
+
+    fun updateIncomeEntry(entry: IncomeEntry) {
+        check(incomeLedger.update(entry)) { "Не удалось изменить доход." }
+        writeLegacyIncomeMirror()
+        saveAutomaticBackup()
+    }
+
+    fun deleteIncomeEntry(id: String) {
+        check(incomeLedger.delete(id)) { "Не удалось удалить доход." }
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
@@ -261,6 +274,7 @@ private fun ThunBudgetApp() {
     var expenses by remember { mutableStateOf(store.loadExpenses()) }
     var periodIncomes by remember { mutableStateOf(store.loadPeriodIncomes()) }
     var incomeEntries by remember { mutableStateOf(store.loadIncomeEntries()) }
+    var selectedIncomeEntry by remember { mutableStateOf<IncomeEntry?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var voiceDraft by remember { mutableStateOf<VoiceExpenseDraft?>(null) }
     var voiceAmount by remember { mutableStateOf("") }
@@ -450,6 +464,28 @@ private fun ThunBudgetApp() {
                         MetricCard("Доход в месяц",money(displayedMonthlyIncome),Modifier.weight(1f))
                         MetricCard("Средний расход/день",money(if(LocalDate.parse(periodEnd).isBefore(LocalDate.now())) 0.0 else remaining.coerceAtLeast(0.0)/(java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(),LocalDate.parse(periodEnd))+1).coerceAtLeast(1)),Modifier.weight(1f))
                     } }
+                    item {
+                        Card(shape=RoundedCornerShape(16.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                Text("Операции дохода за период", fontWeight=FontWeight.SemiBold)
+                                val visibleIncomeEntries = incomeEntries.filter { it.periodStart == periodStart && it.periodEnd == periodEnd }.sortedByDescending { it.date }
+                                if (visibleIncomeEntries.isEmpty()) {
+                                    Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else {
+                                    visibleIncomeEntries.forEach { entry ->
+                                        Row(verticalAlignment=Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(entry.title, fontWeight=FontWeight.Medium)
+                                                Text("${entry.date}${if (entry.isLegacyAggregate) " · перенесено из старой версии" else ""}", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            Text(money(entry.amount), fontWeight=FontWeight.SemiBold)
+                                            TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     item {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("Бюджет по категориям",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
@@ -731,10 +767,17 @@ private fun ThunBudgetApp() {
                     draft.isIncomeEdit -> {
                         val amount = confirmedAmount ?: return@TextButton
                         store.prepareUndoSnapshot(); canUndo=true
-                        store.setPeriodIncomeTotal(periodStart, periodEnd, amount)
+                        val latestEntry = incomeEntries.filter { it.periodStart == periodStart && it.periodEnd == periodEnd }
+                            .maxByOrNull { it.date }
+                        if (latestEntry != null) {
+                            store.updateIncomeEntry(latestEntry.copy(amount = amount))
+                            voiceMessage = "Последняя запись дохода «${latestEntry.title}» изменена на ${money(amount)}."
+                        } else {
+                            store.setPeriodIncomeTotal(periodStart, periodEnd, amount)
+                            voiceMessage = "Общая сумма дохода за период установлена: ${money(amount)}."
+                        }
                         periodIncomes = store.loadPeriodIncomes()
                         incomeEntries = store.loadIncomeEntries()
-                        voiceMessage = "Общая сумма дохода за период установлена: ${money(amount)}."
                     }
                     draft.isEdit -> {
                         val amount = confirmedAmount ?: return@TextButton
@@ -873,6 +916,21 @@ private fun ThunBudgetApp() {
         expenses=updated; store.saveExpenses(expenses); showAdd=false; addFromCategory=null
         if(spentAfter>cap) OverspendNotifier.notify(context, "Превышение бюджета", "Категория «$category»: превышение ${money(spentAfter-cap)} за выбранный период.")
     })
+    selectedIncomeEntry?.let { selected ->
+        IncomeEntryEditDialog(selected, onDismiss={selectedIncomeEntry=null}, onSave={amount->
+            store.prepareUndoSnapshot(); canUndo=true
+            store.updateIncomeEntry(selected.copy(amount=amount))
+            incomeEntries=store.loadIncomeEntries()
+            periodIncomes=store.loadPeriodIncomes()
+            selectedIncomeEntry=null
+        }, onDelete={
+            store.prepareUndoSnapshot(); canUndo=true
+            store.deleteIncomeEntry(selected.id)
+            incomeEntries=store.loadIncomeEntries()
+            periodIncomes=store.loadPeriodIncomes()
+            selectedIncomeEntry=null
+        })
+    }
     selectedExpense?.let { selected ->
         ExpenseEditDialog(selected,categories,onDismiss={selectedExpense=null},onSave={edited->
             store.prepareUndoSnapshot(); canUndo=true
@@ -887,7 +945,7 @@ private fun ThunBudgetApp() {
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
-            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); incomeEntries=store.loadIncomeEntries()
+            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1; backupMessage="Автоматическая резервная копия восстановлена."
         } else backupMessage="Не удалось восстановить автоматическую копию."
@@ -944,6 +1002,29 @@ private fun ThunBudgetApp() {
         AlertDialog(onDismissRequest={backupMessage=null},title={Text("Резервная копия")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
     }
 
+}
+
+@Composable
+private fun IncomeEntryEditDialog(entry: IncomeEntry, onDismiss:()->Unit, onSave:(Double)->Unit, onDelete:()->Unit) {
+    var amount by remember(entry.id) { mutableStateOf(entry.amount.toString()) }
+    val parsed=amount.replace(',','.').toDoubleOrNull()
+    AlertDialog(
+        onDismissRequest=onDismiss,
+        title={Text("Изменить доход")},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text(entry.title, fontWeight=FontWeight.SemiBold)
+                Text("Дата: ${entry.date} · ${entry.periodStart} — ${entry.periodEnd}", style=MaterialTheme.typography.bodySmall)
+                if(entry.isLegacyAggregate) Text("Это перенесённая общая сумма старого периода, а не отдельное поступление.", style=MaterialTheme.typography.bodySmall)
+                OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+            }
+        },
+        confirmButton={TextButton(enabled=parsed!=null && parsed.isFinite() && parsed>0.0,onClick={onSave(parsed!!)}) { Text("Сохранить") }},
+        dismissButton={Row {
+            TextButton(onClick=onDelete) { Text("Удалить") }
+            TextButton(onClick=onDismiss) { Text("Отмена") }
+        }}
+    )
 }
 
 @Composable
