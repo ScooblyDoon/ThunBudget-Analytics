@@ -1901,80 +1901,139 @@ private fun BankOperationsReviewDialog(
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,bankNotificationAccessEnabled:Boolean,pendingBankOperationCount:Int,onEnableBankNotifications:()->Unit,onRefreshBankStatus:()->Unit,onReviewBankOperations:()->Unit,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
+private fun SettingsDialog(
+    income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,
+    darkTheme:Boolean,bankNotificationAccessEnabled:Boolean,pendingBankOperationCount:Int,
+    onEnableBankNotifications:()->Unit,onRefreshBankStatus:()->Unit,onReviewBankOperations:()->Unit,
+    onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,
+    externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,
+    onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,
+    onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,
+    onRestorePrevious:()->Unit,
+    onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit
+) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
     var sourceNames by remember { mutableStateOf(categories.map { it.name }) }
     var from by remember { mutableStateOf(start) }
     var to by remember { mutableStateOf(end) }
-    AlertDialog(onDismissRequest=onDismiss,title={Text("Настройки бюджета")},text={
-        LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=540.dp)) {
-            item { Text("Оформление",fontWeight=FontWeight.Bold) }
-            item {
-                Text("Тема приложения",style=MaterialTheme.typography.bodyMedium)
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(selected=!darkTheme,onClick={onThemeChange(false)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Светлая") }
-                    SegmentedButton(selected=darkTheme,onClick={onThemeChange(true)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("Тёмная") }
+    var section by rememberSaveable { mutableStateOf("income") }
+    val sections = listOf(
+        "income" to "Доход",
+        "period" to "Период",
+        "categories" to "Категории",
+        "export" to "Выгрузка",
+        "backup" to "Копирование",
+        "bank" to "Т-Банк",
+        "appearance" to "Оформление"
+    )
+    val validIncome = inc.replace(',','.').toDoubleOrNull()
+    val validSavings = sav.replace(',','.').toDoubleOrNull()
+    val validDates = runCatching { LocalDate.parse(from); LocalDate.parse(to); !LocalDate.parse(to).isBefore(LocalDate.parse(from)) }.getOrDefault(false)
+    val validCategories = cats.isNotEmpty() && cats.all { it.name.isNotBlank() && it.percent.isFinite() && it.percent >= 0.0 } &&
+        cats.map { it.name.trim().lowercase() }.distinct().size == cats.size && cats.sumOf { it.percent } <= 100.0
+    AlertDialog(
+        onDismissRequest=onDismiss,
+        title={Text("Настройки")},
+        text={
+            Column(verticalArrangement=Arrangement.spacedBy(10.dp),modifier=Modifier.heightIn(max=560.dp)) {
+                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                    items(sections) { (key,label) ->
+                        FilterChip(selected=section==key,onClick={section=key},label={Text(label)})
+                    }
                 }
-            }
-            item { OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
-            item { OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
-            item { Text("Импорт операций из Т-Банка",fontWeight=FontWeight.Bold) }
-            item {
-                Text(
-                    if (bankNotificationAccessEnabled) "Доступ к уведомлениям включён. ThunBudget отбирает только уведомления Т-Банка и предлагает распознанные операции на проверку."
-                    else "Android выдаёт разрешение на чтение уведомлений устройства целиком. ThunBudget отбирает только уведомления Т-Банка; остальные уведомления не сохраняются и не обрабатываются.",
-                    style=MaterialTheme.typography.bodySmall,
-                    color=MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedButton(onClick=onEnableBankNotifications,modifier=Modifier.fillMaxWidth()) {
-                    Text(if (bankNotificationAccessEnabled) "Открыть настройки доступа" else "Разрешить доступ к уведомлениям")
-                }
-                OutlinedButton(onClick=onRefreshBankStatus,modifier=Modifier.fillMaxWidth()) { Text("Обновить статус и список операций") }
-                OutlinedButton(onClick=onReviewBankOperations,enabled=pendingBankOperationCount>0,modifier=Modifier.fillMaxWidth()) {
-                    Text("Проверить операции Т-Банка ($pendingBankOperationCount)")
-                }
-                Text("Операции не сохраняются в бюджет автоматически. Сначала проверь сумму и категорию. Содержимое уведомлений не отправляется в интернет.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            item { Text("Резервное копирование",fontWeight=FontWeight.Bold) }
-            item {
-                Text("Внутри приложения хранится до 6 последних проверенных копий. Дополнительно можно выбрать внешнюю папку для автоматического сохранения JSON-копий.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(if (externalBackupFolder.isNullOrBlank()) "Внешняя папка не выбрана" else "Автоматическое сохранение во внешнюю папку включено",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                externalBackupLastSuccess?.let { Text("Последняя внешняя копия: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                externalBackupLastError?.let { Text("Ошибка внешнего резервирования: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error) }
-                OutlinedButton(onClick=onChooseExternalFolder,modifier=Modifier.fillMaxWidth()) { Text(if (externalBackupFolder.isNullOrBlank()) "Выбрать папку для автокопий" else "Изменить папку автокопий") }
-                if (!externalBackupFolder.isNullOrBlank()) OutlinedButton(onClick=onClearExternalFolder,modifier=Modifier.fillMaxWidth()) { Text("Отключить внешние автокопии") }
-                OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию вручную") }
-                if(hasAutomaticBackup) OutlinedButton(onClick=onRestoreAutomatic,modifier=Modifier.fillMaxWidth()) { Text("Восстановить автокопию приложения") }
-                OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из файла") }
-                if(hasPreviousRestoreBackup) OutlinedButton(onClick=onRestorePrevious,modifier=Modifier.fillMaxWidth()) { Text("Отменить последнее восстановление") }
-            }
-            item { Divider() }
-            item { Text("Период планирования",fontWeight=FontWeight.Bold) }
-            item { OutlinedTextField(from,{from=it},label={Text("Начало (ГГГГ-ММ-ДД)")},singleLine=true) }
-            item { OutlinedTextField(to,{to=it},label={Text("Окончание (ГГГГ-ММ-ДД)")},singleLine=true) }
-            item { Text("Категории бюджета",fontWeight=FontWeight.Bold) }
-            items(cats.size) { index ->
-                Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                    OutlinedTextField(cats[index].name,{v->cats=cats.toMutableList().also{it[index]=it[index].copy(name=v)}},label={Text("Название категории")},singleLine=true,modifier=Modifier.fillMaxWidth())
-                    Row(verticalAlignment=Alignment.CenterVertically) {
-                        OutlinedTextField(cats[index].percent.toString(),{v->cats=cats.toMutableList().also{it[index]=it[index].copy(percent=v.replace(',','.').toDoubleOrNull()?:0.0)}},label={Text("Доля, %")},modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
-                        TextButton(onClick={cats=cats.filterIndexed{idx,_->idx!=index};sourceNames=sourceNames.filterIndexed{idx,_->idx!=index}}) { Text("Удалить",color=Color(0xFFC74444)) }
+                Divider()
+                when(section) {
+                    "income" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Доход и накопления",fontWeight=FontWeight.Bold)
+                        OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())
+                        OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())
+                        Text("Цель рассчитывается от дохода и используется в планировании бюджета.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    "period" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Период планирования",fontWeight=FontWeight.Bold)
+                        OutlinedTextField(from,{from=it},label={Text("Начало (ГГГГ-ММ-ДД)")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                        OutlinedTextField(to,{to=it},label={Text("Окончание (ГГГГ-ММ-ДД)")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                        if(!validDates) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
+                    }
+                    "categories" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=440.dp)) {
+                        item { Text("Категории бюджета",fontWeight=FontWeight.Bold) }
+                        items(cats.size) { index ->
+                            Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                OutlinedTextField(cats[index].name,{v->cats=cats.toMutableList().also{it[index]=it[index].copy(name=v)}},label={Text("Название категории")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                                Row(verticalAlignment=Alignment.CenterVertically) {
+                                    OutlinedTextField(cats[index].percent.toString(),{v->cats=cats.toMutableList().also{it[index]=it[index].copy(percent=v.replace(',','.').toDoubleOrNull()?:0.0)}},label={Text("Доля, %")},modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+                                    TextButton(onClick={cats=cats.filterIndexed{idx,_->idx!=index};sourceNames=sourceNames.filterIndexed{idx,_->idx!=index}}) { Text("Удалить",color=Color(0xFFC74444)) }
+                                }
+                            }
+                        }
+                        item { OutlinedButton(onClick={cats=cats+BudgetCategory("",0.0);sourceNames=sourceNames+""},modifier=Modifier.fillMaxWidth()) { Text("Добавить категорию") } }
+                        item { Text("Сумма долей: ${cats.sumOf{it.percent}}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                    "export" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Выгрузка данных",fontWeight=FontWeight.Bold)
+                        Text("Сохрани отчёт по бюджету в формате Excel. Резервная копия находится в отдельном разделе.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick=onExportExcel,modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") }
+                    }
+                    "backup" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text("Резервное копирование",fontWeight=FontWeight.Bold)
+                        Text("Резервные копии предназначены для восстановления данных приложения.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if(externalBackupFolder.isNullOrBlank()) "Автоматическое сохранение во внешнюю папку выключено" else "Автоматическое сохранение во внешнюю папку включено",style=MaterialTheme.typography.bodySmall)
+                        externalBackupLastSuccess?.let { Text("Последняя внешняя копия: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                        externalBackupLastError?.let { Text("Ошибка внешнего резервирования: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error) }
+                        OutlinedButton(onClick=onChooseExternalFolder,modifier=Modifier.fillMaxWidth()) { Text(if(externalBackupFolder.isNullOrBlank()) "Выбрать папку для автокопий" else "Изменить папку автокопий") }
+                        if(!externalBackupFolder.isNullOrBlank()) OutlinedButton(onClick=onClearExternalFolder,modifier=Modifier.fillMaxWidth()) { Text("Отключить внешние автокопии") }
+                        OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию вручную") }
+                        if(hasAutomaticBackup) OutlinedButton(onClick=onRestoreAutomatic,modifier=Modifier.fillMaxWidth()) { Text("Восстановить автокопию приложения") }
+                        OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из файла") }
+                        if(hasPreviousRestoreBackup) OutlinedButton(onClick=onRestorePrevious,modifier=Modifier.fillMaxWidth()) { Text("Отменить последнее восстановление") }
+                    }
+                    "bank" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Импорт операций из Т-Банка",fontWeight=FontWeight.Bold)
+                        Text(
+                            if(bankNotificationAccessEnabled) "Специальный доступ Android включён. Новые уведомления Т-Банка будут обрабатываться приложением."
+                            else "Специальный доступ к уведомлениям Android пока не включён. Обычного разрешения «Уведомления» недостаточно.",
+                            style=MaterialTheme.typography.bodySmall,
+                            color=if(bankNotificationAccessEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                        OutlinedButton(onClick=onEnableBankNotifications,modifier=Modifier.fillMaxWidth()) {
+                            Text(if(bankNotificationAccessEnabled) "Открыть специальный доступ Android" else "Включить доступ к уведомлениям Android")
+                        }
+                        OutlinedButton(onClick=onRefreshBankStatus,modifier=Modifier.fillMaxWidth()) { Text("Проверить разрешение и обновить список") }
+                        OutlinedButton(onClick=onReviewBankOperations,enabled=pendingBankOperationCount>0,modifier=Modifier.fillMaxWidth()) {
+                            Text("Проверить операции Т-Банка ($pendingBankOperationCount)")
+                        }
+                        Text("В очереди: $pendingBankOperationCount. Операции добавляются в бюджет только после ручного подтверждения. Старые уведомления до включения доступа не импортируются.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    "appearance" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Оформление",fontWeight=FontWeight.Bold)
+                        Text("Тема приложения")
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            SegmentedButton(selected=!darkTheme,onClick={onThemeChange(false)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Светлая") }
+                            SegmentedButton(selected=darkTheme,onClick={onThemeChange(true)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("Тёмная") }
+                        }
                     }
                 }
             }
-            item { OutlinedButton(onClick={cats=cats+BudgetCategory("",0.0);sourceNames=sourceNames+""},modifier=Modifier.fillMaxWidth()) { Text("Добавить категорию") } }
-            item { Text("Сумма долей: ${cats.sumOf{it.percent}}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-    },confirmButton={
-        TextButton(onClick={
-            val i=inc.replace(',','.').toDoubleOrNull(); val s=sav.replace(',','.').toDoubleOrNull()
-            val validDates=runCatching{LocalDate.parse(from);LocalDate.parse(to)}.isSuccess
-            if(i!=null&&i>0&&s!=null&&s>=0&&s<=100&&cats.isNotEmpty()&&cats.all{it.name.isNotBlank()&&it.percent>=0}&&cats.map{it.name.trim().lowercase()}.distinct().size==cats.size&&cats.sumOf{it.percent}<=100.0&&validDates&&!LocalDate.parse(to).isBefore(LocalDate.parse(from)))
-                onSave(i,s,cats.map{it.copy(name=it.name.trim())},from,to,sourceNames.zip(cats).filter{it.first.isNotBlank()}.associate{it.first to it.second.name.trim()})
-        },enabled=(inc.replace(',','.').toDoubleOrNull()?:0.0)>0) { Text("Сохранить") }
-    },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+        },
+        confirmButton={
+            TextButton(
+                onClick={
+                    if(validIncome!=null && validIncome.isFinite() && validIncome>0 &&
+                        validSavings!=null && validSavings.isFinite() && validSavings in 0.0..100.0 &&
+                        validCategories && validDates) {
+                        onSave(validIncome,validSavings,cats.map{it.copy(name=it.name.trim())},from,to,
+                            sourceNames.zip(cats).filter{it.first.isNotBlank()}.associate{it.first to it.second.name.trim()})
+                    }
+                },
+                enabled=validIncome!=null && validIncome.isFinite() && validIncome>0 &&
+                    validSavings!=null && validSavings.isFinite() && validSavings in 0.0..100.0 &&
+                    validCategories && validDates
+            ) { Text("Сохранить") }
+        },
+        dismissButton={TextButton(onClick=onDismiss){Text("Закрыть")}}
+    )
 }
 
 @Composable
