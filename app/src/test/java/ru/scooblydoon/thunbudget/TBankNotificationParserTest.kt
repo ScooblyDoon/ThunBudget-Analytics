@@ -38,6 +38,18 @@ class TBankNotificationParserTest {
     }
 
     @Test
+    fun parsesSignedIncomingMoneyTransfer() {
+        val result = TBankNotificationParser.parse(
+            title = "Марк П.",
+            text = "+10 ₽ · Перевод денежных средств",
+            bigText = null,
+            postTime = timestamp
+        )
+        assertEquals(BankOperationType.INCOME, result?.type)
+        assertEquals(10.0, result?.amount ?: 0.0, 0.001)
+    }
+
+    @Test
     fun preservesKopecks() {
         val result = TBankNotificationParser.parse(
             title = "Т-Банк",
