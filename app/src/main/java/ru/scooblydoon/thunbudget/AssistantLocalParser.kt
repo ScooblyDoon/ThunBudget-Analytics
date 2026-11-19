@@ -49,7 +49,7 @@ object AssistantLocalParser {
             return command(AssistantIntent.QUERY_REMAINING, confidence = 0.92)
         }
 
-        if (listOf("превыш", "перерасход", "где вышел за бюджет", "какие категории выше бюджета")
+        if (listOf("превыш", "превыс", "перерасход", "где вышел за бюджет", "какие категории выше бюджета")
                 .any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_OVERSPENDING, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.9)
         }
@@ -66,7 +66,7 @@ object AssistantLocalParser {
             )
         }
 
-        if (category != null && listOf("сколько потратил", "сколько потратила", "расходы", "потрачено").any { normalized.contains(it) }) {
+        if (category != null && listOf("сколько потратил", "сколько я потратил", "сколько потратила", "сколько я потратила", "расходы", "потрачено").any { normalized.contains(it) }) {
             return command(
                 AssistantIntent.QUERY_CATEGORY_SPENDING,
                 category = category,
@@ -76,7 +76,7 @@ object AssistantLocalParser {
             )
         }
 
-        if (listOf("сколько потратил", "сколько потратила", "общие расходы", "сумма расходов", "потрачено", "покажи расходы", "все расходы", "расходы за").any { normalized.contains(it) }) {
+        if (listOf("сколько потратил", "сколько я потратил", "сколько потратила", "сколько я потратила", "общие расходы", "сумма расходов", "потрачено", "покажи расходы", "все расходы", "расходы за").any { normalized.contains(it) }) {
             return command(
                 AssistantIntent.QUERY_SPENDING,
                 periodStart = periodStart,
