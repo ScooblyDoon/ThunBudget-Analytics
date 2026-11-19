@@ -1,6 +1,9 @@
 package ru.scooblydoon.thunbudget
 
 import java.time.LocalDate
+import java.io.StringReader
+import javax.xml.parsers.DocumentBuilderFactory
+import org.xml.sax.InputSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -84,6 +87,21 @@ class XlsxExporterTest {
         assertTrue(xml.contains("autoFilter ref=\"A1:G2\""))
         assertTrue(xml.contains("state=\"frozen\""))
         assertTrue(xml.contains("fitToWidth=\"1\""))
+    }
+
+    @Test
+    fun worksheetAndStylesXmlAreWellFormed() {
+        val rows = XlsxExporter.periods(
+            expenses = emptyList(),
+            cats = listOf(BudgetCategory("Продукты", 25.0)),
+            income = 30_000.0,
+            start = LocalDate.parse("2026-11-10"),
+            end = LocalDate.parse("2026-11-20"),
+            periodIncome = 0.0
+        )
+        val parser = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+        parser.parse(InputSource(StringReader(XlsxExporter.sheet(rows))))
+        parser.parse(InputSource(StringReader(XlsxExporter.styles())))
     }
 
     @Test
