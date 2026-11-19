@@ -42,7 +42,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private data class PeriodIncome(val start: String, val end: String, val amount: Double)
+internal data class PeriodIncome(val start: String, val end: String, val amount: Double)
 
 internal class BudgetStore(context: Context) {
     private val appContext = context.applicationContext
