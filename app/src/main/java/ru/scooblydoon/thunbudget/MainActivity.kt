@@ -360,8 +360,11 @@ internal class BudgetStore(context: Context) {
         }
         editor.putString("_auto_backup", snapshot)
             .putString("_auto_backup_date", LocalDate.now().toString())
-        check(editor.commit()) { "Не удалось сохранить автоматическую резервную копию." }
+        val internalSaved = editor.commit()
+        // External backup is scheduled independently so an internal storage failure
+        // does not suppress the second protection layer.
         if (!externalBackupFolder().isNullOrBlank()) runCatching { ExternalBackupSettings.schedule(appContext) }
+        check(internalSaved) { "Не удалось сохранить автоматическую резервную копию." }
         BudgetWidgetProvider.refreshAll(appContext)
     }
 
