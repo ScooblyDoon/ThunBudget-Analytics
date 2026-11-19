@@ -34,10 +34,16 @@ internal object ExternalBackupStorage {
         ) ?: error("Папка резервного копирования недоступна.")
 
         try {
+            val expectedBytes = json.toByteArray(Charsets.UTF_8)
             resolver.openOutputStream(created, "w")?.use { stream ->
-                stream.write(json.toByteArray(Charsets.UTF_8))
+                stream.write(expectedBytes)
                 stream.flush()
             } ?: error("Не удалось открыть файл резервной копии.")
+            val actualBytes = resolver.openInputStream(created)?.use { it.readBytes() }
+                ?: error("Не удалось проверить сохранённую резервную копию.")
+            require(actualBytes.contentEquals(expectedBytes)) {
+                "Проверка сохранённой резервной копии не пройдена."
+            }
         } catch (error: Exception) {
             runCatching { DocumentsContract.deleteDocument(resolver, created) }
             throw error
@@ -49,7 +55,7 @@ internal object ExternalBackupStorage {
     private fun pruneOldCopies(context: Context, treeUri: Uri, treeId: String) {
         val resolver = context.contentResolver
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, treeId)
-        val rows = mutableListOf<Pair<Long, Uri>>()
+        val rows = mutableListOf<Triple<Long, String, Uri>>()
         resolver.query(
             children,
             arrayOf(
@@ -67,13 +73,12 @@ internal object ExternalBackupStorage {
                 if (!name.startsWith(FILE_PREFIX) || !name.endsWith(".json")) continue
                 val id = cursor.getString(idColumn) ?: continue
                 val modified = if (modifiedColumn >= 0 && !cursor.isNull(modifiedColumn)) cursor.getLong(modifiedColumn) else 0L
-                rows += modified to DocumentsContract.buildDocumentUriUsingTree(treeUri, id)
+                rows += Triple(modified, name, DocumentsContract.buildDocumentUriUsingTree(treeUri, id))
             }
         } ?: return
 
-        rows.sortedByDescending { it.first }.drop(KEEP_FILES).forEach { (_, uri) ->
-            runCatching { DocumentsContract.deleteDocument(resolver, uri) }
-        }
+        rows.sortedWith(compareByDescending<Triple<Long, String, Uri>> { it.first }.thenByDescending { it.second })
+            .drop(KEEP_FILES).forEach { (_, _, uri) -> runCatching { DocumentsContract.deleteDocument(resolver, uri) } }
     }
 }
 
