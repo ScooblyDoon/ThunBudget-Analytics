@@ -454,6 +454,9 @@ private fun ThunBudgetApp() {
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var pendingBankOperations by remember { mutableStateOf(BankNotificationStore.load(context)) }
+    var showBankOperationsReview by remember { mutableStateOf(false) }
+    var bankNotificationAccessEnabled by remember { mutableStateOf(BankNotificationStore.isAccessEnabled(context)) }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
@@ -1394,7 +1397,7 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onClearExternalFolder={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,bankNotificationAccessEnabled=bankNotificationAccessEnabled,pendingBankOperationCount=pendingBankOperations.size,onEnableBankNotifications={BankNotificationStore.openAccessSettings(context)},onRefreshBankStatus={bankNotificationAccessEnabled=BankNotificationStore.isAccessEnabled(context);pendingBankOperations=BankNotificationStore.load(context)},onReviewBankOperations={pendingBankOperations=BankNotificationStore.load(context);showBankOperationsReview=true},onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onClearExternalFolder={
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
@@ -1427,6 +1430,35 @@ private fun ThunBudgetApp() {
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; store.savePeriod(start,end)
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
     })
+    if(showBankOperationsReview) BankOperationsReviewDialog(
+        operations=pendingBankOperations,
+        categories=categories,
+        onImport={ operation, category ->
+            val duplicate = if (operation.type == BankOperationType.EXPENSE) {
+                expenses.any { it.date == operation.date && it.amount == operation.amount && it.title.equals(operation.title, true) }
+            } else {
+                incomeEntries.any { it.date == operation.date && it.amount == operation.amount && it.title.equals(operation.title, true) }
+            }
+            if (duplicate) {
+                backupMessage = "Похожая операция уже есть в истории. Повторно добавлять её не будем."
+            } else {
+                store.prepareUndoSnapshot(); canUndo = true
+                if (operation.type == BankOperationType.EXPENSE) {
+                    val updated = (listOf(Expense(System.currentTimeMillis(), operation.title, category, operation.amount, operation.date)) + expenses).sortedByDescending { it.date }
+                    expenses = updated
+                    store.saveExpenses(updated)
+                } else {
+                    store.addIncomeEntry(operation.title, operation.amount, operation.date, periodStart, periodEnd)
+                    incomeEntries = store.loadIncomeEntries()
+                    periodIncomes = store.loadPeriodIncomes()
+                }
+                BankNotificationStore.remove(context, operation.id)
+                pendingBankOperations = BankNotificationStore.load(context)
+            }
+        },
+        onSkip={ operation -> BankNotificationStore.remove(context, operation.id); pendingBankOperations=BankNotificationStore.load(context) },
+        onDismiss={showBankOperationsReview=false}
+    )
     if(showRestoreConfirmation) AlertDialog(
         onDismissRequest={showRestoreConfirmation=false},
         title={Text("Восстановить резервную копию?")},
@@ -1804,7 +1836,61 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
+private fun BankOperationsReviewDialog(
+    operations: List<PendingBankOperation>,
+    categories: List<BudgetCategory>,
+    onImport: (PendingBankOperation, String) -> Unit,
+    onSkip: (PendingBankOperation) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest=onDismiss,
+        title={Text("Операции из Т-Банка")},
+        text={
+            if (operations.isEmpty()) {
+                Text("Новых распознанных операций нет.")
+            } else {
+                LazyColumn(
+                    modifier=Modifier.heightIn(max=520.dp),
+                    verticalArrangement=Arrangement.spacedBy(10.dp)
+                ) {
+                    items(operations,key={it.id}) { operation ->
+                        var category by remember(operation.id,categories) {
+                            mutableStateOf(categories.firstOrNull()?.name ?: "Прочее")
+                        }
+                        var expanded by remember(operation.id) { mutableStateOf(false) }
+                        Card {
+                            Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Text(if(operation.type==BankOperationType.EXPENSE) "Расход" else "Поступление",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
+                                Text(operation.title,fontWeight=FontWeight.SemiBold)
+                                Text(money(operation.amount),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+                                Text(operation.date,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                if(operation.type==BankOperationType.EXPENSE) {
+                                    ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
+                                        OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor().fillMaxWidth(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
+                                        ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
+                                            categories.forEach { item -> DropdownMenuItem(text={Text(item.name)},onClick={category=item.name;expanded=false}) }
+                                        }
+                                    }
+                                }
+                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.fillMaxWidth()) {
+                                    Button(onClick={onImport(operation,category)},modifier=Modifier.weight(1f)) {
+                                        Text(if(operation.type==BankOperationType.EXPENSE) "Добавить расход" else "Добавить доход")
+                                    }
+                                    TextButton(onClick={onSkip(operation)}) { Text("Пропустить") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton={TextButton(onClick=onDismiss){Text("Закрыть")}}
+    )
+}
+
+@Composable
+private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,bankNotificationAccessEnabled:Boolean,pendingBankOperationCount:Int,onEnableBankNotifications:()->Unit,onRefreshBankStatus:()->Unit,onReviewBankOperations:()->Unit,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
@@ -1823,6 +1909,23 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
             }
             item { OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
+            item { Text("Импорт операций из Т-Банка",fontWeight=FontWeight.Bold) }
+            item {
+                Text(
+                    if (bankNotificationAccessEnabled) "Доступ к уведомлениям включён. Новые распознанные операции будут появляться здесь после уведомления банка."
+                    else "Для получения операций разреши ThunBudget доступ к уведомлениям Android. Приложение обрабатывает только уведомления Т-Банка.",
+                    style=MaterialTheme.typography.bodySmall,
+                    color=MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedButton(onClick=onEnableBankNotifications,modifier=Modifier.fillMaxWidth()) {
+                    Text(if (bankNotificationAccessEnabled) "Открыть настройки доступа" else "Разрешить доступ к уведомлениям")
+                }
+                OutlinedButton(onClick=onRefreshBankStatus,modifier=Modifier.fillMaxWidth()) { Text("Обновить статус и список операций") }
+                OutlinedButton(onClick=onReviewBankOperations,enabled=pendingBankOperationCount>0,modifier=Modifier.fillMaxWidth()) {
+                    Text("Проверить операции Т-Банка ($pendingBankOperationCount)")
+                }
+                Text("Операции не сохраняются в бюджет автоматически. Сначала проверь сумму и категорию. Содержимое уведомлений не отправляется в интернет.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             item { Text("Резервное копирование",fontWeight=FontWeight.Bold) }
             item {
                 Text("Внутри приложения хранится до 6 последних проверенных копий. Дополнительно можно выбрать внешнюю папку для автоматического сохранения JSON-копий.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
