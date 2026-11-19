@@ -1604,7 +1604,7 @@ private fun startOfflineSpeechRecognition(
     recognizer.startListening(intent)
 }
 
-private fun parseSpokenAmount(normalized: String): Double? {
+internal fun parseSpokenAmount(normalized: String): Double? {
     // SpeechRecognizer may use narrow/non-breaking spaces in grouped numbers (e.g. «2 000»).
     // A dot followed by three digits is treated as a thousands separator («2.000»).
     val canonical = normalized.replace(Regex("""[\s\p{Z}]+"""), " ").trim()
