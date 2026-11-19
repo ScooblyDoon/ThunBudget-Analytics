@@ -5,6 +5,7 @@
 - Added a review queue: detected operations require user confirmation and category selection before being added.
 - Added duplicate protection for identical imported operations.
 - Improved parsing of expanded notifications and decimal amounts; ambiguous notifications are ignored.
+- Added parser tests for purchases, incoming transfers, decimal values, repeated notification text, and ambiguous amounts.
 - Notification processing is limited to the T-Bank Android package and stays on the device.
 - Existing budget screens and their layout remain unchanged.
 
