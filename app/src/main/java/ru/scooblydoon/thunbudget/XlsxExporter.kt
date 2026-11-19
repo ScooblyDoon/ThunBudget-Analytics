@@ -260,7 +260,12 @@ object XlsxExporter {
         sheets.forEachIndexed { index, sheet ->
             append("<sheet name=\"${xml(sheet.first)}\" sheetId=\"${index + 1}\" r:id=\"rId${index + 1}\"/>")
         }
-        append("</sheets></workbook>")
+        append("</sheets><definedNames>")
+        sheets.forEachIndexed { index, sheet ->
+            val safeName = sheet.first.replace("'", "''")
+            append("<definedName name=\"_xlnm.Print_Titles\" localSheetId=\"$index\">'$safeName'!$1:$1</definedName>")
+        }
+        append("</definedNames></workbook>")
     }
 
     private fun workbookRels(count: Int) = buildString {
