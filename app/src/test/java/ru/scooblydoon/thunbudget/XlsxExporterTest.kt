@@ -49,6 +49,21 @@ class XlsxExporterTest {
     }
 
     @Test
+    fun monthlyReportUsesRecordedIncomeAndFallsBackToConfiguredMonthlyIncome() {
+        val rows = XlsxExporter.months(
+            expenses = emptyList(),
+            cats = listOf(BudgetCategory("Продукты", 25.0)),
+            income = 30_000.0,
+            year = 2026,
+            monthlyIncomes = mapOf("2026-01" to 50_000.0)
+        )
+
+        assertEquals(12 + 1, rows.size)
+        assertEquals(12_500.0, rows[1][2] as Double, 0.001)
+        assertEquals(7_500.0, rows[2][2] as Double, 0.001)
+    }
+
+    @Test
     fun reportRejectsEndDateBeforeStartDate() {
         assertThrows(IllegalArgumentException::class.java) {
             XlsxExporter.periods(
