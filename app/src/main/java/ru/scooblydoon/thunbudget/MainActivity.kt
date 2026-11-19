@@ -309,11 +309,15 @@ internal class BudgetStore(context: Context) {
         val categories = JSONArray(data.getString("categories"))
         require(categories.length() > 0)
         val categoryNames = mutableSetOf<String>()
+        var categoryPercentTotal = 0.0
         for (i in 0 until categories.length()) {
             val row = categories.getJSONObject(i)
             require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
-            require(row.getDouble("percent").isFinite() && row.getDouble("percent") >= 0.0)
+            val percent = row.getDouble("percent")
+            require(percent.isFinite() && percent >= 0.0)
+            categoryPercentTotal += percent
         }
+        require(categoryPercentTotal <= 100.0)
         val periodIncomes = JSONArray(data.optString("period_incomes", "[]"))
         for (i in 0 until periodIncomes.length()) {
             val row = periodIncomes.getJSONObject(i)
