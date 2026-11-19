@@ -231,6 +231,9 @@ internal class BudgetStore(context: Context) {
         require(root.getString("app") == "ThunBudget") { "Это не резервная копия ThunBudget." }
         require(root.getInt("schemaVersion") == 1) { "Версия резервной копии не поддерживается." }
         val data = root.getJSONObject("data")
+        require(isBackupSnapshotValid(JSONObject().put("app", "ThunBudget").put("schemaVersion", 1).put("data", data).toString())) {
+            "В резервной копии обнаружены некорректные или противоречивые данные."
+        }
         require(data.has("expenses") && data.has("categories") && data.has("income") && data.has("savings")) {
             "В резервной копии отсутствуют обязательные данные."
         }
@@ -274,10 +277,13 @@ internal class BudgetStore(context: Context) {
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
+            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme")) {
+                "В резервной копии обнаружено неизвестное поле."
+            }
             val value = data.get(key)
             when (value) {
                 is String -> if (key != "_pre_restore_backup") editor.putString(key, value)
-                is Boolean -> if (key == "dark_theme") editor.putBoolean(key, value)
+                is Boolean -> if (key == "dark_theme" || key == IncomeLedgerRepository.MIGRATION_KEY) editor.putBoolean(key, value) else error("Некорректный формат данных резервной копии.")
                 else -> error("Некорректный формат данных резервной копии.")
             }
         }
@@ -331,6 +337,13 @@ internal class BudgetStore(context: Context) {
         val savings = data.getString("savings").toDoubleOrNull()
         require(monthlyIncome != null && monthlyIncome.isFinite() && monthlyIncome > 0.0)
         require(savings != null && savings.isFinite() && savings in 0.0..100.0)
+        val configuredStart = data.optString("period_start")
+        val configuredEnd = data.optString("period_end")
+        if (configuredStart.isNotBlank() || configuredEnd.isNotBlank()) {
+            val start = LocalDate.parse(configuredStart)
+            val end = LocalDate.parse(configuredEnd)
+            require(!end.isBefore(start))
+        }
         true
     }.getOrDefault(false)
 
