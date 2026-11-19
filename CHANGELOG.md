@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.3.1
+- Release build: versionCode 14, versionName 1.3.1.
 - Reorganized Settings into separate sections for income and savings, planning period, categories, Excel export, backups, T-Bank import, and appearance.
 - Moved Excel report export into its own Settings section, separate from backup and restore.
 - Clarified the dedicated Android notification-listener permission and added an explicit status refresh action.
