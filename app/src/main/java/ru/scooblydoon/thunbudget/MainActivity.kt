@@ -246,6 +246,7 @@ private class BudgetStore(context: Context) {
     fun saveAutomaticBackup() {
         val snapshot = exportBackup()
         prefs.edit().putString("_auto_backup", snapshot).commit()
+        BudgetWidgetProvider.refreshAll(context)
     }
 
     fun hasAutomaticBackup(): Boolean = !prefs.getString("_auto_backup", null).isNullOrBlank()
