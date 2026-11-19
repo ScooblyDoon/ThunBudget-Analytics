@@ -1281,6 +1281,7 @@ private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCate
                 }
             } }
         }
+        }
     }
 }
 
