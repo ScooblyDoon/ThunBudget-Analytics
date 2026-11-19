@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -371,6 +372,22 @@ private fun ThunBudgetApp() {
     DisposableEffect(offlineSpeechRecognizer) {
         onDispose { offlineSpeechRecognizer?.destroy() }
     }
+    var ttsReady by remember { mutableStateOf(false) }
+    val speechOutput = remember(context) {
+        TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+    }
+    LaunchedEffect(ttsReady) {
+        if (ttsReady) speechOutput.language = Locale("ru", "RU")
+    }
+    LaunchedEffect(voiceMessage, ttsReady) {
+        val response = voiceMessage
+        if (ttsReady && !response.isNullOrBlank()) {
+            speechOutput.speak(response, TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_response")
+        }
+    }
+    DisposableEffect(speechOutput) {
+        onDispose { speechOutput.stop(); speechOutput.shutdown() }
+    }
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -536,6 +553,7 @@ private fun ThunBudgetApp() {
             isListening = true
             startOfflineSpeechRecognition(context, offlineSpeechRecognizer, onResult = { alternatives ->
                 isListening = false
+                showAssistantDialog = false
                 val interpreted = alternatives.firstNotNullOfOrNull { phrase ->
                     AssistantLocalParser.parse(phrase, categories.map { it.name }, today)?.let { phrase to it }
                 }
@@ -1052,7 +1070,19 @@ private fun ThunBudgetApp() {
         )
     }
     voiceMessage?.let { message ->
-        AlertDialog(onDismissRequest={voiceMessage=null},title={Text("Помощник")},text={Text(message)},confirmButton={TextButton(onClick={voiceMessage=null}) { Text("Понятно") }})
+        AlertDialog(
+            onDismissRequest = { voiceMessage = null },
+            title = { Text("Помощник ThunBudget") },
+            text = { Text(message) },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = {
+                        if (ttsReady) speechOutput.speak(message, TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_manual")
+                    }, enabled = ttsReady) { Text("Повторить голосом") }
+                    TextButton(onClick = { voiceMessage = null }) { Text("Понятно") }
+                }
+            }
+        )
     }
     if (showAssistantDialog) {
         AlertDialog(
@@ -1069,11 +1099,26 @@ private fun ThunBudgetApp() {
                         minLines = 2,
                         maxLines = 4
                     )
-                    Text(
-                        "Пока работает локальное понимание команд. Для сложных запросов подключим облачный ИИ следующим этапом.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalButton(
+                            onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                            enabled = !isListening,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.Mic, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (isListening) "Слушаю…" else "Сказать голосом")
+                        }
+                    }
+                    if (isListening) {
+                        Text("Говори после звукового сигнала. Распознавание выполняется на устройстве.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text(
+                            "Помощник работает локально, без отправки финансовых данных в облако. Можно спросить об остатке, расходах, категориях или продиктовать новую операцию.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             },
             confirmButton = {
