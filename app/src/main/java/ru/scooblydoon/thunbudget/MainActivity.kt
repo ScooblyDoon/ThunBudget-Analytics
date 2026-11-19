@@ -287,6 +287,8 @@ private fun ThunBudgetApp() {
     var voiceDraft by remember { mutableStateOf<VoiceExpenseDraft?>(null) }
     var voiceAmount by remember { mutableStateOf("") }
     var voiceMessage by remember { mutableStateOf<String?>(null) }
+    var showAssistantDialog by remember { mutableStateOf(false) }
+    var assistantTextInput by remember { mutableStateOf("") }
     var voiceEditCandidates by remember { mutableStateOf<List<Expense>>(emptyList()) }
     var voiceSelectedExpenseId by remember { mutableStateOf<Long?>(null) }
     var voiceEditExpanded by remember { mutableStateOf(false) }
@@ -298,43 +300,6 @@ private fun ThunBudgetApp() {
     }
     DisposableEffect(offlineSpeechRecognizer) {
         onDispose { offlineSpeechRecognizer?.destroy() }
-    }
-    val voicePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) {
-            voiceMessage = "Для голосового ввода необходимо разрешить доступ к микрофону."
-        } else if (offlineSpeechRecognizer == null) {
-            voiceMessage = "На этом устройстве не найден локальный движок распознавания русской речи. Установи офлайн-пакет распознавания речи в настройках Android или используй ручной ввод. Интернет-распознавание приложение не запускает."
-        } else {
-            isListening = true
-            startOfflineSpeechRecognition(context, offlineSpeechRecognizer, onResult = { alternatives ->
-                isListening = false
-                val parsed = alternatives
-                    .mapNotNull { phrase -> parseVoiceExpense(phrase, categories)?.let { draft -> phrase to draft } }
-                    .maxByOrNull { (phrase, _) -> voiceRecognitionScore(phrase, categories) }
-                    ?.let { (phrase, draft) -> draft.copy(sourcePhrase = phrase) }
-                if (parsed == null) {
-                    voiceMessage = "Не удалось разобрать команду. Скажи сумму и назначение: «Добавь расход 1 500 рублей на продукты» или «Добавь доход 54 тысячи рублей». Распознано: ${alternatives.joinToString(" / ")}"
-                } else {
-                    voiceDraft = parsed
-                    voiceAmount = parsed.amount.toLong().takeIf { it.toDouble() == parsed.amount }?.toString()
-                        ?: parsed.amount.toString()
-                    if (parsed.isEdit) {
-                        voiceEditCandidates = expenses.filter { it.category == parsed.category }.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
-                        voiceSelectedExpenseId = voiceEditCandidates.firstOrNull()?.id
-                        if (voiceEditCandidates.isEmpty()) {
-                            voiceDraft = null
-                            voiceMessage = "Не найдена сохранённая операция в категории «${parsed.category}». Укажи категорию, например: «Измени расход продукты на 1500 рублей»."
-                        }
-                    } else {
-                        voiceEditCandidates = emptyList()
-                        voiceSelectedExpenseId = null
-                    }
-                }
-            }, onError = { code ->
-                isListening = false
-                voiceMessage = "Не удалось распознать речь (код $code). Попробуй ещё раз или проверь, установлен ли офлайн-пакет русского языка."
-            })
-        }
     }
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
@@ -391,6 +356,151 @@ private fun ThunBudgetApp() {
     val spentToday = expenses.filter { it.date == today.toString() }.sumOf { it.amount }
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
+
+    fun handleAssistantPhrase(phrase: String) {
+        val parsed = AssistantLocalParser.parse(phrase, categories.map { it.name }, today)
+        if (parsed == null) {
+            voiceMessage = "Пока не удалось понять запрос. Попробуй: «Сколько осталось до зарплаты?», «Сколько потратил на продукты в этом месяце?» или «Вчера потратил две тысячи на продукты»."
+            return
+        }
+        when (val validation = AssistantCommandValidator.validate(parsed, categories.map { it.name }, today)) {
+            is AssistantCommandValidation.NeedsClarification -> {
+                voiceMessage = validation.reason
+                return
+            }
+            is AssistantCommandValidation.Rejected -> {
+                voiceMessage = validation.reason
+                return
+            }
+            is AssistantCommandValidation.Valid -> {
+                val command = validation.command
+                val from = command.periodStart ?: periodStart
+                val to = command.periodEnd ?: periodEnd
+                val rangeExpenses = expenses.filter { it.date >= from && it.date <= to }
+                val spentInRange = rangeExpenses.sumOf { it.amount }
+                val rangeIncome = if (from == periodStart && to == periodEnd && periodIncome > 0.0) {
+                    periodIncome
+                } else {
+                    val targetMonth = runCatching { YearMonth.from(LocalDate.parse(to)) }.getOrNull()
+                    targetMonth?.let { month ->
+                        periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end)) == month }.getOrDefault(false) }
+                            .sumOf { it.amount }
+                    }?.takeIf { it > 0.0 } ?: income
+                }
+                val plannedRange = if (from == periodStart && to == periodEnd) planned
+                    else categories.sumOf { plannedForPeriod(rangeIncome, it.percent, from, to) }
+                val remainingRange = plannedRange - spentInRange
+                val dateLabel = "${LocalDate.parse(from).format(formatter)} — ${LocalDate.parse(to).format(formatter)}"
+
+                when (command.intent) {
+                    AssistantIntent.QUERY_REMAINING -> {
+                        val days = if (today.isAfter(LocalDate.parse(periodEnd))) 0L
+                            else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(periodStart)), LocalDate.parse(periodEnd)) + 1
+                        val average = if (days > 0) remaining.coerceAtLeast(0.0) / days else 0.0
+                        voiceMessage = "За отчётный период осталось ${money(remaining)}.\nСредний доступный расход: ${money(average)} в день.\nПериод: $periodStart — $periodEnd."
+                    }
+                    AssistantIntent.QUERY_SPENDING -> {
+                        voiceMessage = "Расходы за период $dateLabel: ${money(spentInRange)}.\nОпераций: ${rangeExpenses.size}."
+                    }
+                    AssistantIntent.QUERY_CATEGORY_SPENDING -> {
+                        val rows = rangeExpenses.filter { it.category == command.category }
+                        voiceMessage = "На категорию «${command.category}» потрачено ${money(rows.sumOf { it.amount })} за период $dateLabel.\nОпераций: ${rows.size}."
+                    }
+                    AssistantIntent.QUERY_OVERSPENDING -> {
+                        val exceeded = categories.mapNotNull { category ->
+                            val cap = if (from == periodStart && to == periodEnd) {
+                                if (periodIncome > 0.0) periodIncome * category.percent / 100.0
+                                else plannedForPeriod(income, category.percent, from, to)
+                            } else plannedForPeriod(rangeIncome, category.percent, from, to)
+                            val actual = rangeExpenses.filter { it.category == category.name }.sumOf { it.amount }
+                            if (actual > cap) "${category.name}: превышение ${money(actual - cap)}" else null
+                        }
+                        voiceMessage = if (exceeded.isEmpty()) "За период $dateLabel превышений бюджета по категориям нет."
+                            else "Превышения бюджета за период $dateLabel:\n" + exceeded.joinToString("\n")
+                    }
+                    AssistantIntent.FORECAST -> {
+                        val daily = command.amount ?: 0.0
+                        val endDate = LocalDate.parse(to)
+                        val days = if (today.isAfter(endDate)) 0L
+                            else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(from)), endDate) + 1
+                        val projected = remainingRange - daily * days
+                        voiceMessage = "Если тратить по ${money(daily)} в день ещё $days дн., к концу периода останется ${money(projected)}.\nСейчас доступно: ${money(remainingRange)}."
+                    }
+                    AssistantIntent.ADD_EXPENSE -> {
+                        val amount = command.amount ?: return
+                        voiceDraft = VoiceExpenseDraft(
+                            title = command.title ?: command.category ?: "Расход",
+                            category = command.category ?: return,
+                            amount = amount,
+                            date = command.date ?: today.toString(),
+                            sourcePhrase = phrase
+                        )
+                        voiceAmount = amount.toLong().takeIf { it.toDouble() == amount }?.toString() ?: amount.toString()
+                        voiceEditCandidates = emptyList()
+                        voiceSelectedExpenseId = null
+                    }
+                    AssistantIntent.ADD_INCOME -> {
+                        val amount = command.amount ?: return
+                        voiceDraft = VoiceExpenseDraft(
+                            title = command.title ?: "Доход",
+                            category = "Доход",
+                            amount = amount,
+                            date = command.date ?: today.toString(),
+                            sourcePhrase = phrase,
+                            isIncome = true
+                        )
+                        voiceAmount = amount.toLong().takeIf { it.toDouble() == amount }?.toString() ?: amount.toString()
+                    }
+                    else -> voiceMessage = "Эту команду пока не поддерживает локальный помощник. Она будет добавлена на следующем этапе."
+                }
+            }
+        }
+    }
+
+    val voicePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) {
+            voiceMessage = "Для голосового ввода необходимо разрешить доступ к микрофону."
+        } else if (offlineSpeechRecognizer == null) {
+            voiceMessage = "На этом устройстве не найден локальный движок распознавания русской речи. Установи офлайн-пакет распознавания речи в настройках Android или используй ручной ввод. Интернет-распознавание приложение не запускает."
+        } else {
+            isListening = true
+            startOfflineSpeechRecognition(context, offlineSpeechRecognizer, onResult = { alternatives ->
+                isListening = false
+                val interpreted = alternatives.firstNotNullOfOrNull { phrase ->
+                    AssistantLocalParser.parse(phrase, categories.map { it.name }, today)?.let { phrase to it }
+                }
+                if (interpreted != null) {
+                    handleAssistantPhrase(interpreted.first)
+                } else {
+                    val parsed = alternatives
+                        .mapNotNull { phrase -> parseVoiceExpense(phrase, categories)?.let { draft -> phrase to draft } }
+                        .maxByOrNull { (phrase, _) -> voiceRecognitionScore(phrase, categories) }
+                        ?.let { (phrase, draft) -> draft.copy(sourcePhrase = phrase) }
+                    if (parsed == null) {
+                        voiceMessage = "Не удалось разобрать команду. Скажи сумму и назначение: «Добавь расход 1 500 рублей на продукты» или «Добавь доход 54 тысячи рублей». Распознано: ${alternatives.joinToString(" / ")}"
+                    } else {
+                        voiceDraft = parsed
+                        voiceAmount = parsed.amount.toLong().takeIf { it.toDouble() == parsed.amount }?.toString()
+                            ?: parsed.amount.toString()
+                        if (parsed.isEdit) {
+                            voiceEditCandidates = expenses.filter { it.category == parsed.category }.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
+                            voiceSelectedExpenseId = voiceEditCandidates.firstOrNull()?.id
+                            if (voiceEditCandidates.isEmpty()) {
+                                voiceDraft = null
+                                voiceMessage = "Не найдена сохранённая операция в категории «${parsed.category}». Укажи категорию, например: «Измени расход продукты на 1500 рублей»."
+                            }
+                        } else {
+                            voiceEditCandidates = emptyList()
+                            voiceSelectedExpenseId = null
+                        }
+                    }
+                }
+            }, onError = { code ->
+                isListening = false
+                voiceMessage = "Не удалось распознать речь (код $code). Попробуй ещё раз или проверь, установлен ли офлайн-пакет русского языка."
+            })
+        }
+    }
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
         if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year) }
     }
@@ -457,7 +567,7 @@ private fun ThunBudgetApp() {
             topBar={ TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } },
-                actions={ TextButton(onClick={showSettings=true}) { Text("Настройки") } }
+                actions={ Row(verticalAlignment=Alignment.CenterVertically) { TextButton(onClick={showAssistantDialog=true}) { Text("Помощник") }; TextButton(onClick={showSettings=true}) { Text("Настройки") } } }
             ) },
             floatingActionButton={ if(tab != 2) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
                 SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
@@ -872,7 +982,43 @@ private fun ThunBudgetApp() {
         )
     }
     voiceMessage?.let { message ->
-        AlertDialog(onDismissRequest={voiceMessage=null},title={Text("Голосовой ввод")},text={Text(message)},confirmButton={TextButton(onClick={voiceMessage=null}) { Text("Понятно") }})
+        AlertDialog(onDismissRequest={voiceMessage=null},title={Text("Помощник")},text={Text(message)},confirmButton={TextButton(onClick={voiceMessage=null}) { Text("Понятно") }})
+    }
+    if (showAssistantDialog) {
+        AlertDialog(
+            onDismissRequest = { showAssistantDialog = false },
+            title = { Text("Помощник ThunBudget") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = assistantTextInput,
+                        onValueChange = { assistantTextInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Напиши команду или вопрос") },
+                        placeholder = { Text("Например: сколько осталось до зарплаты?") },
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                    Text(
+                        "Пока работает локальное понимание команд. Для сложных запросов подключим облачный ИИ следующим этапом.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = assistantTextInput.isNotBlank(),
+                    onClick = {
+                        val phrase = assistantTextInput.trim()
+                        assistantTextInput = ""
+                        showAssistantDialog = false
+                        handleAssistantPhrase(phrase)
+                    }
+                ) { Text("Отправить") }
+            },
+            dismissButton = { TextButton(onClick = { showAssistantDialog = false }) { Text("Закрыть") } }
+        )
     }
     if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,periodIncome,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
         store.prepareUndoSnapshot(); canUndo=true
