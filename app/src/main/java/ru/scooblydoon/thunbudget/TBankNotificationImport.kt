@@ -27,7 +27,7 @@ internal data class PendingBankOperation(
 
 internal object TBankNotificationParser {
     private val amountPattern = Regex(
-        """(?<!\\d)(\\d{1,3}(?:[ \\u00A0\\u202F]\\d{3})+|\\d+)(?:[,.]\\d{1,2})?\\s*(?:₽|руб(?:лей|ля|ль|\.)?)""",
+        """(?<!\d)(\d{1,3}(?:[ \u00A0\u202F]\d{3})+|\d+)(?:[,.]\d{1,2})?\s*(?:₽|руб(?:лей|ля|ль|\.)?)""",
         RegexOption.IGNORE_CASE
     )
     private val expensePattern = Regex("""покупк|оплат|списан|перевод\s+на|сняти|плат[её]ж""", RegexOption.IGNORE_CASE)
@@ -35,7 +35,7 @@ internal object TBankNotificationParser {
 
     fun parse(title: String?, text: String?, bigText: String?, postTime: Long): PendingBankOperation? {
         val parts = listOfNotNull(title, text, bigText)
-            .map { it.replace(Regex("""\\s+"""), " ").trim() }
+            .map { it.replace(Regex("""\s+"""), " ").trim() }
             .filter { it.isNotBlank() }
         if (parts.isEmpty()) return null
         val combined = parts.distinct().joinToString(" ").take(700)
@@ -48,7 +48,7 @@ internal object TBankNotificationParser {
         // do not guess which amount is the operation.
         if (matches.size != 1) return null
         val amountText = matches.single().groupValues[1]
-            .replace(Regex("""[ \\u00A0\\u202F]"""), "")
+            .replace(Regex("""[ \u00A0\u202F]"""), "")
             .replace(',', '.')
         val amount = amountText.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 } ?: return null
 
@@ -60,7 +60,7 @@ internal object TBankNotificationParser {
             .replace(amountPattern, "")
             .replace(Regex("""(?i)покупка|оплата|списание|поступление|зачисление|пополнение|перевод|снятие|возврат"""), "")
             .replace(Regex("""[•·,:;—–-]+"""), " ")
-            .replace(Regex("""\\s+"""), " ")
+            .replace(Regex("""\s+"""), " ")
             .trim()
             .ifBlank { if (isExpense) "Покупка по карте Т-Банка" else "Поступление Т-Банка" }
             .take(100)
