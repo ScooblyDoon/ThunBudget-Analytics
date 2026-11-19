@@ -1934,11 +1934,11 @@ private fun SettingsDialog(
     var section by rememberSaveable { mutableStateOf("income") }
     val sections = listOf(
         "income" to "Доход",
+        "bank" to "Синхронизация с Т-Банком",
         "period" to "Период",
         "categories" to "Категории",
         "export" to "Выгрузка",
         "backup" to "Копирование",
-        "bank" to "Т-Банк",
         "appearance" to "Оформление"
     )
     val validIncome = inc.replace(',','.').toDoubleOrNull()
