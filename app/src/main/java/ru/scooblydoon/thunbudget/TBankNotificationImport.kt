@@ -31,7 +31,7 @@ internal object TBankNotificationParser {
         RegexOption.IGNORE_CASE
     )
     private val expensePattern = Regex("""покупк|оплат|списан|перевод\s+на|сняти|плат[её]ж""", RegexOption.IGNORE_CASE)
-    private val incomePattern = Regex("""поступлен|зачислен|пополнен|входящ(?:ий|его)\s+перевод|перевод\s+от|возврат""", RegexOption.IGNORE_CASE)
+    private val incomePattern = Regex("""поступлен|зачислен|пополнен|входящ(?:ий|его)\s+перевод|перевод\s+от|вам\s+перевели|получен\s+перевод|возврат""", RegexOption.IGNORE_CASE)
 
     fun parse(title: String?, text: String?, bigText: String?, postTime: Long): PendingBankOperation? {
         val parts = listOfNotNull(title, text, bigText)
@@ -43,20 +43,19 @@ internal object TBankNotificationParser {
             !expensePattern.containsMatchIn(combined) && !incomePattern.containsMatchIn(combined)
         ) return null
 
-        val matches = amountPattern.findAll(combined).toList()
-        // If a notice contains several currency amounts (e.g. purchase + remaining balance),
-        // do not guess which amount is the operation.
-        if (matches.size != 1) return null
-        val amountText = matches.single().groupValues[1]
-            .replace(Regex("""[ \u00A0\u202F]"""), "")
-            .replace(',', '.')
-        val amount = amountText.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 } ?: return null
+        val amountTexts = parts.flatMap { part -> amountPattern.findAll(part).map { it.groupValues[1] }.toList() }
+            .map { it.replace(Regex("""[ \u00A0\u202F]"""), "").replace(',', '.') }
+            .distinct()
+        // The same amount can be repeated in collapsed/expanded notification text.
+        // Different amounts (for example, purchase + balance) are ambiguous and are ignored.
+        if (amountTexts.size != 1) return null
+        val amount = amountTexts.single().toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 } ?: return null
 
         val isExpense = expensePattern.containsMatchIn(combined)
         val isIncome = incomePattern.containsMatchIn(combined)
         if (isExpense == isIncome) return null
 
-        val titleSource = parts.firstOrNull { amountPattern.containsMatchIn(it) }
+        val titleSource = parts.filter { amountPattern.containsMatchIn(it) }.maxByOrNull { it.length }
             ?: parts.firstOrNull { it.length > 2 }
             ?: "Операция Т-Банка"
         val cleanTitle = titleSource
