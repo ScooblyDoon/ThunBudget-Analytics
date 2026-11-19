@@ -1,7 +1,6 @@
 package ru.scooblydoon.thunbudget
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.LocalDate
@@ -40,6 +39,20 @@ class AssistantLocalParserTest {
         val command = AssistantLocalParser.parse("Если буду тратить по тысяче рублей в день, сколько останется к зарплате?", categories, today)
         assertEquals(AssistantIntent.FORECAST, command?.intent)
         assertEquals(1000.0, command?.amount)
+    }
+
+    @Test fun parsesYesterdayCategoryQuery() {
+        val command = AssistantLocalParser.parse("Сколько потратил на продукты вчера?", categories, today)
+        assertEquals(AssistantIntent.QUERY_CATEGORY_SPENDING, command?.intent)
+        assertEquals("2026-11-18", command?.periodStart)
+        assertEquals("2026-11-18", command?.periodEnd)
+    }
+
+    @Test fun parsesGenericExpensesQuery() {
+        val command = AssistantLocalParser.parse("Покажи все расходы за неделю", categories, today)
+        assertEquals(AssistantIntent.QUERY_SPENDING, command?.intent)
+        assertEquals("2026-11-13", command?.periodStart)
+        assertEquals("2026-11-19", command?.periodEnd)
     }
 
     @Test fun unknownPhraseDoesNotProduceCommand() {
