@@ -45,6 +45,25 @@ object AssistantLocalParser {
         val periodStart = periodBounds?.first?.toString()
         val periodEnd = periodBounds?.second?.toString()
 
+        if (listOf("удали последний расход", "удалить последний расход", "удали последнюю операцию", "удалить последнюю операцию", "отмени последнюю операцию").any { normalized.contains(it) }) {
+            return command(
+                AssistantIntent.DELETE_EXPENSE,
+                target = "last_expense",
+                confidence = 0.9
+            )
+        }
+
+        if (listOf("измени последний расход", "изменить последний расход", "поменяй последний расход", "исправь последний расход", "измени последнюю операцию").any { normalized.contains(it) }) {
+            val replacementAmount = parseSpokenAmount(normalized)
+            return command(
+                AssistantIntent.UPDATE_EXPENSE,
+                amount = replacementAmount,
+                target = "last_expense",
+                confidence = if (replacementAmount != null) 0.9 else 0.72,
+                missingFields = if (replacementAmount == null) listOf("новая сумма") else emptyList()
+            )
+        }
+
         if (listOf("сколько осталось", "остаток", "доступно в бюджете", "до зарплаты").any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_REMAINING, confidence = 0.92)
         }
@@ -128,6 +147,7 @@ object AssistantLocalParser {
         date: String? = null,
         periodStart: String? = null,
         periodEnd: String? = null,
+        target: String? = null,
         confidence: Double,
         missingFields: List<String> = emptyList()
     ) = AssistantCommand(
@@ -138,6 +158,7 @@ object AssistantLocalParser {
         date = date,
         periodStart = periodStart,
         periodEnd = periodEnd,
+        target = target,
         confidence = confidence,
         missingFields = missingFields
     )
