@@ -13,6 +13,7 @@ permissions:
   contents: read
 
 jobs:
+  # Revalidate the corrected chart-screen Kotlin scope.
   build:
     runs-on: ubuntu-latest
     env:
