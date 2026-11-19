@@ -286,16 +286,7 @@ private class BudgetStore(context: Context) {
         true
     }.getOrDefault(false)
 
-    private fun isCurrentDataValid(): Boolean = runCatching {
-        val rawExpenses = prefs.getString("expenses", "[]") ?: "[]"
-        JSONArray(rawExpenses)
-        prefs.getString("categories", null)?.let { JSONArray(it) }
-        val monthlyIncome = prefs.getString("income", "100000")?.toDoubleOrNull()
-        val savings = prefs.getString("savings", "10")?.toDoubleOrNull()
-        require(monthlyIncome != null && monthlyIncome.isFinite() && monthlyIncome > 0.0)
-        require(savings != null && savings.isFinite() && savings in 0.0..100.0)
-        true
-    }.getOrDefault(false)
+    private fun isCurrentDataValid(): Boolean = isBackupSnapshotValid(exportBackup())
 
     fun saveAutomaticBackup() {
         val snapshot = exportBackup()
@@ -778,6 +769,40 @@ private fun ThunBudgetApp() {
                         val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
                         val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
                         MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
+                    }
+                    item {
+                        val previousMonth = analyticsMonth.minusMonths(1)
+                        val currentFrom = analyticsMonth.atDay(1)
+                        val currentTo = minOf(analyticsMonth.atEndOfMonth(), if (analyticsMonth == YearMonth.now()) today else analyticsMonth.atEndOfMonth())
+                        val previousTo = if (analyticsMonth == YearMonth.now()) {
+                            previousMonth.atDay(today.dayOfMonth.coerceAtMost(previousMonth.lengthOfMonth()))
+                        } else previousMonth.atEndOfMonth()
+                        val currentTotal = expenses.filter { it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount }
+                        val previousTotal = expenses.filter { it.date >= previousMonth.atDay(1).toString() && it.date <= previousTo.toString() }.sumOf { it.amount }
+                        val change = currentTotal - previousTotal
+                        val changePercent = if (previousTotal > 0.0) change / previousTotal * 100.0 else 0.0
+                        val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(currentFrom, currentTo) + 1
+                        val dailyAverage = if (elapsedDays > 0) currentTotal / elapsedDays else 0.0
+                        val topCategory = categories.map { cat ->
+                            cat.name to expenses.filter { it.category == cat.name && it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount }
+                        }.maxByOrNull { it.second }
+                        Card(shape = RoundedCornerShape(20.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Динамика расходов", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                Text("К " + previousMonth.format(DateTimeFormatter.ofPattern("LLLL", Locale("ru", "RU"))) + ": " +
+                                    (if (previousTotal <= 0.0) "нет данных для сравнения" else
+                                        (if (change > 0.0) "рост " else if (change < 0.0) "снижение " else "без изменений ") +
+                                        money(kotlin.math.abs(change)) + " (" +
+                                        String.format(Locale("ru", "RU"), "%.1f", kotlin.math.abs(changePercent)) + "%)"),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (change > 0.0) Color(0xFFC74444) else Color(0xFF168A72))
+                                Text("Средний расход в день: " + money(dailyAverage), style = MaterialTheme.typography.bodyMedium)
+                                Text("Крупнейшая категория: " +
+                                    (topCategory?.takeIf { it.second > 0.0 }?.let { it.first + " · " + money(it.second) } ?: "нет расходов"),
+                                    style = MaterialTheme.typography.bodyMedium)
+                                if (analyticsMonth == YearMonth.now()) Text("Сравнение выполнено за одинаковое количество прошедших дней месяца.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                     item { TextButton(onClick={showMonthCategories=!showMonthCategories; persistUiExpanded(context,"month_categories",showMonthCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showMonthCategories) items(categories,key={ "month-"+it.name }) { cat ->
@@ -1670,7 +1695,7 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
             item { OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { Text("Резервное копирование",fontWeight=FontWeight.Bold) }
             item {
-                Text("Сохрани копию всех доходов, расходов, категорий и настроек в JSON-файл. Файл можно хранить отдельно от приложения и использовать после переустановки.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Приложение хранит до 6 последних проверенных автокопий на устройстве: при изменениях данных и запуске. Для защиты при переустановке периодически экспортируй JSON-файл отдельно.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию") }
                 if(hasAutomaticBackup) OutlinedButton(onClick=onRestoreAutomatic,modifier=Modifier.fillMaxWidth()) { Text("Восстановить автокопию приложения") }
                 OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из файла") }
