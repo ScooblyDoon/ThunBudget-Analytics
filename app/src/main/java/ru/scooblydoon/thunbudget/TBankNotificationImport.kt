@@ -27,7 +27,7 @@ internal data class PendingBankOperation(
 
 internal object TBankNotificationParser {
     private val amountPattern = Regex(
-        """(?<!\d)(\d{1,3}(?:[ \u00A0\u202F]\d{3})+|\d+)(?:[,.]\d{1,2})?\s*(?:₽|руб(?:лей|ля|ль|\.)?)""",
+        """(?<!\d)(\d{1,3}(?:[ \u00A0\u202F]\d{3})+|\d+)([,.]\d{1,2})?\s*(?:₽|руб(?:лей|ля|ль|\.)?)""",
         RegexOption.IGNORE_CASE
     )
     private val expensePattern = Regex("""покупк|оплат|списан|перевод\s+на|сняти|плат[её]ж""", RegexOption.IGNORE_CASE)
@@ -43,8 +43,8 @@ internal object TBankNotificationParser {
             !expensePattern.containsMatchIn(combined) && !incomePattern.containsMatchIn(combined)
         ) return null
 
-        val amountTexts = parts.flatMap { part -> amountPattern.findAll(part).map { it.groupValues[1] }.toList() }
-            .map { it.replace(Regex("""[ \u00A0\u202F]"""), "").replace(',', '.') }
+        val amountTexts = parts.flatMap { part -> amountPattern.findAll(part).map { it.groupValues[1] + it.groupValues[2].replace(',', '.') }.toList() }
+            .map { it.replace(Regex("""[ \u00A0\u202F]"""), "") }
             .distinct()
         // The same amount can be repeated in collapsed/expanded notification text.
         // Different amounts (for example, purchase + balance) are ambiguous and are ignored.
@@ -158,8 +158,8 @@ internal object BankNotificationStore {
 }
 
 class TBankNotificationListenerService : NotificationListenerService() {
-    override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        if (sbn == null || !BankNotificationStore.isSupportedPackage(sbn.packageName)) return
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (!BankNotificationStore.isSupportedPackage(sbn.packageName)) return
         val extras = sbn.notification?.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
