@@ -191,6 +191,10 @@ private class BudgetStore(context: Context) {
                 }
             }
         }
+        if (!data.has("expenses")) data.put("expenses", "[]")
+        if (!data.has("income")) data.put("income", "100000")
+        if (!data.has("savings")) data.put("savings", "10")
+        if (!data.has("period_incomes")) data.put("period_incomes", "[]")
         if (!data.has("categories")) {
             val defaults = JSONArray()
             loadCategories().forEach { defaults.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
@@ -278,6 +282,13 @@ private class BudgetStore(context: Context) {
             val row = categories.getJSONObject(i)
             require(row.getString("name").isNotBlank())
             require(row.getDouble("percent").isFinite() && row.getDouble("percent") >= 0.0)
+        }
+        val periodIncomes = JSONArray(data.optString("period_incomes", "[]"))
+        for (i in 0 until periodIncomes.length()) {
+            val row = periodIncomes.getJSONObject(i)
+            val start = LocalDate.parse(row.getString("start"))
+            val end = LocalDate.parse(row.getString("end"))
+            require(!end.isBefore(start) && row.getDouble("amount").isFinite() && row.getDouble("amount") >= 0.0)
         }
         val monthlyIncome = data.getString("income").toDoubleOrNull()
         val savings = data.getString("savings").toDoubleOrNull()
@@ -1086,6 +1097,7 @@ private fun ThunBudgetApp() {
                         expenses=updated; store.saveExpenses(expenses)
                         val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
                         val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
+                        voiceMessage = "Расход ${money(amount)} в категории «${draft.category}» сохранён."
                         if(spent>cap) OverspendNotifier.notify(context,"Превышение бюджета","Категория «${draft.category}»: превышение ${money(spent-cap)} за выбранный период.")
                     }
                 }
