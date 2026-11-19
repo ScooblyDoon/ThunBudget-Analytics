@@ -37,6 +37,18 @@ class TBankNotificationParserTest {
     }
 
     @Test
+    fun acceptsSameAmountRepeatedInCollapsedAndExpandedText() {
+        val result = TBankNotificationParser.parse(
+            title = "Т-Банк",
+            text = "Покупка 1 250 ₽",
+            bigText = "Покупка в магазине 1 250 ₽",
+            postTime = timestamp
+        )
+        assertEquals(BankOperationType.EXPENSE, result?.type)
+        assertEquals(1250.0, result?.amount ?: 0.0, 0.001)
+    }
+
+    @Test
     fun ignoresNotificationsWithSeveralAmounts() {
         val result = TBankNotificationParser.parse(
             title = "Т-Банк",
