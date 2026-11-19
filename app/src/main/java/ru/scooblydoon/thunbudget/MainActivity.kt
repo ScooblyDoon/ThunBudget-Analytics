@@ -674,9 +674,13 @@ private fun ThunBudgetApp() {
         if (uri != null) {
             backupMessage = runCatching {
                 val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                val previousFolder = externalBackupFolder
                 context.contentResolver.takePersistableUriPermission(uri, flags)
                 store.setExternalBackupFolder(uri.toString())
                 externalBackupFolder = uri.toString()
+                if (!previousFolder.isNullOrBlank() && previousFolder != uri.toString()) {
+                    runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(previousFolder), flags) }
+                }
                 "Папка выбрана. Автоматическое резервирование будет выполняться в неё после изменения данных."
             }.getOrElse { "Не удалось подключить папку: ${it.message ?: "ошибка доступа"}" }
         }
