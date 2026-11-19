@@ -1448,7 +1448,17 @@ private fun ThunBudgetApp() {
                     expenses = updated
                     store.saveExpenses(updated)
                 } else {
-                    store.addIncomeEntry(operation.title, operation.amount, operation.date, periodStart, periodEnd)
+                    val operationDate = LocalDate.parse(operation.date)
+                    val configuredFrom = LocalDate.parse(periodStart)
+                    val configuredTo = LocalDate.parse(periodEnd)
+                    val incomePeriod = if (!operationDate.isBefore(configuredFrom) && !operationDate.isAfter(configuredTo)) {
+                        periodStart to periodEnd
+                    } else when (operationDate.dayOfMonth) {
+                        in 9..23 -> operationDate.withDayOfMonth(9).toString() to operationDate.withDayOfMonth(23).toString()
+                        in 24..31 -> operationDate.withDayOfMonth(24).toString() to operationDate.plusMonths(1).withDayOfMonth(8).toString()
+                        else -> operationDate.minusMonths(1).withDayOfMonth(24).toString() to operationDate.withDayOfMonth(8).toString()
+                    }
+                    store.addIncomeEntry(operation.title, operation.amount, operation.date, incomePeriod.first, incomePeriod.second)
                     incomeEntries = store.loadIncomeEntries()
                     periodIncomes = store.loadPeriodIncomes()
                 }
