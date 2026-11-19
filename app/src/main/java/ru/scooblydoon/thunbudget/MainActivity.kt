@@ -1923,8 +1923,8 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
             item { Text("Импорт операций из Т-Банка",fontWeight=FontWeight.Bold) }
             item {
                 Text(
-                    if (bankNotificationAccessEnabled) "Доступ к уведомлениям включён. Новые распознанные операции будут появляться здесь после уведомления банка."
-                    else "Для получения операций разреши ThunBudget доступ к уведомлениям Android. Приложение обрабатывает только уведомления Т-Банка.",
+                    if (bankNotificationAccessEnabled) "Доступ к уведомлениям включён. ThunBudget отбирает только уведомления Т-Банка и предлагает распознанные операции на проверку."
+                    else "Android выдаёт разрешение на чтение уведомлений устройства целиком. ThunBudget отбирает только уведомления Т-Банка; остальные уведомления не сохраняются и не обрабатываются.",
                     style=MaterialTheme.typography.bodySmall,
                     color=MaterialTheme.colorScheme.onSurfaceVariant
                 )
