@@ -668,7 +668,7 @@ private fun ThunBudgetApp() {
         }
     }
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
-        if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, periodIncome) }
+        if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, periodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (_, entries) -> entries.sumOf { it.amount } }) }
     }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var externalBackupFolder by remember { mutableStateOf(store.externalBackupFolder()) }
