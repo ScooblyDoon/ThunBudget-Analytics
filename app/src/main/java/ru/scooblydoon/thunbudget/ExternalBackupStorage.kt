@@ -94,11 +94,20 @@ internal class ExternalBackupWorker(
             val snapshot = BudgetStore(applicationContext).validatedBackupSnapshot()
                 ?: return Result.retry()
             ExternalBackupStorage.save(applicationContext, Uri.parse(rawUri), snapshot)
-            preferences.edit().putString(ExternalBackupSettings.LAST_SUCCESS_KEY, Instant.now().toString()).apply()
+            preferences.edit()
+                .putString(ExternalBackupSettings.LAST_SUCCESS_KEY, Instant.now().toString())
+                .remove(ExternalBackupSettings.LAST_ERROR_KEY)
+                .apply()
             Result.success()
         } catch (_: SecurityException) {
+            preferences.edit()
+                .putString(ExternalBackupSettings.LAST_ERROR_KEY, "Нет доступа к выбранной папке. Выберите её заново в настройках.")
+                .apply()
             Result.failure()
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            preferences.edit()
+                .putString(ExternalBackupSettings.LAST_ERROR_KEY, error.message ?: "Не удалось сохранить внешнюю копию. Проверьте доступ к папке.")
+                .apply()
             Result.retry()
         }
     }
@@ -107,6 +116,7 @@ internal class ExternalBackupWorker(
 internal object ExternalBackupSettings {
     const val URI_KEY = "external_backup_tree_uri"
     const val LAST_SUCCESS_KEY = "external_backup_last_success"
+    const val LAST_ERROR_KEY = "external_backup_last_error"
     private const val WORK_NAME = "thunbudget_external_backup"
 
     fun schedule(context: Context) {
