@@ -69,6 +69,24 @@ class XlsxExporterTest {
     }
 
     @Test
+    fun sheetXmlContainsFormulaTotalsFrozenHeaderAndPrintLayout() {
+        val rows = XlsxExporter.periods(
+            expenses = listOf(Expense(1, "Покупка", "Продукты", 250.0, "2026-11-10")),
+            cats = listOf(BudgetCategory("Продукты", 25.0)),
+            income = 30_000.0,
+            start = LocalDate.parse("2026-11-10"),
+            end = LocalDate.parse("2026-11-20"),
+            periodIncome = 20_000.0
+        )
+        val xml = XlsxExporter.sheet(rows)
+
+        assertTrue(xml.contains("<f>SUM(D2:D2)</f>"))
+        assertTrue(xml.contains("autoFilter ref=\"A1:G2\""))
+        assertTrue(xml.contains("state=\"frozen\""))
+        assertTrue(xml.contains("fitToWidth=\"1\""))
+    }
+
+    @Test
     fun reportRejectsEndDateBeforeStartDate() {
         assertThrows(IllegalArgumentException::class.java) {
             XlsxExporter.periods(
