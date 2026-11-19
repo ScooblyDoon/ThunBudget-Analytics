@@ -62,7 +62,7 @@ internal class BudgetStore(context: Context) {
     fun setExternalBackupFolder(uri: String?) {
         val editor = prefs.edit()
         if (uri.isNullOrBlank()) editor.remove(ExternalBackupSettings.URI_KEY).remove(ExternalBackupSettings.LAST_SUCCESS_KEY).remove(ExternalBackupSettings.LAST_ERROR_KEY)
-        else editor.putString(ExternalBackupSettings.URI_KEY, uri).remove(ExternalBackupSettings.LAST_ERROR_KEY)
+        else editor.putString(ExternalBackupSettings.URI_KEY, uri).remove(ExternalBackupSettings.LAST_SUCCESS_KEY).remove(ExternalBackupSettings.LAST_ERROR_KEY)
         check(editor.commit()) { "Не удалось сохранить настройки внешнего резервирования." }
         if (!uri.isNullOrBlank()) ExternalBackupSettings.schedule(appContext)
     }
