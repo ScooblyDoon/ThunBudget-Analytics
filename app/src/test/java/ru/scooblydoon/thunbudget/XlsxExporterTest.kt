@@ -3,6 +3,7 @@ package ru.scooblydoon.thunbudget
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class XlsxExporterTest {
@@ -24,7 +25,9 @@ class XlsxExporterTest {
             periodIncome = 20_000.0
         )
 
-        assertEquals(2, rows.size)
+        assertEquals(3, rows.size)
+        assertEquals("ИТОГО", rows[2][0])
+        assertTrue(rows[2][3].toString().contains("SUM(D2:D2)"))
         assertEquals("2026-11-10", rows[1][0])
         assertEquals("2026-11-20", rows[1][1])
         assertEquals(5_000.0, rows[1][3] as Double, 0.001)
@@ -58,7 +61,9 @@ class XlsxExporterTest {
             monthlyIncomes = mapOf("2026-01" to 50_000.0)
         )
 
-        assertEquals(12 + 1, rows.size)
+        assertEquals(12 + 2, rows.size)
+        assertEquals("ИТОГО", rows.last()[0])
+        assertTrue(rows.last()[2].toString().contains("SUM(C2:C13)"))
         assertEquals(12_500.0, rows[1][2] as Double, 0.001)
         assertEquals(7_500.0, rows[2][2] as Double, 0.001)
     }
