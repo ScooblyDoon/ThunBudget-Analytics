@@ -699,6 +699,27 @@ private fun ThunBudgetApp() {
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
         }
     }
+    val excelImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            backupMessage = runCatching {
+                val imported = XlsxImporter.readExpenses({ selected -> context.contentResolver.openInputStream(selected) }, uri)
+                val existing = expenses.map { "${it.date}| ${it.title.trim().lowercase(Locale.ROOT)}|${it.category.trim().lowercase(Locale.ROOT)}|${it.amount}" }.toSet()
+                val fresh = imported.filterNot { "${it.date}| ${it.title.trim().lowercase(Locale.ROOT)}|${it.category.trim().lowercase(Locale.ROOT)}|${it.amount}" in existing }
+                if (fresh.isNotEmpty()) {
+                    store.prepareUndoSnapshot()
+                    canUndo = true
+                    val newCategoryNames = fresh.map { it.category }.distinct().filterNot { name -> categories.any { it.name.equals(name, true) } }
+                    if (newCategoryNames.isNotEmpty()) {
+                        categories = categories + newCategoryNames.map { BudgetCategory(it, 0.0) }
+                        store.saveCategories(categories)
+                    }
+                    expenses = (expenses + fresh).distinctBy { it.id }.sortedByDescending { it.date }
+                    store.saveExpenses(expenses)
+                }
+                "Импортировано операций: ${fresh.size}. Пропущено повторов: ${imported.size - fresh.size}."
+            }.getOrElse { "Не удалось импортировать Excel: ${it.message ?: "проверь формат файла"}" }
+        }
+    }
     var externalBackupFolder by remember { mutableStateOf(store.externalBackupFolder()) }
     var showRestoreConfirmation by remember { mutableStateOf(false) }
     val externalBackupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -1009,7 +1030,6 @@ private fun ThunBudgetApp() {
                         }
                     }
                     item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
-                    item { OutlinedButton(onClick={exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx")},modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") } }
                 }
                 2 -> Box(Modifier.padding(padding).fillMaxSize()) {
                     ChartsScreen(
@@ -1410,7 +1430,7 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,bankNotificationAccessEnabled=bankNotificationAccessEnabled,pendingBankOperationCount=pendingBankOperations.size,onEnableBankNotifications={BankNotificationStore.openAccessSettings(context)},onRefreshBankStatus={bankNotificationAccessEnabled=BankNotificationStore.isAccessEnabled(context);pendingBankOperations=BankNotificationStore.load(context)},onReviewBankOperations={pendingBankOperations=BankNotificationStore.load(context);showBankOperationsReview=true},onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onExportExcel={ exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx") },onClearExternalFolder={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,bankNotificationAccessEnabled=bankNotificationAccessEnabled,pendingBankOperationCount=pendingBankOperations.size,onEnableBankNotifications={BankNotificationStore.openAccessSettings(context)},onRefreshBankStatus={bankNotificationAccessEnabled=BankNotificationStore.isAccessEnabled(context);pendingBankOperations=BankNotificationStore.load(context)},onReviewBankOperations={pendingBankOperations=BankNotificationStore.load(context);showBankOperationsReview=true},onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onExportExcel={ exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx") },onImportExcel={ excelImportLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream")) },onClearExternalFolder={
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
@@ -1920,7 +1940,7 @@ private fun SettingsDialog(
     onEnableBankNotifications:()->Unit,onRefreshBankStatus:()->Unit,onReviewBankOperations:()->Unit,
     onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,
     externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,
-    onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,
+    onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,onImportExcel:()->Unit,
     onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,
     onRestorePrevious:()->Unit,
     onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit
@@ -1934,10 +1954,10 @@ private fun SettingsDialog(
     var section by rememberSaveable { mutableStateOf("income") }
     val sections = listOf(
         "income" to "Доход",
-        "bank" to "Синхронизация с Т-Банком",
+        "bank" to "Т-Банк",
         "period" to "Период",
         "categories" to "Категории",
-        "export" to "Выгрузка",
+        "export" to "Excel",
         "backup" to "Копирование",
         "appearance" to "Оформление"
     )
@@ -1985,9 +2005,11 @@ private fun SettingsDialog(
                         item { Text("Сумма долей: ${cats.sumOf{it.percent}}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     "export" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Text("Выгрузка данных",fontWeight=FontWeight.Bold)
-                        Text("Сохрани отчёт по бюджету в формате Excel. Резервная копия находится в отдельном разделе.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Импорт и экспорт Excel",fontWeight=FontWeight.Bold)
+                        Text("Перенос операций выполняется без удаления текущих данных. Повторяющиеся операции пропускаются. Резервная копия приложения находится в отдельном разделе.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedButton(onClick=onExportExcel,modifier=Modifier.fillMaxWidth()) { Text("Экспорт полного отчёта в Excel (.xlsx)") }
+                        OutlinedButton(onClick=onImportExcel,modifier=Modifier.fillMaxWidth()) { Text("Импорт операций из Excel (.xlsx)") }
+                        Text("Для импорта в книге должен быть лист «Операции» со столбцами: Дата, Описание, Категория, Сумма.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     "backup" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Text("Резервное копирование",fontWeight=FontWeight.Bold)
