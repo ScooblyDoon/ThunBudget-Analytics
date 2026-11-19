@@ -13,9 +13,9 @@ import java.util.zip.ZipInputStream
  * Supports inline strings and shared strings used by standard Excel workbooks.
  */
 object XlsxImporter {
-    fun readExpenses(open: (Uri) -> java.io.InputStream?, uri: Uri): List<Expense> {
+    fun readExpenses(openStream: (Uri) -> java.io.InputStream?, uri: Uri): List<Expense> {
         val entries = mutableMapOf<String, ByteArray>()
-        open(uri)?.use { input ->
+        openStream(uri)?.use { input ->
             ZipInputStream(input).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
