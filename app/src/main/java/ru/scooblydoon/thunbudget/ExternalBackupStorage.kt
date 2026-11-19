@@ -49,7 +49,8 @@ internal object ExternalBackupStorage {
             throw error
         }
 
-        pruneOldCopies(context, treeUri, treeId)
+        // Retention is best-effort: a provider that cannot enumerate children must not invalidate a verified backup.
+        runCatching { pruneOldCopies(context, treeUri, treeId) }
     }
 
     private fun pruneOldCopies(context: Context, treeUri: Uri, treeId: String) {
