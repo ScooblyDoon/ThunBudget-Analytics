@@ -41,16 +41,16 @@ object AssistantLocalParser {
         val periodStart = month?.atDay(1)?.toString()
         val periodEnd = month?.let { if (it == YearMonth.from(today)) today else it.atEndOfMonth() }?.toString()
 
-        if (listOf("сколько осталось", "остаток", "доступно в бюджете", "до зарплаты").any(normalized::contains)) {
+        if (listOf("сколько осталось", "остаток", "доступно в бюджете", "до зарплаты").any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_REMAINING, confidence = 0.92)
         }
 
         if (listOf("превыш", "перерасход", "где вышел за бюджет", "какие категории выше бюджета")
-                .any(normalized::contains)) {
+                .any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_OVERSPENDING, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.9)
         }
 
-        if (listOf("если буду тратить", "если тратить", "в день", "прогноз", "сколько останется к").any(normalized::contains)) {
+        if (listOf("если буду тратить", "если тратить", "в день", "прогноз", "сколько останется к").any { normalized.contains(it) }) {
             val dailyAmount = parseSpokenAmount(normalized)
             return command(
                 AssistantIntent.FORECAST,
@@ -62,11 +62,30 @@ object AssistantLocalParser {
             )
         }
 
+        if (category != null && listOf("сколько потратил", "сколько потратила", "расходы", "потрачено").any { normalized.contains(it) }) {
+            return command(
+                AssistantIntent.QUERY_CATEGORY_SPENDING,
+                category = category,
+                periodStart = periodStart,
+                periodEnd = periodEnd,
+                confidence = 0.9
+            )
+        }
+
+        if (listOf("сколько потратил", "сколько потратила", "общие расходы", "сумма расходов", "потрачено").any { normalized.contains(it) }) {
+            return command(
+                AssistantIntent.QUERY_SPENDING,
+                periodStart = periodStart,
+                periodEnd = periodEnd,
+                confidence = 0.88
+            )
+        }
+
         val isIncome = listOf("доход", "зарплата", "получил", "получила", "поступление", "зачислили", "мне перевели")
-            .any(normalized::contains)
+            .any { normalized.contains(it) }
         val amount = parseSpokenAmount(normalized)
 
-        if (isIncome && listOf("добавь", "добавить", "запиши", "внеси", "получил", "получила", "мне перевели").any(normalized::contains)) {
+        if (isIncome && listOf("добавь", "добавить", "запиши", "внеси", "получил", "получила", "мне перевели").any { normalized.contains(it) }) {
             return command(
                 AssistantIntent.ADD_INCOME,
                 amount = amount,
@@ -78,7 +97,7 @@ object AssistantLocalParser {
         }
 
         val hasExpenseVerb = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход", "купил", "купила", "оплатил", "оплатила")
-            .any(normalized::contains)
+            .any { normalized.contains(it) }
         if (hasExpenseVerb) {
             return command(
                 AssistantIntent.ADD_EXPENSE,
@@ -91,25 +110,6 @@ object AssistantLocalParser {
                     if (amount == null) add("сумма расхода")
                     if (category == null) add("категория")
                 }
-            )
-        }
-
-        if (category != null && listOf("сколько потратил", "сколько потратила", "расходы", "потрачено").any(normalized::contains)) {
-            return command(
-                AssistantIntent.QUERY_CATEGORY_SPENDING,
-                category = category,
-                periodStart = periodStart,
-                periodEnd = periodEnd,
-                confidence = 0.9
-            )
-        }
-
-        if (listOf("сколько потратил", "сколько потратила", "общие расходы", "сумма расходов", "потрачено").any(normalized::contains)) {
-            return command(
-                AssistantIntent.QUERY_SPENDING,
-                periodStart = periodStart,
-                periodEnd = periodEnd,
-                confidence = 0.88
             )
         }
 
