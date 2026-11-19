@@ -352,6 +352,8 @@ private fun ThunBudgetApp() {
     var showSavingsInfo by rememberUiExpanded(context, "savings_info")
     var showPlanChart by rememberUiExpanded(context, "chart_plan")
     var showPieChart by rememberUiExpanded(context, "chart_pie")
+    var showCategoryCharts by rememberUiExpanded(context, "chart_categories")
+    var showAnnualCategoryCharts by rememberUiExpanded(context, "annual_category_charts")
     var selectedChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var showHistoryFilters by rememberUiExpanded(context, "history_filters")
     val today = LocalDate.now()
@@ -660,11 +662,12 @@ private fun ThunBudgetApp() {
                         expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
                         showPlan=showPlanChart,onShowPlanChange={showPlanChart=it; persistUiExpanded(context,"chart_plan",it)},showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
                         selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
+                        showCategoryCharts=showCategoryCharts,onShowCategoryChartsChange={showCategoryCharts=it; persistUiExpanded(context,"chart_categories",it)},
                         fallbackIncome=income,periodIncomes=periodIncomes
                     )
                 }
                 3 -> Box(Modifier.padding(padding).fillMaxSize()) {
-                    AnnualChartsScreen(expenses=expenses,categories=categories,year=annualChartYear,onYearChange={annualChartYear=it},selectedCategoryNames=selectedAnnualChartCategoryNames,onSelectedCategoryNamesChange={selectedAnnualChartCategoryNames=it})
+                    AnnualChartsScreen(expenses=expenses,categories=categories,year=annualChartYear,onYearChange={annualChartYear=it},selectedCategoryNames=selectedAnnualChartCategoryNames,onSelectedCategoryNamesChange={selectedAnnualChartCategoryNames=it},showCategoryCharts=showAnnualCategoryCharts,onShowCategoryChartsChange={showAnnualCategoryCharts=it; persistUiExpanded(context,"annual_category_charts",it)})
                 }
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
@@ -1085,6 +1088,7 @@ private fun ChartsScreen(
     expenses:List<Expense>,categories:List<BudgetCategory>,month:YearMonth,onMonthChange:(YearMonth)->Unit,
     showPlan:Boolean,onShowPlanChange:(Boolean)->Unit,showPie:Boolean,onShowPieChange:(Boolean)->Unit,
     selectedChartCategoryNames:String,onSelectedChartCategoryNamesChange:(String)->Unit,
+    showCategoryCharts:Boolean,onShowCategoryChartsChange:(Boolean)->Unit,
     fallbackIncome:Double,periodIncomes:List<PeriodIncome>
 ) {
     val selectedChartCategories=selectedChartCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
@@ -1102,22 +1106,30 @@ private fun ChartsScreen(
         } }
         item { MetricCard("Фактические расходы за месяц",money(total),Modifier.fillMaxWidth()) }
         item {
-            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text("Графики по категориям",fontWeight=FontWeight.Bold)
-                Text("Выберите категории, чтобы добавить или убрать их графики.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                categories.chunked(2).forEach { rowCategories ->
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        rowCategories.forEach { category ->
-                            FilterChip(selected=selectedChartCategories.contains(category.name),onClick={
-                                val updated=if(selectedChartCategories.contains(category.name)) selectedChartCategories-category.name else selectedChartCategories+category.name
-                                onSelectedChartCategoryNamesChange(updated.joinToString("|"))
-                            },label={Text(category.name)})
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Text("Графики по категориям",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
+                TextButton(onClick={onShowCategoryChartsChange(!showCategoryCharts)}) {
+                    Text(if(showCategoryCharts) "Свернуть ▲" else "Развернуть ▼")
+                }
+            }
+        }
+        if(showCategoryCharts) {
+            item {
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Выберите категории, чтобы добавить или убрать их графики.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    categories.chunked(2).forEach { rowCategories ->
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            rowCategories.forEach { category ->
+                                FilterChip(selected=selectedChartCategories.contains(category.name),onClick={
+                                    val updated=if(selectedChartCategories.contains(category.name)) selectedChartCategories-category.name else selectedChartCategories+category.name
+                                    onSelectedChartCategoryNamesChange(updated.joinToString("|"))
+                                },label={Text(category.name)})
+                            }
                         }
                     }
                 }
             }
-        }
-        items(selectedChartCategories.filter { name -> categories.any { it.name==name } }.toList(),key={"category-daily-"+it}) { categoryName ->
+            items(selectedChartCategories.filter { name -> categories.any { it.name==name } }.toList(),key={"category-daily-"+it}) { categoryName ->
             val dailyValues=(1..month.lengthOfMonth()).map { day ->
                 val date=month.atDay(day).toString()
                 monthExpenses.filter { it.category==categoryName && it.date==date }.sumOf { it.amount }
@@ -1130,20 +1142,11 @@ private fun ChartsScreen(
                         Text(money(dailyValues.sum()),fontWeight=FontWeight.Bold)
                         TextButton(onClick={onSelectedChartCategoryNamesChange((selectedChartCategories-categoryName).joinToString("|"))}) { Text("Убрать") }
                     }
-                    Canvas(Modifier.fillMaxWidth().height(112.dp)) {
-                        val slot=size.width/dailyValues.size.coerceAtLeast(1)
-                        val barWidth=(slot*.62f).coerceAtLeast(2f)
-                        dailyValues.forEachIndexed { index,value ->
-                            val barHeight=(value/maxValue).toFloat()*size.height
-                            drawRect(color=Color(0xFF6556D9),topLeft=androidx.compose.ui.geometry.Offset(index*slot+(slot-barWidth)/2f,size.height-barHeight),size=androidx.compose.ui.geometry.Size(barWidth,barHeight))
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                        Text("1",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("${month.lengthOfMonth()} число",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    val dayTicks=listOf(1,5,10,15,20,25,month.lengthOfMonth()).distinct().filter { it<=month.lengthOfMonth() }
+                    ScaledBarChart(values=dailyValues,xLabels=dayTicks.map { it.toString() },color=Color(0xFF6556D9),height=112.dp)
                 }
             }
+        }
         }
         item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Плановые и фактические расходы",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={onShowPlanChange(!showPlan)}) { Text(if(showPlan) "Скрыть" else "Показать") } } }
         if(showPlan) {
@@ -1191,8 +1194,39 @@ private fun ChartsScreen(
     }
 }
 
+
 @Composable
-private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCategory>,year:Int,onYearChange:(Int)->Unit,selectedCategoryNames:String,onSelectedCategoryNamesChange:(String)->Unit) {
+private fun ScaledBarChart(values:List<Double>,xLabels:List<String>,color:Color,height:androidx.compose.ui.unit.Dp) {
+    val maxValue=values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+    val middleValue=maxValue/2.0
+    Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+        Text("тыс. ₽",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment=Alignment.CenterVertically) {
+            Column(Modifier.width(42.dp).height(height),verticalArrangement=Arrangement.SpaceBetween) {
+                Text(String.format(Locale("ru","RU"),"%.1f",maxValue/1000.0),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(String.format(Locale("ru","RU"),"%.1f",middleValue/1000.0),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("0",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Canvas(Modifier.weight(1f).height(height)) {
+                val slot=size.width/values.size.coerceAtLeast(1)
+                val barWidth=(slot*.62f).coerceAtLeast(2f)
+                drawLine(Color.Gray.copy(alpha=.22f),androidx.compose.ui.geometry.Offset(0f,0f),androidx.compose.ui.geometry.Offset(size.width,0f),strokeWidth=1f)
+                drawLine(Color.Gray.copy(alpha=.22f),androidx.compose.ui.geometry.Offset(0f,size.height/2f),androidx.compose.ui.geometry.Offset(size.width,size.height/2f),strokeWidth=1f)
+                drawLine(Color.Gray.copy(alpha=.22f),androidx.compose.ui.geometry.Offset(0f,size.height),androidx.compose.ui.geometry.Offset(size.width,size.height),strokeWidth=1f)
+                values.forEachIndexed { index,value ->
+                    val barHeight=(value/maxValue).toFloat()*size.height
+                    drawRect(color=color,topLeft=androidx.compose.ui.geometry.Offset(index*slot+(slot-barWidth)/2f,size.height-barHeight),size=androidx.compose.ui.geometry.Size(barWidth,barHeight))
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(start=42.dp),horizontalArrangement=Arrangement.SpaceBetween) {
+            xLabels.forEach { label -> Text(label,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
+@Composable
+private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCategory>,year:Int,onYearChange:(Int)->Unit,selectedCategoryNames:String,onSelectedCategoryNamesChange:(String)->Unit,showCategoryCharts:Boolean,onShowCategoryChartsChange:(Boolean)->Unit) {
     val selected=selectedCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
     val yearExpenses=expenses.filter { it.date.startsWith("$year-") }
     val totals=(1..12).map { m -> yearExpenses.filter { runCatching { LocalDate.parse(it.date).monthValue==m }.getOrDefault(false) }.sumOf { it.amount } }
@@ -1210,25 +1244,28 @@ private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCate
         item { Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("Расходы по месяцам",fontWeight=FontWeight.Bold)
             if(total==0.0) Text("За этот год расходов пока нет.",color=MaterialTheme.colorScheme.onSurfaceVariant) else {
-                val max=totals.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
-                Canvas(Modifier.fillMaxWidth().height(145.dp)) {
-                    val slot=size.width/12f; val w=slot*.58f
-                    totals.forEachIndexed { i,v -> val h=(v/max).toFloat()*size.height; drawRect(Color(0xFF6556D9),androidx.compose.ui.geometry.Offset(i*slot+(slot-w)/2f,size.height-h),androidx.compose.ui.geometry.Size(w,h)) }
-                }
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { labels.forEach { Text(it,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
+                ScaledBarChart(values=totals,xLabels=labels,color=Color(0xFF6556D9),height=145.dp)
             }
         } } }
-        item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text("Графики по категориям",fontWeight=FontWeight.Bold)
-            Text("Выберите категории для сравнения расходов по месяцам.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            categories.chunked(2).forEach { group -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                group.forEach { cat -> FilterChip(selected=selected.contains(cat.name),onClick={
-                    val next=if(selected.contains(cat.name)) selected-cat.name else selected+cat.name
-                    onSelectedCategoryNamesChange(next.joinToString("|"))
-                },label={Text(cat.name)}) }
+        item {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Text("Графики по категориям",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
+                TextButton(onClick={onShowCategoryChartsChange(!showCategoryCharts)}) {
+                    Text(if(showCategoryCharts) "Свернуть ▲" else "Развернуть ▼")
+                }
+            }
+        }
+        if(showCategoryCharts) {
+            item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text("Выберите категории для сравнения расходов по месяцам.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                categories.chunked(2).forEach { group -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    group.forEach { cat -> FilterChip(selected=selected.contains(cat.name),onClick={
+                        val next=if(selected.contains(cat.name)) selected-cat.name else selected+cat.name
+                        onSelectedCategoryNamesChange(next.joinToString("|"))
+                    },label={Text(cat.name)}) }
+                } }
             } }
-        } }
-        items(selected.filter { name -> categories.any { it.name==name } }.toList(),key={"annual-"+it}) { name ->
+            items(selected.filter { name -> categories.any { it.name==name } }.toList(),key={"annual-"+it}) { name ->
             val values=(1..12).map { m -> yearExpenses.filter { it.category==name && runCatching { LocalDate.parse(it.date).monthValue==m }.getOrDefault(false) }.sumOf { it.amount } }
             val sum=values.sum()
             Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -1238,13 +1275,8 @@ private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCate
                     TextButton(onClick={onSelectedCategoryNamesChange((selected-name).joinToString("|"))}) { Text("Убрать") }
                 }
                 if(sum==0.0) Text("Расходов по категории за год нет.",style=MaterialTheme.typography.bodySmall) else {
-                    val max=values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
                     val color=palette[(categories.indexOfFirst { it.name==name }.coerceAtLeast(0))%palette.size]
-                    Canvas(Modifier.fillMaxWidth().height(120.dp)) {
-                        val slot=size.width/12f; val w=slot*.58f
-                        values.forEachIndexed { i,v -> val h=(v/max).toFloat()*size.height; drawRect(color,androidx.compose.ui.geometry.Offset(i*slot+(slot-w)/2f,size.height-h),androidx.compose.ui.geometry.Size(w,h)) }
-                    }
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { labels.forEach { Text(it,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } }
+                    ScaledBarChart(values=values,xLabels=labels,color=color,height=120.dp)
                     values.forEachIndexed { i,v -> if(v>0.0) Text(java.time.Month.of(i+1).getDisplayName(java.time.format.TextStyle.FULL,Locale("ru","RU"))+": "+money(v),style=MaterialTheme.typography.bodySmall) }
                 }
             } }
@@ -1309,6 +1341,7 @@ private fun SpendingBreakdownCard(
                     }
                 }
             }
+        }
         }
     }
 }
