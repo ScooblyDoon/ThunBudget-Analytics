@@ -55,6 +55,19 @@ class AssistantLocalParserTest {
         assertEquals("2026-11-19", command?.periodEnd)
     }
 
+    @Test fun parsesVoiceUpdateLastExpense() {
+        val command = AssistantLocalParser.parse("Измени последний расход на 1500 рублей", categories, today)
+        assertEquals(AssistantIntent.UPDATE_EXPENSE, command?.intent)
+        assertEquals(1500.0, command?.amount)
+        assertEquals("last_expense", command?.target)
+    }
+
+    @Test fun parsesVoiceDeleteLastExpense() {
+        val command = AssistantLocalParser.parse("Удали последнюю операцию", categories, today)
+        assertEquals(AssistantIntent.DELETE_EXPENSE, command?.intent)
+        assertEquals("last_expense", command?.target)
+    }
+
     @Test fun unknownPhraseDoesNotProduceCommand() {
         assertNull(AssistantLocalParser.parse("Расскажи анекдот", categories, today))
     }
