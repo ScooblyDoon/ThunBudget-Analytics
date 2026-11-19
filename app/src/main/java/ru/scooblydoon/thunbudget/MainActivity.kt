@@ -57,11 +57,12 @@ internal class BudgetStore(context: Context) {
 
     fun externalBackupFolder(): String? = prefs.getString(ExternalBackupSettings.URI_KEY, null)
     fun externalBackupLastSuccess(): String? = prefs.getString(ExternalBackupSettings.LAST_SUCCESS_KEY, null)
+    fun externalBackupLastError(): String? = prefs.getString(ExternalBackupSettings.LAST_ERROR_KEY, null)
 
     fun setExternalBackupFolder(uri: String?) {
         val editor = prefs.edit()
-        if (uri.isNullOrBlank()) editor.remove(ExternalBackupSettings.URI_KEY).remove(ExternalBackupSettings.LAST_SUCCESS_KEY)
-        else editor.putString(ExternalBackupSettings.URI_KEY, uri)
+        if (uri.isNullOrBlank()) editor.remove(ExternalBackupSettings.URI_KEY).remove(ExternalBackupSettings.LAST_SUCCESS_KEY).remove(ExternalBackupSettings.LAST_ERROR_KEY)
+        else editor.putString(ExternalBackupSettings.URI_KEY, uri).remove(ExternalBackupSettings.LAST_ERROR_KEY)
         check(editor.commit()) { "Не удалось сохранить настройки внешнего резервирования." }
         if (!uri.isNullOrBlank()) ExternalBackupSettings.schedule(appContext)
     }
@@ -202,7 +203,7 @@ internal class BudgetStore(context: Context) {
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
-            if (!key.startsWith("_auto_backup") && key != "_pre_restore_backup" && key != "_undo_snapshot" && key != ExternalBackupSettings.URI_KEY && key != ExternalBackupSettings.LAST_SUCCESS_KEY) {
+            if (!key.startsWith("_auto_backup") && key != "_pre_restore_backup" && key != "_undo_snapshot" && key != ExternalBackupSettings.URI_KEY && key != ExternalBackupSettings.LAST_SUCCESS_KEY && key != ExternalBackupSettings.LAST_ERROR_KEY) {
                 when (value) {
                     is String -> data.put(key, value)
                     is Boolean -> data.put(key, value)
@@ -270,10 +271,12 @@ internal class BudgetStore(context: Context) {
             .mapNotNull { (key, value) -> (value as? String)?.let { key to it } }
         val externalFolder = prefs.getString(ExternalBackupSettings.URI_KEY, null)
         val externalLastSuccess = prefs.getString(ExternalBackupSettings.LAST_SUCCESS_KEY, null)
+        val externalLastError = prefs.getString(ExternalBackupSettings.LAST_ERROR_KEY, null)
         val editor = prefs.edit().clear().putString("_pre_restore_backup", safetyBackup)
         retainedAutoBackups.forEach { (key, value) -> editor.putString(key, value) }
         if (!externalFolder.isNullOrBlank()) editor.putString(ExternalBackupSettings.URI_KEY, externalFolder)
         if (!externalLastSuccess.isNullOrBlank()) editor.putString(ExternalBackupSettings.LAST_SUCCESS_KEY, externalLastSuccess)
+        if (!externalLastError.isNullOrBlank()) editor.putString(ExternalBackupSettings.LAST_ERROR_KEY, externalLastError)
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
@@ -1391,7 +1394,7 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onClearExternalFolder={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onClearExternalFolder={
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
@@ -1801,7 +1804,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,externalBackupFolder:String?,externalBackupLastSuccess:String?,onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
+private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
@@ -1825,6 +1828,7 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
                 Text("Внутри приложения хранится до 6 последних проверенных копий. Дополнительно можно выбрать внешнюю папку для автоматического сохранения JSON-копий.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(if (externalBackupFolder.isNullOrBlank()) "Внешняя папка не выбрана" else "Автоматическое сохранение во внешнюю папку включено",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 externalBackupLastSuccess?.let { Text("Последняя внешняя копия: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                externalBackupLastError?.let { Text("Ошибка внешнего резервирования: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error) }
                 OutlinedButton(onClick=onChooseExternalFolder,modifier=Modifier.fillMaxWidth()) { Text(if (externalBackupFolder.isNullOrBlank()) "Выбрать папку для автокопий" else "Изменить папку автокопий") }
                 if (!externalBackupFolder.isNullOrBlank()) OutlinedButton(onClick=onClearExternalFolder,modifier=Modifier.fillMaxWidth()) { Text("Отключить внешние автокопии") }
                 OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию вручную") }
