@@ -515,6 +515,28 @@ private fun ThunBudgetApp() {
                         val projected = remainingRange - daily * days
                         voiceMessage = "Если тратить по ${money(daily)} в день ещё $days дн., к концу периода останется ${money(projected)}.\nСейчас доступно: ${money(remainingRange)}."
                     }
+                    AssistantIntent.UPDATE_EXPENSE, AssistantIntent.DELETE_EXPENSE -> {
+                        val target = expenses.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id }).firstOrNull()
+                        if (target == null) {
+                            voiceMessage = "Пока нет расходов, которые можно изменить или удалить."
+                        } else {
+                            voiceEditCandidates = expenses.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
+                            voiceSelectedExpenseId = target.id
+                            val deleting = command.intent == AssistantIntent.DELETE_EXPENSE
+                            voiceDraft = VoiceExpenseDraft(
+                                title = target.title,
+                                category = target.category,
+                                amount = command.amount ?: target.amount,
+                                date = target.date,
+                                sourcePhrase = phrase,
+                                isEdit = true,
+                                isDelete = deleting
+                            )
+                            voiceAmount = (command.amount ?: target.amount).toLong()
+                                .takeIf { it.toDouble() == (command.amount ?: target.amount) }?.toString()
+                                ?: (command.amount ?: target.amount).toString()
+                        }
+                    }
                     AssistantIntent.ADD_EXPENSE -> {
                         val amount = command.amount ?: return
                         voiceDraft = VoiceExpenseDraft(
@@ -980,7 +1002,7 @@ private fun ThunBudgetApp() {
     voiceDraft?.let { draft ->
         AlertDialog(
             onDismissRequest={voiceDraft=null},
-            title={Text(when { draft.isCategoryRename -> "Проверь переименование категории"; draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncomeEdit -> "Проверь изменение дохода"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
+            title={Text(when { draft.isCategoryRename -> "Проверь переименование категории"; draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncomeEdit -> "Проверь изменение дохода"; draft.isDelete -> "Подтверди удаление операции"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
             text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 if (draft.isCategoryRename) {
                     Text("Категория: «${draft.category}» → «${draft.title}»",fontWeight=FontWeight.Bold)
@@ -995,7 +1017,7 @@ private fun ThunBudgetApp() {
                             OutlinedTextField(
                                 value=selected?.let { "${it.title} · ${it.date} · ${money(it.amount)}" } ?: "Операция не выбрана",
                                 onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),
-                                label={Text("Какую операцию изменить")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(voiceEditExpanded)}
+                                label={Text(if (draft.isDelete) "Какую операцию удалить" else "Какую операцию изменить")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(voiceEditExpanded)}
                             )
                             ExposedDropdownMenu(expanded=voiceEditExpanded,onDismissRequest={voiceEditExpanded=false}) {
                                 candidates.forEach { candidate ->
@@ -1008,7 +1030,7 @@ private fun ThunBudgetApp() {
                         }
                         Text("Текущая сумма: ${selected?.let { money(it.amount) } ?: "не выбрана"}",style=MaterialTheme.typography.bodySmall)
                     }
-                    OutlinedTextField(
+                    if (!draft.isDelete) OutlinedTextField(
                         value=voiceAmount,
                         onValueChange={ voiceAmount=it },
                         label={Text("Сумма, ₽")},
@@ -1022,7 +1044,9 @@ private fun ThunBudgetApp() {
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
             confirmButton={TextButton(
-                enabled = draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit || ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId })),
+                enabled = draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit ||
+                    (if (draft.isDelete) voiceEditCandidates.any { it.id == voiceSelectedExpenseId }
+                    else ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId }))),
                 onClick={
                 val confirmedAmount = voiceAmount.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
                 when {
@@ -1053,6 +1077,14 @@ private fun ThunBudgetApp() {
                         }
                         periodIncomes = store.loadPeriodIncomes()
                         incomeEntries = store.loadIncomeEntries()
+                    }
+                    draft.isDelete -> {
+                        val targetId = voiceSelectedExpenseId ?: return@TextButton
+                        val target = expenses.firstOrNull { it.id == targetId } ?: return@TextButton
+                        store.prepareUndoSnapshot(); canUndo=true
+                        expenses = expenses.filterNot { it.id == targetId }
+                        store.saveExpenses(expenses)
+                        voiceMessage = "Операция «${target.title}» от ${target.date} на ${money(target.amount)} удалена."
                     }
                     draft.isEdit -> {
                         val amount = confirmedAmount ?: return@TextButton
@@ -1102,7 +1134,7 @@ private fun ThunBudgetApp() {
                     }
                 }
                 voiceDraft=null
-            }) { Text(when { draft.isCategoryRename -> "Переименовать категорию"; draft.isCategoryAdd -> "Добавить категорию"; draft.isCategoryEdit -> "Изменить долю"; draft.isIncomeEdit -> "Изменить доход"; draft.isEdit -> "Сохранить изменения"; draft.isIncome -> "Сохранить доход"; else -> "Сохранить расход" }) }},
+            }) { Text(when { draft.isDelete -> "Удалить операцию"; draft.isCategoryRename -> "Переименовать категорию"; draft.isCategoryAdd -> "Добавить категорию"; draft.isCategoryEdit -> "Изменить долю"; draft.isIncomeEdit -> "Изменить доход"; draft.isEdit -> "Сохранить изменения"; draft.isIncome -> "Сохранить доход"; else -> "Сохранить расход" }) }},
             dismissButton={TextButton(onClick={voiceDraft=null}) { Text("Отмена") }}
         )
     }
@@ -1865,7 +1897,8 @@ private data class VoiceExpenseDraft(
     val isCategoryEdit: Boolean = false,
     val isEdit: Boolean = false,
     val isCategoryRename: Boolean = false,
-    val isIncomeEdit: Boolean = false
+    val isIncomeEdit: Boolean = false,
+    val isDelete: Boolean = false
 )
 
 private fun startOfflineSpeechRecognition(
