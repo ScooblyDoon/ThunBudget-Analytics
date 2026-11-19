@@ -55,9 +55,15 @@ object XlsxImporter {
         }
     }
 
-    private fun parseDate(value: String): String? {
-        LocalDate.parse(value).let { return it.toString() }
-    }
+    private fun parseDate(value: String): String? = runCatching {
+        val text = value.trim()
+        if (text.matches(Regex("""\\d{4}-\\d{2}-\\d{2}"""))) LocalDate.parse(text).toString()
+        else {
+            val serial = text.toDouble()
+            require(serial >= 1.0 && serial <= 2_958_465.0)
+            LocalDate.of(1899, 12, 30).plusDays(serial.toLong()).toString()
+        }
+    }.getOrNull()
 
     private fun parseSharedStrings(bytes: ByteArray): List<String> {
         val parser = Xml.newPullParser()
