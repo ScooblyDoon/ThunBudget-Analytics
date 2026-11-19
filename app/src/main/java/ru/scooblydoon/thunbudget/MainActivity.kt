@@ -15,6 +15,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -457,6 +459,17 @@ private fun ThunBudgetApp() {
     var pendingBankOperations by remember { mutableStateOf(BankNotificationStore.load(context)) }
     var showBankOperationsReview by remember { mutableStateOf(false) }
     var bankNotificationAccessEnabled by remember { mutableStateOf(BankNotificationStore.isAccessEnabled(context)) }
+    DisposableEffect(context) {
+        val activity = context as? ComponentActivity
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                bankNotificationAccessEnabled = BankNotificationStore.isAccessEnabled(context)
+                pendingBankOperations = BankNotificationStore.load(context)
+            }
+        }
+        activity?.lifecycle?.addObserver(observer)
+        onDispose { activity?.lifecycle?.removeObserver(observer) }
+    }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
