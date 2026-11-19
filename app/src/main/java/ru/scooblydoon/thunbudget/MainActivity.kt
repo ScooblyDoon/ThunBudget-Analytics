@@ -667,10 +667,15 @@ private fun ThunBudgetApp() {
             })
         }
     }
-    val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
-        if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, periodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (_, entries) -> entries.sumOf { it.amount } }) }
-    }
     var backupMessage by remember { mutableStateOf<String?>(null) }
+    val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
+        if (uri != null) {
+            backupMessage = runCatching {
+                XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, periodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (_, entries) -> entries.sumOf { it.amount } })
+                "Excel-отчёт успешно сохранён."
+            }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
+        }
+    }
     var externalBackupFolder by remember { mutableStateOf(store.externalBackupFolder()) }
     var showRestoreConfirmation by remember { mutableStateOf(false) }
     val externalBackupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -1444,7 +1449,7 @@ private fun ThunBudgetApp() {
         dismissButton={TextButton(onClick={showUndoConfirmation=false}) { Text("Оставить") }}
     )
     backupMessage?.let { message ->
-        AlertDialog(onDismissRequest={backupMessage=null},title={Text("Резервная копия")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
+        AlertDialog(onDismissRequest={backupMessage=null},title={Text("Результат операции")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
     }
 
 }
