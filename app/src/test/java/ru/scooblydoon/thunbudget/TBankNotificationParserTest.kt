@@ -37,6 +37,17 @@ class TBankNotificationParserTest {
     }
 
     @Test
+    fun preservesKopecks() {
+        val result = TBankNotificationParser.parse(
+            title = "Т-Банк",
+            text = "Покупка 1 250,50 ₽",
+            bigText = null,
+            postTime = timestamp
+        )
+        assertEquals(1250.50, result?.amount ?: 0.0, 0.001)
+    }
+
+    @Test
     fun acceptsSameAmountRepeatedInCollapsedAndExpandedText() {
         val result = TBankNotificationParser.parse(
             title = "Т-Банк",
