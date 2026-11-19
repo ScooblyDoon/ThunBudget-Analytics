@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0
+- Added local T-Bank transaction capture from Android notifications.
+- Added a review queue: detected operations require user confirmation and category selection before being added.
+- Added duplicate protection for identical imported operations.
+- Notification processing is limited to the T-Bank Android package and stays on the device.
+- Existing budget screens and their layout remain unchanged.
+
+# Changelog
+
 ## 1.2.0
 
 ### Data protection
