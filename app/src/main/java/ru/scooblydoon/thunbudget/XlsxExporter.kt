@@ -215,7 +215,7 @@ object XlsxExporter {
         return result
     }
 
-    private fun sheet(rows: List<List<Any>>): String = buildString {
+    internal fun sheet(rows: List<List<Any>>): String = buildString {
         val columnCount = rows.maxOfOrNull { it.size } ?: 1
         val lastColumn = col(columnCount - 1)
         val widths = (0 until columnCount).map { column ->
