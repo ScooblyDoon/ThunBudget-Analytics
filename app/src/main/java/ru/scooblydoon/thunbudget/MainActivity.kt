@@ -43,6 +43,7 @@ import java.util.Locale
 private data class PeriodIncome(val start: String, val end: String, val amount: Double)
 
 private class BudgetStore(context: Context) {
+    private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     private val incomeLedger = IncomeLedgerRepository(prefs)
 
@@ -246,7 +247,7 @@ private class BudgetStore(context: Context) {
     fun saveAutomaticBackup() {
         val snapshot = exportBackup()
         prefs.edit().putString("_auto_backup", snapshot).commit()
-        BudgetWidgetProvider.refreshAll(context)
+        BudgetWidgetProvider.refreshAll(appContext)
     }
 
     fun hasAutomaticBackup(): Boolean = !prefs.getString("_auto_backup", null).isNullOrBlank()
