@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_budget_description">Расходы, доходы и доступный расход в день до конца отчётного периода</string>
+</resources>
