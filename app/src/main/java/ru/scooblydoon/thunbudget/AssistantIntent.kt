@@ -45,7 +45,7 @@ sealed interface AssistantCommandValidation {
 object AssistantCommandValidator {
     private const val MIN_CONFIDENCE = 0.65
     private const val MAX_AMOUNT = 100_000_000.0
-    private val datePattern = Regex("""\\d{4}-\\d{2}-\\d{2}""")
+    private val datePattern = Regex("""\d{4}-\d{2}-\d{2}""")
 
     fun validate(
         input: AssistantCommand,
