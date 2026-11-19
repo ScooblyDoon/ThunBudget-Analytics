@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [ "main", "feature/next-update-ux", "feature/charts-icon-ai-foundation-2026-11-19", "feature/assistant-intent-v1-2026-11-19", "feature/home-screen-widget-v1-2026-11-19" ]
+    branches: [ "main", "feature/next-update-ux", "feature/charts-icon-ai-foundation-2026-11-19", "feature/assistant-intent-v1-2026-11-19", "feature/home-screen-widget-v1-2026-11-19", "feature/reliability-voice-analytics-v2-2026-11-19" ]
   workflow_dispatch:
 
 concurrency:
