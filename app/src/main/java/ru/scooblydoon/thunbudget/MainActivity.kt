@@ -1845,6 +1845,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
     },confirmButton={ TextButton(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && runCatching{LocalDate.parse(date)}.isSuccess) onSave(title,category,v,date) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BankOperationsReviewDialog(
     operations: List<PendingBankOperation>,
