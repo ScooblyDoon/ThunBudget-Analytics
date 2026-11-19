@@ -4,6 +4,7 @@
 - Added local T-Bank transaction capture from Android notifications.
 - Added a review queue: detected operations require user confirmation and category selection before being added.
 - Added duplicate protection for identical imported operations.
+- Improved parsing of expanded notifications and decimal amounts; ambiguous notifications are ignored.
 - Notification processing is limited to the T-Bank Android package and stays on the device.
 - Existing budget screens and their layout remain unchanged.
 
