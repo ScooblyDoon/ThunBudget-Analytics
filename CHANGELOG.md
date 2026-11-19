@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1
+- Reorganized Settings into separate sections for income and savings, planning period, categories, Excel export, backups, T-Bank import, and appearance.
+- Moved Excel report export into its own Settings section, separate from backup and restore.
+- Clarified the dedicated Android notification-listener permission and added an explicit status refresh action.
+- Refresh notification-listener permission state and pending bank operations when the app resumes.
+- Improved notification-listener permission component matching.
+- Recognize signed positive T-Bank money-transfer notifications such as “+10 ₽ · Перевод денежных средств” as income.
+- Added a parser regression test for signed incoming transfers.
+- Kept the main budget screen layout and local-only data handling unchanged.
+
+# Changelog
+
 ## 1.3.0
 - Added local T-Bank transaction capture from Android notifications.
 - Added a review queue: detected operations require user confirmation and category selection before being added.
