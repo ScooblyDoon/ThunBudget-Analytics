@@ -32,6 +32,7 @@ internal object TBankNotificationParser {
     )
     private val expensePattern = Regex("""покупк|оплат|списан|перевод\s+на|сняти|плат[её]ж""", RegexOption.IGNORE_CASE)
     private val incomePattern = Regex("""поступлен|зачислен|пополнен|входящ(?:ий|его)\s+перевод|перевод\s+от|вам\s+перевели|получен\s+перевод|возврат""", RegexOption.IGNORE_CASE)
+    private val signedIncomePattern = Regex("""\+\s*\d[\d\s\u00A0\u202F]*(?:[,.]\d{1,2})?\s*(?:₽|руб(?:лей|ля|ль|\.)?)""", RegexOption.IGNORE_CASE)
 
     fun parse(title: String?, text: String?, bigText: String?, postTime: Long): PendingBankOperation? {
         val parts = listOfNotNull(title, text, bigText)
@@ -51,8 +52,10 @@ internal object TBankNotificationParser {
         if (amountTexts.size != 1) return null
         val amount = amountTexts.single().toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 } ?: return null
 
+        val hasPositiveSign = signedIncomePattern.containsMatchIn(combined)
+        val transferDescription = Regex("""перевод\s+денежных\s+средств""", RegexOption.IGNORE_CASE).containsMatchIn(combined)
         val isExpense = expensePattern.containsMatchIn(combined)
-        val isIncome = incomePattern.containsMatchIn(combined)
+        val isIncome = incomePattern.containsMatchIn(combined) || (hasPositiveSign && transferDescription)
         if (isExpense == isIncome) return null
 
         val titleSource = parts.filter { amountPattern.containsMatchIn(it) }.maxByOrNull { it.length }
