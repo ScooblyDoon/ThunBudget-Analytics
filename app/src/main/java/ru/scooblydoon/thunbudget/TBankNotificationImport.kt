@@ -56,7 +56,10 @@ internal object TBankNotificationParser {
         val isIncome = incomePattern.containsMatchIn(combined)
         if (isExpense == isIncome) return null
 
-        val cleanTitle = (parts.firstOrNull { it.length > 2 } ?: "Операция Т-Банка")
+        val titleSource = parts.firstOrNull { amountPattern.containsMatchIn(it) }
+            ?: parts.firstOrNull { it.length > 2 }
+            ?: "Операция Т-Банка"
+        val cleanTitle = titleSource
             .replace(amountPattern, "")
             .replace(Regex("""(?i)покупка|оплата|списание|поступление|зачисление|пополнение|перевод|снятие|возврат"""), "")
             .replace(Regex("""[•·,:;—–-]+"""), " ")
