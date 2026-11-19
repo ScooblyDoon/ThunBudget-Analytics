@@ -1345,7 +1345,6 @@ private fun SpendingBreakdownCard(
         }
         }
     }
-}
 
 private fun persistUiExpanded(context: Context, key: String, expanded: Boolean) {
     context.getSharedPreferences("thunbudget_ui_state", Context.MODE_PRIVATE)
