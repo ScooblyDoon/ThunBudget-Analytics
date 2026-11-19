@@ -47,7 +47,11 @@ private class BudgetStore(context: Context) {
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     private val incomeLedger = IncomeLedgerRepository(prefs)
 
-    init { incomeLedger.migrateLegacyIfNeeded() }
+    init {
+        incomeLedger.migrateLegacyIfNeeded()
+        // Never replace the last good backup with data that fails integrity checks.
+        if (!isCurrentDataValid() && hasAutomaticBackup()) restoreAutomaticBackup()
+    }
 
     fun loadDarkTheme(): Boolean = prefs.getBoolean("dark_theme", false)
     fun saveDarkTheme(enabled: Boolean) { prefs.edit().putBoolean("dark_theme", enabled).apply() }
@@ -179,12 +183,17 @@ private class BudgetStore(context: Context) {
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
-            if (key != "_pre_restore_backup" && key != "_auto_backup" && key != "_undo_snapshot") {
+            if (!key.startsWith("_auto_backup") && key != "_pre_restore_backup" && key != "_undo_snapshot") {
                 when (value) {
                     is String -> data.put(key, value)
                     is Boolean -> data.put(key, value)
                 }
             }
+        }
+        if (!data.has("categories")) {
+            val defaults = JSONArray()
+            loadCategories().forEach { defaults.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+            data.put("categories", defaults.toString())
         }
         return JSONObject()
             .put("app", "ThunBudget")
@@ -230,7 +239,11 @@ private class BudgetStore(context: Context) {
         }
         // Снимок текущих данных сохраняется до замены, чтобы можно было отменить ошибочное восстановление.
         val safetyBackup = exportBackup()
+        val retainedAutoBackups = prefs.all
+            .filterKeys { it == "_auto_backup" || Regex("""^_auto_backup_[1-5]$""").matches(it) }
+            .mapNotNull { (key, value) -> (value as? String)?.let { key to it } }
         val editor = prefs.edit().clear().putString("_pre_restore_backup", safetyBackup)
+        retainedAutoBackups.forEach { (key, value) -> editor.putString(key, value) }
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
@@ -241,19 +254,74 @@ private class BudgetStore(context: Context) {
                 else -> error("Некорректный формат данных резервной копии.")
             }
         }
-        editor.commit()
+        require(editor.commit()) { "Не удалось записать восстановленные данные." }
+        saveAutomaticBackup()
+        true
+    }.getOrDefault(false)
+
+    private fun isBackupSnapshotValid(snapshot: String?): Boolean = runCatching {
+        require(!snapshot.isNullOrBlank())
+        val root = JSONObject(snapshot)
+        require(root.optString("app") == "ThunBudget" && root.optInt("schemaVersion") == 1)
+        val data = root.getJSONObject("data")
+        val expenses = JSONArray(data.getString("expenses"))
+        for (i in 0 until expenses.length()) {
+            val row = expenses.getJSONObject(i)
+            require(row.getString("title").isNotBlank() && row.getString("category").isNotBlank())
+            require(row.getDouble("amount").isFinite() && row.getDouble("amount") > 0.0)
+            LocalDate.parse(row.getString("date"))
+        }
+        val categories = JSONArray(data.getString("categories"))
+        require(categories.length() > 0)
+        for (i in 0 until categories.length()) {
+            val row = categories.getJSONObject(i)
+            require(row.getString("name").isNotBlank())
+            require(row.getDouble("percent").isFinite() && row.getDouble("percent") >= 0.0)
+        }
+        val monthlyIncome = data.getString("income").toDoubleOrNull()
+        val savings = data.getString("savings").toDoubleOrNull()
+        require(monthlyIncome != null && monthlyIncome.isFinite() && monthlyIncome > 0.0)
+        require(savings != null && savings.isFinite() && savings in 0.0..100.0)
+        true
+    }.getOrDefault(false)
+
+    private fun isCurrentDataValid(): Boolean = runCatching {
+        val rawExpenses = prefs.getString("expenses", "[]") ?: "[]"
+        JSONArray(rawExpenses)
+        prefs.getString("categories", null)?.let { JSONArray(it) }
+        val monthlyIncome = prefs.getString("income", "100000")?.toDoubleOrNull()
+        val savings = prefs.getString("savings", "10")?.toDoubleOrNull()
+        require(monthlyIncome != null && monthlyIncome.isFinite() && monthlyIncome > 0.0)
+        require(savings != null && savings.isFinite() && savings in 0.0..100.0)
+        true
     }.getOrDefault(false)
 
     fun saveAutomaticBackup() {
         val snapshot = exportBackup()
-        prefs.edit().putString("_auto_backup", snapshot).commit()
+        if (!isBackupSnapshotValid(snapshot)) return
+        val previous = prefs.getString("_auto_backup", null)
+        val editor = prefs.edit()
+        for (slot in 5 downTo 1) {
+            val candidate = if (slot == 1) previous else prefs.getString("_auto_backup_${slot - 1}", null)
+            if (isBackupSnapshotValid(candidate)) editor.putString("_auto_backup_${slot}", candidate)
+        }
+        editor.putString("_auto_backup", snapshot)
+            .putString("_auto_backup_date", LocalDate.now().toString())
+        check(editor.commit()) { "Не удалось сохранить автоматическую резервную копию." }
         BudgetWidgetProvider.refreshAll(appContext)
     }
 
-    fun hasAutomaticBackup(): Boolean = !prefs.getString("_auto_backup", null).isNullOrBlank()
+    fun automaticBackupCount(): Int =
+        (listOf("_auto_backup") + (1..5).map { "_auto_backup_${it}" })
+            .count { isBackupSnapshotValid(prefs.getString(it, null)) }
+
+    fun hasAutomaticBackup(): Boolean = automaticBackupCount() > 0
 
     fun restoreAutomaticBackup(): Boolean {
-        val snapshot = prefs.getString("_auto_backup", null) ?: return false
+        val snapshot = (listOf("_auto_backup") + (1..5).map { "_auto_backup_${it}" })
+            .asSequence()
+            .mapNotNull { prefs.getString(it, null) }
+            .firstOrNull { isBackupSnapshotValid(it) } ?: return false
         return restoreBackup(snapshot)
     }
 
