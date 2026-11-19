@@ -3,6 +3,7 @@ package ru.scooblydoon.thunbudget
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -43,7 +44,7 @@ import java.util.Locale
 
 private data class PeriodIncome(val start: String, val end: String, val amount: Double)
 
-private class BudgetStore(context: Context) {
+internal class BudgetStore(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     private val incomeLedger = IncomeLedgerRepository(prefs)
@@ -53,6 +54,19 @@ private class BudgetStore(context: Context) {
         // Never replace the last good backup with data that fails integrity checks.
         if (!isCurrentDataValid() && hasAutomaticBackup()) restoreAutomaticBackup()
     }
+
+    fun externalBackupFolder(): String? = prefs.getString(ExternalBackupSettings.URI_KEY, null)
+    fun externalBackupLastSuccess(): String? = prefs.getString(ExternalBackupSettings.LAST_SUCCESS_KEY, null)
+
+    fun setExternalBackupFolder(uri: String?) {
+        val editor = prefs.edit()
+        if (uri.isNullOrBlank()) editor.remove(ExternalBackupSettings.URI_KEY).remove(ExternalBackupSettings.LAST_SUCCESS_KEY)
+        else editor.putString(ExternalBackupSettings.URI_KEY, uri)
+        check(editor.commit()) { "Не удалось сохранить настройки внешнего резервирования." }
+        if (!uri.isNullOrBlank()) ExternalBackupSettings.schedule(appContext)
+    }
+
+    fun validatedBackupSnapshot(): String? = exportBackup().takeIf(::isBackupSnapshotValid)
 
     fun loadDarkTheme(): Boolean = prefs.getBoolean("dark_theme", false)
     fun saveDarkTheme(enabled: Boolean) { prefs.edit().putBoolean("dark_theme", enabled).apply() }
@@ -143,8 +157,12 @@ private class BudgetStore(context: Context) {
         }.getOrDefault(emptyList())
     }
     fun saveExpenses(items: List<Expense>) {
+        require(items.map { it.id }.distinct().size == items.size) { "Повторяется идентификатор расхода." }
+        require(items.all { it.title.isNotBlank() && it.category.isNotBlank() && it.amount.isFinite() && it.amount > 0.0 && runCatching { LocalDate.parse(it.date) }.isSuccess }) {
+            "Обнаружены некорректные данные расхода."
+        }
         val a=JSONArray(); items.forEach { a.put(JSONObject().put("id",it.id).put("title",it.title).put("category",it.category).put("amount",it.amount).put("date",it.date)) }
-        prefs.edit().putString("expenses",a.toString()).commit()
+        check(prefs.edit().putString("expenses",a.toString()).commit()) { "Не удалось сохранить расходы." }
         saveAutomaticBackup()
     }
 
@@ -184,7 +202,7 @@ private class BudgetStore(context: Context) {
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
-            if (!key.startsWith("_auto_backup") && key != "_pre_restore_backup" && key != "_undo_snapshot") {
+            if (!key.startsWith("_auto_backup") && key != "_pre_restore_backup" && key != "_undo_snapshot" && key != ExternalBackupSettings.URI_KEY && key != ExternalBackupSettings.LAST_SUCCESS_KEY) {
                 when (value) {
                     is String -> data.put(key, value)
                     is Boolean -> data.put(key, value)
@@ -247,8 +265,12 @@ private class BudgetStore(context: Context) {
         val retainedAutoBackups = prefs.all
             .filterKeys { it == "_auto_backup" || Regex("""^_auto_backup_[1-5]$""").matches(it) }
             .mapNotNull { (key, value) -> (value as? String)?.let { key to it } }
+        val externalFolder = prefs.getString(ExternalBackupSettings.URI_KEY, null)
+        val externalLastSuccess = prefs.getString(ExternalBackupSettings.LAST_SUCCESS_KEY, null)
         val editor = prefs.edit().clear().putString("_pre_restore_backup", safetyBackup)
         retainedAutoBackups.forEach { (key, value) -> editor.putString(key, value) }
+        if (!externalFolder.isNullOrBlank()) editor.putString(ExternalBackupSettings.URI_KEY, externalFolder)
+        if (!externalLastSuccess.isNullOrBlank()) editor.putString(ExternalBackupSettings.LAST_SUCCESS_KEY, externalLastSuccess)
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
@@ -270,17 +292,20 @@ private class BudgetStore(context: Context) {
         require(root.optString("app") == "ThunBudget" && root.optInt("schemaVersion") == 1)
         val data = root.getJSONObject("data")
         val expenses = JSONArray(data.getString("expenses"))
+        val expenseIds = mutableSetOf<Long>()
         for (i in 0 until expenses.length()) {
             val row = expenses.getJSONObject(i)
+            require(expenseIds.add(row.getLong("id"))) { "Повторяется идентификатор расхода." }
             require(row.getString("title").isNotBlank() && row.getString("category").isNotBlank())
             require(row.getDouble("amount").isFinite() && row.getDouble("amount") > 0.0)
             LocalDate.parse(row.getString("date"))
         }
         val categories = JSONArray(data.getString("categories"))
         require(categories.length() > 0)
+        val categoryNames = mutableSetOf<String>()
         for (i in 0 until categories.length()) {
             val row = categories.getJSONObject(i)
-            require(row.getString("name").isNotBlank())
+            require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
             require(row.getDouble("percent").isFinite() && row.getDouble("percent") >= 0.0)
         }
         val periodIncomes = JSONArray(data.optString("period_incomes", "[]"))
@@ -289,6 +314,18 @@ private class BudgetStore(context: Context) {
             val start = LocalDate.parse(row.getString("start"))
             val end = LocalDate.parse(row.getString("end"))
             require(!end.isBefore(start) && row.getDouble("amount").isFinite() && row.getDouble("amount") >= 0.0)
+        }
+        val incomeEntries = JSONArray(data.optString("income_entries", "[]"))
+        val incomeIds = mutableSetOf<String>()
+        for (i in 0 until incomeEntries.length()) {
+            val row = incomeEntries.getJSONObject(i)
+            require(row.getString("id").isNotBlank() && incomeIds.add(row.getString("id")))
+            require(row.getString("title").isNotBlank())
+            require(row.getDouble("amount").isFinite() && row.getDouble("amount") > 0.0)
+            val date = LocalDate.parse(row.getString("date"))
+            val start = LocalDate.parse(row.getString("periodStart"))
+            val end = LocalDate.parse(row.getString("periodEnd"))
+            require(!end.isBefore(start) && !date.isBefore(start) && !date.isAfter(end))
         }
         val monthlyIncome = data.getString("income").toDoubleOrNull()
         val savings = data.getString("savings").toDoubleOrNull()
@@ -311,6 +348,7 @@ private class BudgetStore(context: Context) {
         editor.putString("_auto_backup", snapshot)
             .putString("_auto_backup_date", LocalDate.now().toString())
         check(editor.commit()) { "Не удалось сохранить автоматическую резервную копию." }
+        if (!externalBackupFolder().isNullOrBlank()) runCatching { ExternalBackupSettings.schedule(appContext) }
         BudgetWidgetProvider.refreshAll(appContext)
     }
 
@@ -617,7 +655,19 @@ private fun ThunBudgetApp() {
         if (uri != null) runCatching { XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year) }
     }
     var backupMessage by remember { mutableStateOf<String?>(null) }
+    var externalBackupFolder by remember { mutableStateOf(store.externalBackupFolder()) }
     var showRestoreConfirmation by remember { mutableStateOf(false) }
+    val externalBackupFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            backupMessage = runCatching {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+                store.setExternalBackupFolder(uri.toString())
+                externalBackupFolder = uri.toString()
+                "Папка выбрана. Автоматическое резервирование будет выполняться в неё после изменения данных."
+            }.getOrElse { "Не удалось подключить папку: ${it.message ?: "ошибка доступа"}" }
+        }
+    }
     val backupExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) {
             backupMessage = runCatching {
@@ -1312,7 +1362,11 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),onDismiss={showSettings=false},onRestoreAutomatic={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onClearExternalFolder={
+        externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
+        store.setExternalBackupFolder(null)
+        externalBackupFolder=null
+    },onDismiss={showSettings=false},onRestoreAutomatic={
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
@@ -1718,7 +1772,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 }
 
 @Composable
-private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
+private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,darkTheme:Boolean,onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,externalBackupFolder:String?,externalBackupLastSuccess:String?,onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,onRestorePrevious:()->Unit,onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit) {
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
@@ -1739,8 +1793,12 @@ private fun SettingsDialog(income:Double,savings:Double,categories:List<BudgetCa
             item { OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true) }
             item { Text("Резервное копирование",fontWeight=FontWeight.Bold) }
             item {
-                Text("Приложение хранит до 6 последних проверенных автокопий на устройстве: при изменениях данных и запуске. Для защиты при переустановке периодически экспортируй JSON-файл отдельно.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию") }
+                Text("Внутри приложения хранится до 6 последних проверенных копий. Дополнительно можно выбрать внешнюю папку для автоматического сохранения JSON-копий.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (externalBackupFolder.isNullOrBlank()) "Внешняя папка не выбрана" else "Автоматическое сохранение во внешнюю папку включено",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                externalBackupLastSuccess?.let { Text("Последняя внешняя копия: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                OutlinedButton(onClick=onChooseExternalFolder,modifier=Modifier.fillMaxWidth()) { Text(if (externalBackupFolder.isNullOrBlank()) "Выбрать папку для автокопий" else "Изменить папку автокопий") }
+                if (!externalBackupFolder.isNullOrBlank()) OutlinedButton(onClick=onClearExternalFolder,modifier=Modifier.fillMaxWidth()) { Text("Отключить внешние автокопии") }
+                OutlinedButton(onClick=onBackup,modifier=Modifier.fillMaxWidth()) { Text("Создать резервную копию вручную") }
                 if(hasAutomaticBackup) OutlinedButton(onClick=onRestoreAutomatic,modifier=Modifier.fillMaxWidth()) { Text("Восстановить автокопию приложения") }
                 OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из файла") }
                 if(hasPreviousRestoreBackup) OutlinedButton(onClick=onRestorePrevious,modifier=Modifier.fillMaxWidth()) { Text("Отменить последнее восстановление") }
