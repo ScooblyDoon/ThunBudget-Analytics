@@ -25,11 +25,9 @@ object AssistantLocalParser {
             .sortedByDescending { it.length }
             .firstOrNull { normalized.contains(it.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }
 
-        val date = when {
-            Regex("""\b(вчера|за вчера)\b""").containsMatchIn(normalized) -> today.minusDays(1)
-            Regex("""\b(сегодня|за сегодня)\b""").containsMatchIn(normalized) -> today
-            else -> today
-        }
+        val mentionsYesterday = Regex("""\b(вчера|за вчера)\b""").containsMatchIn(normalized)
+        val mentionsToday = Regex("""\b(сегодня|за сегодня)\b""").containsMatchIn(normalized)
+        val date = if (mentionsYesterday) today.minusDays(1) else today
 
         val month = when {
             normalized.contains("прошлом месяце") || normalized.contains("за прошлый месяц") ->
@@ -38,8 +36,14 @@ object AssistantLocalParser {
                 normalized.contains("за месяц") -> YearMonth.from(today)
             else -> null
         }
-        val periodStart = month?.atDay(1)?.toString()
-        val periodEnd = month?.let { if (it == YearMonth.from(today)) today else it.atEndOfMonth() }?.toString()
+        val periodBounds = when {
+            month != null -> month.atDay(1) to (if (month == YearMonth.from(today)) today else month.atEndOfMonth())
+            mentionsYesterday || mentionsToday -> date to date
+            normalized.contains("за неделю") || normalized.contains("за последние 7 дней") -> today.minusDays(6) to today
+            else -> null
+        }
+        val periodStart = periodBounds?.first?.toString()
+        val periodEnd = periodBounds?.second?.toString()
 
         if (listOf("сколько осталось", "остаток", "доступно в бюджете", "до зарплаты").any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_REMAINING, confidence = 0.92)
@@ -72,7 +76,7 @@ object AssistantLocalParser {
             )
         }
 
-        if (listOf("сколько потратил", "сколько потратила", "общие расходы", "сумма расходов", "потрачено").any { normalized.contains(it) }) {
+        if (listOf("сколько потратил", "сколько потратила", "общие расходы", "сумма расходов", "потрачено", "покажи расходы", "все расходы", "расходы за").any { normalized.contains(it) }) {
             return command(
                 AssistantIntent.QUERY_SPENDING,
                 periodStart = periodStart,
