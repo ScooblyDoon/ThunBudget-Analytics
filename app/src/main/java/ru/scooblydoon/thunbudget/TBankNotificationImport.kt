@@ -152,7 +152,10 @@ internal object BankNotificationStore {
         val enabled = android.provider.Settings.Secure.getString(
             context.contentResolver, "enabled_notification_listeners"
         ) ?: return false
-        return enabled.split(':').any { it.contains(context.packageName) }
+        return enabled.split(':').any { component ->
+            android.content.ComponentName.unflattenFromString(component)?.let { it.packageName == context.packageName }
+                ?: component.contains(context.packageName)
+        }
     }
 
     fun openAccessSettings(context: Context) {
