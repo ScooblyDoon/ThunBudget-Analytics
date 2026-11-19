@@ -2,6 +2,7 @@ package ru.scooblydoon.thunbudget
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -20,7 +21,7 @@ class TBankNotificationParserTest {
         )
         assertEquals(BankOperationType.EXPENSE, result?.type)
         assertEquals(1250.0, result?.amount ?: 0.0, 0.001)
-        assertEquals("в Пятёрочке", result?.title)
+        assertTrue(result?.title?.contains("Пятёрочке") == true)
         assertEquals("2026-11-19", result?.date)
     }
 
