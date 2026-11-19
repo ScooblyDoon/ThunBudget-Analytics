@@ -29,8 +29,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Run unit tests
-        run: gradle :app:testDebugUnitTest
+      - name: Run unit tests and compile debug APK
+        run: gradle :app:testDebugUnitTest :app:assembleDebug
       - name: Decode persistent release keystore
         if: ${{ env.THUNBUDGET_SIGNING_KEY != '' }}
         env:
