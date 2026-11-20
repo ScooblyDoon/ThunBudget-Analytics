@@ -2646,7 +2646,7 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
     val matchedCategory = if (isIncome) null else findVoiceCategory(normalized, categories) ?: return null
 
     return VoiceExpenseDraft(
-        title = if (isIncome) "Голосовой доход" else extractVoiceExpenseTitle(phrase, matchedCategory!!.name),
+        title = if (isIncome) "Голосовой доход" else extractVoiceExpenseTitle(spoken, matchedCategory!!.name),
         category = if (isIncome) "Доход" else matchedCategory!!.name,
         amount = amount, date = date.toString(), isIncome = isIncome, isEdit = isEdit
     )
