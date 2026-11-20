@@ -115,6 +115,11 @@ internal fun formatDateDigits(input: String): String {
     }
 }
 
+internal fun voiceDateDigits(isoDate: String): String {
+    val date = runCatching { LocalDate.parse(isoDate) }.getOrNull() ?: return ""
+    return date.format(java.time.format.DateTimeFormatter.ofPattern("ddMMyyyy"))
+}
+
 internal fun parseUserDate(input: String): LocalDate? {
     val digits = input.filter(Char::isDigit)
     if (digits.length != 8) return null
