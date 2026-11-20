@@ -163,7 +163,7 @@ object AssistantLocalParser {
                 AssistantIntent.ADD_EXPENSE,
                 amount = amount,
                 category = category,
-                title = category,
+                title = extractExpenseTitle(phrase, category),
                 date = date.toString(),
                 confidence = if (amount != null && category != null) 0.92 else 0.72,
                 missingFields = buildList {
@@ -176,6 +176,15 @@ object AssistantLocalParser {
         return null
     }
 
+    private fun extractExpenseTitle(phrase: String, category: String?): String {
+        var title = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+        val categoryText = category?.lowercase(Locale("ru", "RU"))?.replace('ё', 'е')
+        if (!categoryText.isNullOrBlank()) title = title.replace(categoryText, " ")
+        title = title.replace(Regex("[0-9][0-9\\s.,]*"), " ")
+            .replace(Regex("\\b(введи|введите|добавь|добавить|запиши|записать|расход|трату|потратил|потратила|внеси|внести|купил|купила|оплатил|оплатила|на|в|по|рубль|рубля|рублей|руб|р)\\b"), " ")
+            .replace(Regex("\\s+"), " ").trim()
+        return title.takeIf { it.length >= 2 }?.replaceFirstChar { it.titlecase(Locale("ru", "RU")) } ?: category ?: "Расход"
+    }
     private fun command(
         intent: AssistantIntent,
         amount: Double? = null,
