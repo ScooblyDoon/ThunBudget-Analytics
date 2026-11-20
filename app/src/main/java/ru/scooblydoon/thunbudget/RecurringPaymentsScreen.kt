@@ -29,69 +29,76 @@ internal fun RecurringPaymentsScreen(
     val today = LocalDate.now()
     val month = YearMonth.from(today)
     val pending = payments.filter { it.active && it.dueDate(month) <= today && !it.isCompleted(month) }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(16.dp)) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Регулярные платежи", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Подтверждай оплату — только тогда она попадёт в историю расходов.", style = MaterialTheme.typography.bodySmall)
-                }
-                Button(onClick = { showAdd = true }) { Text("+ Добавить") }
+
+    // Keep the title and Add action outside the scrolling list so they remain
+    // visible regardless of how many recurring payments have been created.
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Регулярные платежи", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Подтверждай оплату — только тогда она попадёт в историю расходов.", style = MaterialTheme.typography.bodySmall)
             }
+            Button(onClick = { showAdd = true }) { Text("+ Добавить") }
         }
-        if (pending.isNotEmpty()) item { Text("Ожидают подтверждения", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        items(pending, key = { "pending-" + it.id }) { payment ->
-            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(payment.title, fontWeight = FontWeight.SemiBold)
-                            Text("${payment.category} · срок ${payment.dueDate(month)}", style = MaterialTheme.typography.bodySmall)
+
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
+        ) {
+            if (pending.isNotEmpty()) {
+                item { Text("Ожидают подтверждения", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                items(pending, key = { "pending-" + it.id }) { payment ->
+                    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(payment.title, fontWeight = FontWeight.SemiBold)
+                                    Text("${payment.category} · срок ${payment.dueDate(month)}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                Text("${payment.amount.toLong()} ₽", fontWeight = FontWeight.Bold)
+                            }
+                            Button(onClick = { onConfirm(payment) }, modifier = Modifier.fillMaxWidth()) { Text("Подтвердить оплату и внести в расходы") }
                         }
-                        Text("${payment.amount.toLong()} ₽", fontWeight = FontWeight.Bold)
                     }
-                    Button(onClick = { onConfirm(payment) }, modifier = Modifier.fillMaxWidth()) { Text("Подтвердить оплату и внести в расходы") }
                 }
             }
-        }
-        item { Text("Все платежи", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        items(payments, key = { it.id }) { payment ->
-            Card(shape = RoundedCornerShape(16.dp)) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(payment.title, fontWeight = FontWeight.SemiBold)
-                        Text("${payment.amount.toLong()} ₽ · ${payment.category} · ${payment.dayOfMonth}-е число каждого месяца", style = MaterialTheme.typography.bodySmall)
-                        Text(if (payment.active) "Активен" else "Приостановлен", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    TextButton(onClick = { onToggle(payment) }) { Text(if (payment.active) "Пауза" else "Включить") }
-                    TextButton(onClick = { onDelete(payment) }) { Text("Удалить") }
-                }
-            }
-        }
-        if (payments.isEmpty()) item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        "Пока нет регулярных платежей. Добавь, например, аренду, интернет или подписку.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Button(
-                        onClick = { showAdd = true },
-                        modifier = Modifier.fillMaxWidth()
+            item { Text("Все платежи", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+            if (payments.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        Text("+ Добавить регулярный платёж")
+                        Text(
+                            "Пока нет регулярных платежей. Нажми «+ Добавить», чтобы создать первый платёж.",
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            } else {
+                items(payments, key = { it.id }) { payment ->
+                    Card(shape = RoundedCornerShape(16.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(payment.title, fontWeight = FontWeight.SemiBold)
+                                Text("${payment.amount.toLong()} ₽ · ${payment.category} · ${payment.dayOfMonth}-е число каждого месяца", style = MaterialTheme.typography.bodySmall)
+                                Text(if (payment.active) "Активен" else "Приостановлен", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { onToggle(payment) }) { Text(if (payment.active) "Пауза" else "Включить") }
+                            TextButton(onClick = { onDelete(payment) }) { Text("Удалить") }
+                        }
                     }
                 }
             }
         }
     }
+
     if (showAdd) {
         var title by remember { mutableStateOf("") }
         var amount by remember { mutableStateOf("") }
