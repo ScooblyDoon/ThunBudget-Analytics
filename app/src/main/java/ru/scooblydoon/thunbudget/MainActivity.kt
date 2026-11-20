@@ -1328,14 +1328,18 @@ private fun ThunBudgetApp() {
                         recurringPayments = recurringPayments + payment; store.saveRecurringPayments(recurringPayments)
                         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     },
+                    onUpdate = { payment ->
+                        recurringPayments = recurringPayments.map { if (it.id == payment.id) payment else it }
+                        store.saveRecurringPayments(recurringPayments)
+                    },
                     onToggle = { payment -> recurringPayments = recurringPayments.map { if (it.id == payment.id) it.copy(active = !it.active) else it }; store.saveRecurringPayments(recurringPayments) },
                     onDelete = { payment -> recurringPayments = recurringPayments.filterNot { it.id == payment.id }; store.saveRecurringPayments(recurringPayments) },
-                    onConfirm = { payment ->
-                        val due = payment.dueDate(YearMonth.from(today))
+                    onConfirm = { payment, paymentMonth ->
+                        val due = payment.dueDate(paymentMonth)
                         store.prepareUndoSnapshot(); canUndo = true
                         expenses = (expenses + Expense(System.currentTimeMillis(), payment.title, payment.category, payment.amount, due.toString())).sortedByDescending { it.date }
                         store.saveExpenses(expenses)
-                        recurringPayments = recurringPayments.map { if (it.id == payment.id) it.copy(completedMonths = it.completedMonths + YearMonth.from(today).toString()) else it }
+                        recurringPayments = recurringPayments.map { if (it.id == payment.id) it.copy(completedMonths = it.completedMonths + paymentMonth.toString()) else it }
                         store.saveRecurringPayments(recurringPayments)
                     }
                     )
