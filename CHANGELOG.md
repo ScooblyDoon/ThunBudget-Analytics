@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.3.11
+- Fix allocation dialog initialization order so available expense history is prepared before suggestions are calculated.
 - Add a persistent collapse/expand toggle for the floating quick-action buttons (voice input, income, add expense).
 
 ## 1.3.10
