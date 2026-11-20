@@ -30,8 +30,10 @@ internal fun parseVoiceDate(phrase: String, today: LocalDate): LocalDate? {
         val day = wordDate.groupValues[1].toIntOrNull() ?: return null
         val monthWord = wordDate.groupValues[2]
         val month = months.firstOrNull { monthWord.startsWith(it.first) }?.second ?: return null
+        val explicitYear = wordDate.groupValues[3].isNotBlank()
         val year = wordDate.groupValues[3].toIntOrNull() ?: today.year
-        return runCatching { LocalDate.of(year, month, day) }.getOrNull()
+        val parsed = runCatching { LocalDate.of(year, month, day) }.getOrNull() ?: return null
+        return if (!explicitYear && parsed.isAfter(today)) parsed.minusYears(1) else parsed
     }
     return null
 }
@@ -74,6 +76,33 @@ internal fun findVoiceCategory(phrase: String, categories: List<BudgetCategory>)
         val score = matched.toDouble() / words.size
         if (score >= 0.75) category to score else null
     }.maxByOrNull { it.second }?.first
+}
+
+
+internal object DateDigitsVisualTransformation : androidx.compose.ui.text.input.VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
+        val digits = text.text.filter(Char::isDigit).take(8)
+        val display = buildString {
+            digits.forEachIndexed { index, char ->
+                if (index == 2 || index == 4) append('.')
+                append(char)
+            }
+        }
+        val offsetMapping = object : androidx.compose.ui.text.input.OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                val safe = offset.coerceIn(0, digits.length)
+                return safe + (if (safe > 4) 2 else if (safe > 2) 1 else 0)
+            }
+            override fun transformedToOriginal(offset: Int): Int {
+                val safe = offset.coerceIn(0, display.length)
+                return (safe - (if (safe > 5) 2 else if (safe > 2) 1 else 0)).coerceIn(0, digits.length)
+            }
+        }
+        return androidx.compose.ui.text.input.TransformedText(
+            androidx.compose.ui.text.AnnotatedString(display),
+            offsetMapping
+        )
+    }
 }
 
 internal fun formatDateDigits(input: String): String {
