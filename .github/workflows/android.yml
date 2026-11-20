@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [ "main", "feature/next-update-ux", "feature/charts-icon-ai-foundation-2026-11-19", "feature/assistant-intent-v1-2026-11-19", "feature/home-screen-widget-v1-2026-11-19", "feature/reliability-voice-analytics-v2-2026-11-19", "feature/widget-2x2-2026-11-19", "feature/major-update-1.1.0-1.2.0-2026-11-19", "feature/tbank-notification-import-2026-11-19", "feature/backup-cloud-retention-2026-11-20", "feature/next-update-voice-history-2026-11-20", "feature/fix-voice-dates-history-2026-11-20" ]
+    branches: [ "main", "feature/next-update-ux", "feature/charts-icon-ai-foundation-2026-11-19", "feature/assistant-intent-v1-2026-11-19", "feature/home-screen-widget-v1-2026-11-19", "feature/reliability-voice-analytics-v2-2026-11-19", "feature/widget-2x2-2026-11-19", "feature/major-update-1.1.0-1.2.0-2026-11-19", "feature/tbank-notification-import-2026-11-19", "feature/backup-cloud-retention-2026-11-20", "feature/next-update-voice-history-2026-11-20", "feature/fix-voice-dates-history-2026-11-20", "fix/voice-natural-phrases-date-field-2026-11-20" ]
   workflow_dispatch:
 
 concurrency:
