@@ -8,7 +8,7 @@ android {
     namespace = "ru.scooblydoon.thunbudget"
     compileSdk = 35
     // Release artifact: ThunBudget Analytics 1.3.18 (versionCode 31) [final-apk].
-// Build includes exact manual allocation restore fix.
+// Includes manual allocation restore and persistent Add button for recurring payments. [final-apk]
 
     defaultConfig {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
