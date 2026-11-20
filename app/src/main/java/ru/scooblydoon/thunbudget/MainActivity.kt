@@ -147,6 +147,21 @@ internal class BudgetStore(context: Context) {
             val a = JSONArray(raw); (0 until a.length()).map { val o=a.getJSONObject(it); BudgetCategory(o.getString("name"),o.getDouble("percent")) }
         }.getOrDefault(emptyList())
     }
+    fun loadAutoAllocationEnabled(): Boolean = prefs.getBoolean("analytics_auto_allocation", false)
+    fun saveAutoAllocationEnabled(enabled: Boolean) { prefs.edit().putBoolean("analytics_auto_allocation", enabled).commit() }
+    fun loadManualAllocationSnapshot(): List<BudgetCategory>? = runCatching {
+        val raw = prefs.getString("analytics_manual_allocation_snapshot", null) ?: return null
+        val array = JSONArray(raw)
+        (0 until array.length()).map { index ->
+            val row = array.getJSONObject(index)
+            BudgetCategory(row.getString("name"), row.getDouble("percent"))
+        }
+    }.getOrNull()
+    fun saveManualAllocationSnapshot(items: List<BudgetCategory>) {
+        val array = JSONArray()
+        items.forEach { array.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+        check(prefs.edit().putString("analytics_manual_allocation_snapshot", array.toString()).commit())
+    }
     fun saveCategories(items: List<BudgetCategory>) {
         val normalizedPairs = BudgetAllocationCalculator.withReserve(items.map { it.name to it.percent })
         val normalized = normalizedPairs.map { BudgetCategory(it.first, it.second) }
@@ -499,6 +514,8 @@ private fun ThunBudgetApp() {
     var showAllocationDialog by remember { mutableStateOf(false) }
     var showDynamicAllocationDialog by remember { mutableStateOf(false) }
     var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
+    var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
+    var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
@@ -552,6 +569,20 @@ private fun ThunBudgetApp() {
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
 
+    LaunchedEffect(autoAllocationEnabled, expenses, periodStart, periodEnd, income, periodIncomes, manualAllocationSnapshot) {
+        if (autoAllocationEnabled) {
+            val actuals = expenses.filter { it.date >= periodStart && it.date <= periodEnd }
+                .groupBy { it.category }.mapValues { (_, rows) -> rows.sumOf { it.amount } }
+            val proposal = AnalyticsBudgetCalculator.dynamicProposal(
+                manualAllocationSnapshot.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }.map { it.name to it.percent },
+                actuals
+            )
+            val updatedRegular = manualAllocationSnapshot.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
+                .map { category -> category.copy(percent = proposal.percentages[category.name] ?: category.percent) }
+            val updated = BudgetAllocationCalculator.withReserve(updatedRegular.map { it.name to it.percent }).map { BudgetCategory(it.first, it.second) }
+            if (updated != categories) { categories = updated; store.saveCategories(updated) }
+        }
+    }
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
         if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
@@ -1014,6 +1045,26 @@ private fun ThunBudgetApp() {
                         val currentEnd = LocalDate.parse(periodEnd)
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
+                    }
+                    item {
+                        Card {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment=Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Автоматическое распределение", fontWeight=FontWeight.SemiBold)
+                                        Text("Доли обновляются по фактическим расходам выбранного периода.", style=MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked=autoAllocationEnabled, onCheckedChange={ enabled ->
+                                        if (enabled) { manualAllocationSnapshot = categories; store.saveManualAllocationSnapshot(categories) }
+                                        autoAllocationEnabled = enabled; store.saveAutoAllocationEnabled(enabled)
+                                    })
+                                }
+                                if (autoAllocationEnabled) TextButton(onClick={
+                                    categories = manualAllocationSnapshot; store.saveCategories(categories)
+                                    autoAllocationEnabled = false; store.saveAutoAllocationEnabled(false)
+                                }) { Text("Отменить автоперерасчёт и вернуть ручные доли") }
+                            }
+                        }
                     }
                     item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; val selectedMonthIncome=AnalyticsBudgetCalculator.monthlyIncome(income,periodIncomes,analyticsMonth,analyticsIncomeMode==1); Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(selectedMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(selectedMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
