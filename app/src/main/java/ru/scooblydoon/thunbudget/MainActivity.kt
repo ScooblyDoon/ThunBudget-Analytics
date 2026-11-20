@@ -503,7 +503,6 @@ private fun ThunBudgetApp() {
     // A standard-width Pixel keeps the existing floating-action layout.
     val compactLayout = configuration.screenWidthDp < 400 ||
         configuration.screenHeightDp < 700 || density.fontScale >= 1.12f
-    val navLabelStyle = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
     val store= remember { BudgetStore(context) }
     var income by remember { mutableDoubleStateOf(store.loadIncome()) }
     var savingsGoal by remember { mutableDoubleStateOf(store.loadSavingsGoal()) }
@@ -996,6 +995,7 @@ private fun ThunBudgetApp() {
             extraLarge = RoundedCornerShape(30.dp)
         )
     ) {
+        val navLabelStyle = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar={ TopAppBar(
