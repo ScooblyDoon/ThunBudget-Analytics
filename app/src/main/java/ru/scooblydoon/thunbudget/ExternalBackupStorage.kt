@@ -15,12 +15,12 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
 /**
- * Writes immutable, timestamped JSON snapshots to a user-selected SAF folder.
- * A failed write is removed so incomplete files are never presented as backups.
+ * Writes verified JSON snapshots to a user-selected document folder.
+ * Keeps only the newest snapshot for each day and at most seven days of history.
  */
 internal object ExternalBackupStorage {
     private const val FILE_PREFIX = "ThunBudget-auto-"
-    private const val KEEP_FILES = 30
+    private const val KEEP_FILES = 7
 
     fun save(context: Context, treeUri: Uri, json: String) {
         val resolver = context.contentResolver
@@ -78,8 +78,17 @@ internal object ExternalBackupStorage {
             }
         } ?: return
 
-        rows.sortedWith(compareByDescending<Triple<Long, String, Uri>> { it.first }.thenByDescending { it.second })
-            .drop(KEEP_FILES).forEach { (_, _, uri) -> runCatching { DocumentsContract.deleteDocument(resolver, uri) } }
+        // Keep only the newest copy from each calendar day, then retain the latest seven days.
+        // Existing timestamped copies from older app versions are deduplicated by their YYYYMMDD prefix.
+        val newestPerDay = rows
+            .sortedWith(compareByDescending<Triple<Long, String, Uri>> { it.first }.thenByDescending { it.second })
+            .distinctBy { row ->
+                Regex("""^ThunBudget-auto-(\\d{8})-.*\\.json$""")
+                    .find(row.second)?.groupValues?.get(1) ?: row.second
+            }
+        newestPerDay.drop(KEEP_FILES).forEach { (_, _, uri) ->
+            runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+        }
     }
 }
 
@@ -120,7 +129,9 @@ internal object ExternalBackupSettings {
     private const val WORK_NAME = "thunbudget_external_backup"
 
     fun schedule(context: Context) {
+        // Debounce bursts of edits: only the final state is uploaded after ten quiet minutes.
         val request = OneTimeWorkRequestBuilder<ExternalBackupWorker>()
+            .setInitialDelay(10, TimeUnit.MINUTES)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
