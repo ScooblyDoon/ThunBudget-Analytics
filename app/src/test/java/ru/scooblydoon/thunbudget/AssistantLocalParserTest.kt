@@ -80,6 +80,24 @@ class AssistantLocalParserTest {
         assertEquals("2026-11-05", command?.date)
     }
 
+    @Test fun parsesNaturalExpenseWithInesiCategoryAndSpokenDate() {
+        val command = AssistantLocalParser.parse(
+            "Внеси 500 рублей в транспорт за 15 ноября",
+            categories,
+            today
+        )
+        assertEquals(AssistantIntent.ADD_EXPENSE, command?.intent)
+        assertEquals(500.0, command?.amount ?: 0.0, 0.001)
+        assertEquals("Транспорт", command?.category)
+        assertEquals("2026-11-15", command?.date)
+    }
+
+    @Test fun defaultsExpenseDateToTodayWhenNoDateIsSpoken() {
+        val command = AssistantLocalParser.parse("Внеси 500 рублей в транспорт", categories, today)
+        assertEquals(AssistantIntent.ADD_EXPENSE, command?.intent)
+        assertEquals("2026-11-19", command?.date)
+    }
+
     @Test fun unknownPhraseDoesNotProduceCommand() {
         assertNull(AssistantLocalParser.parse("Расскажи анекдот", categories, today))
     }
