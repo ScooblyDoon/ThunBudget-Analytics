@@ -2,6 +2,7 @@
 
 ## Added
 - Identify the calendar date with the highest total spending.
+- Regression test corrected to match the sample transaction dates and totals.
 - Identify the weekday with the highest total spending.
 - Rank categories by total spend, not only by transaction count.
 - Give local savings suggestions based on category budgets and actual expenses.
