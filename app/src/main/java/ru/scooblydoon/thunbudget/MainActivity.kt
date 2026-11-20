@@ -148,8 +148,10 @@ internal class BudgetStore(context: Context) {
         }.getOrDefault(emptyList())
     }
     fun saveCategories(items: List<BudgetCategory>) {
-        val a=JSONArray(); items.forEach { a.put(JSONObject().put("name",it.name).put("percent",it.percent)) }
-        prefs.edit().putString("categories",a.toString()).commit()
+        val normalizedPairs = BudgetAllocationCalculator.withReserve(items.map { it.name to it.percent })
+        val normalized = normalizedPairs.map { BudgetCategory(it.first, it.second) }
+        val a=JSONArray(); normalized.forEach { a.put(JSONObject().put("name",it.name).put("percent",it.percent)) }
+        check(prefs.edit().putString("categories",a.toString()).commit()) { "Не удалось сохранить доли категорий." }
         saveAutomaticBackup()
     }
     fun loadRecurringPayments(): List<RecurringPayment> = RecurringPaymentStore(appContext).load()
@@ -735,7 +737,7 @@ private fun ThunBudgetApp() {
                     val newCategoryNames = fresh.map { it.category }.distinct().filterNot { name -> categories.any { it.name.equals(name, true) } }
                     if (newCategoryNames.isNotEmpty()) {
                         categories = categories + newCategoryNames.map { BudgetCategory(it, 0.0) }
-                        store.saveCategories(categories)
+                        store.saveCategories(categories); categories=store.loadCategories()
                     }
                     expenses = (expenses + fresh).distinctBy { it.id }.sortedByDescending { it.date }
                     store.saveExpenses(expenses)
