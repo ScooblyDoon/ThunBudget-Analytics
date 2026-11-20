@@ -106,6 +106,37 @@ class AssistantLocalParserTest {
         assertEquals("2026-11-19", command?.date)
     }
 
+    @Test fun parsesMostFrequentCategoryQuery() {
+        val command = AssistantLocalParser.parse("Какая самая частая категория затрат за год?", categories, today)
+        assertEquals(AssistantIntent.QUERY_TOP_CATEGORY_FREQUENCY, command?.intent)
+        assertEquals("2026-01-01", command?.periodStart)
+        assertEquals("2026-11-19", command?.periodEnd)
+    }
+
+    @Test fun parsesMostFrequentExpenseTitleQuery() {
+        val command = AssistantLocalParser.parse("Какое название расхода встречается чаще всего?", categories, today)
+        assertEquals(AssistantIntent.QUERY_TOP_TITLE_FREQUENCY, command?.intent)
+    }
+
+    @Test fun parsesLargestAndSmallestExpenseQueries() {
+        assertEquals(AssistantIntent.QUERY_MAX_EXPENSE, AssistantLocalParser.parse("Покажи самый большой расход", categories, today)?.intent)
+        assertEquals(AssistantIntent.QUERY_MIN_EXPENSE, AssistantLocalParser.parse("Найди самый маленький расход", categories, today)?.intent)
+    }
+
+    @Test fun parsesAverageCategorySpendForQuarter() {
+        val command = AssistantLocalParser.parse("Покажи средний расход на продукты за квартал", categories, today)
+        assertEquals(AssistantIntent.QUERY_AVERAGE_SPENDING, command?.intent)
+        assertEquals("Продукты", command?.category)
+        assertEquals("2026-10-01", command?.periodStart)
+        assertEquals("2026-11-19", command?.periodEnd)
+    }
+
+    @Test fun parsesCategoryChartRequest() {
+        val command = AssistantLocalParser.parse("Построй график расходов по продуктам за месяц", categories, today)
+        assertEquals(AssistantIntent.QUERY_CHART, command?.intent)
+        assertEquals("Продукты", command?.category)
+    }
+
     @Test fun unknownPhraseDoesNotProduceCommand() {
         assertNull(AssistantLocalParser.parse("Расскажи анекдот", categories, today))
     }
