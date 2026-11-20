@@ -7,6 +7,7 @@
 - Add assistant spending charts by category and monthly trend.
 - Add a discoverable “Что я могу сказать?” help response with command examples.
 - Add tests for analytics queries, calculations, charts, and spoken date formatting.
+- Expand phrase recognition for questions about the most frequent expense title.
 
 ## 1.3.11
 - Fix the empty-history date window and align allocation tests with the adaptive completed-month history rules.
