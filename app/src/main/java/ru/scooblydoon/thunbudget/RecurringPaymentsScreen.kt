@@ -48,7 +48,7 @@ internal fun RecurringPaymentsScreen(
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp)
         ) {
             if (pending.isNotEmpty()) {
                 item { Text("Ожидают подтверждения", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
@@ -99,10 +99,12 @@ internal fun RecurringPaymentsScreen(
             }
         }
       }
-      FloatingActionButton(
+      ExtendedFloatingActionButton(
           onClick = { showAdd = true },
-          modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp)
-      ) { Text("+", style = MaterialTheme.typography.headlineMedium) }
+          modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 16.dp),
+          icon = { Text("+", style = MaterialTheme.typography.headlineMedium) },
+          text = { Text("Добавить плановый расход") }
+      )
     }
 
     if (showAdd) {
