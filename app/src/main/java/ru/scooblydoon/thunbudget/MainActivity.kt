@@ -1,6 +1,7 @@
 package ru.scooblydoon.thunbudget
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -340,6 +341,17 @@ internal class BudgetStore(context: Context) {
             categoryPercentTotal += percent
         }
         require(categoryPercentTotal <= 100.0)
+        val recurringPayments = JSONArray(data.optString("recurring_payments_v1", "[]"))
+        val recurringIds = mutableSetOf<String>()
+        for (i in 0 until recurringPayments.length()) {
+            val row = recurringPayments.getJSONObject(i)
+            require(row.getString("id").isNotBlank() && recurringIds.add(row.getString("id")))
+            require(row.getString("title").isNotBlank() && row.getString("category").isNotBlank())
+            require(row.getDouble("amount").isFinite() && row.getDouble("amount") > 0.0)
+            require(row.getInt("dayOfMonth") in 1..31)
+            val completed = row.optJSONArray("completedMonths") ?: JSONArray()
+            for (j in 0 until completed.length()) require(runCatching { YearMonth.parse(completed.getString(j)) }.isSuccess)
+        }
         val periodIncomes = JSONArray(data.optString("period_incomes", "[]"))
         for (i in 0 until periodIncomes.length()) {
             val row = periodIncomes.getJSONObject(i)
@@ -482,7 +494,7 @@ private fun ThunBudgetApp() {
     var showCategoryManager by remember { mutableStateOf(false) }
     var showAllocationDialog by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
-    var tab by remember { mutableIntStateOf(0) }
+    var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
     var showPeriodCategories by rememberUiExpanded(context, "period_categories")
     var showYearCategories by rememberUiExpanded(context, "year_categories")
@@ -655,6 +667,8 @@ private fun ThunBudgetApp() {
         }
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     val voicePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) {
             voiceMessage = "Для голосового ввода необходимо разрешить доступ к микрофону."
@@ -810,7 +824,7 @@ private fun ThunBudgetApp() {
                 title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } },
                 actions={ Row(verticalAlignment=Alignment.CenterVertically) { TextButton(onClick={showAssistantDialog=true}) { Text("Помощник") }; TextButton(onClick={showSettings=true}) { Text("Настройки") } } }
             ) },
-            floatingActionButton={ if(tab != 2) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+            floatingActionButton={ if(tab != 2 && tab != 5) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
                 SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
                     Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
                 }
@@ -1069,7 +1083,10 @@ private fun ThunBudgetApp() {
                 5 -> RecurringPaymentsScreen(
                     payments = recurringPayments,
                     categories = categories,
-                    onAdd = { payment -> recurringPayments = recurringPayments + payment; store.saveRecurringPayments(recurringPayments) },
+                    onAdd = { payment ->
+                        recurringPayments = recurringPayments + payment; store.saveRecurringPayments(recurringPayments)
+                        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    },
                     onToggle = { payment -> recurringPayments = recurringPayments.map { if (it.id == payment.id) it.copy(active = !it.active) else it }; store.saveRecurringPayments(recurringPayments) },
                     onDelete = { payment -> recurringPayments = recurringPayments.filterNot { it.id == payment.id }; store.saveRecurringPayments(recurringPayments) },
                     onConfirm = { payment ->
@@ -1539,7 +1556,7 @@ private fun ThunBudgetApp() {
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
-            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries()
+            expenses=store.loadExpenses(); recurringPayments=store.loadRecurringPayments(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1; backupMessage="Автоматическая резервная копия восстановлена."
         } else backupMessage="Не удалось восстановить автоматическую копию."
