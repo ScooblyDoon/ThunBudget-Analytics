@@ -1065,6 +1065,7 @@ private fun ThunBudgetApp() {
                                         autoAllocationEnabled = enabled
                                         store.saveAutoAllocationEnabled(enabled)
                                     })
+                                }
                             }
                         }
                     }
