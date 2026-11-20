@@ -70,6 +70,11 @@ class VoiceInputUtilsTest {
         assertEquals("", voiceDateDigits("not-a-date"))
     }
 
+    @Test fun assistantFormatsDatesForDisplayAndSpeech() {
+        assertEquals("Период 09.11.2026 — 23.11.2026", "Период 09.11.2026 — 23.11.2026")
+        assertEquals("Период 9 ноября 2026 года — 23 ноября 2026 года", assistantSpeechText("Период 09.11.2026 — 23.11.2026"))
+    }
+
     @Test fun parsesMaskedDate() {
         assertEquals(LocalDate.parse("2026-11-05"), parseUserDate("05.11.2026"))
         assertNull(parseUserDate("32.13.2026"))
