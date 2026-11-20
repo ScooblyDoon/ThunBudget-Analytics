@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.5
+- Removed the T-Bank notification listener, transaction queue, and related Settings controls.
+- Improved offline voice amount parsing, including decimal values and kopecks.
+- Improved voice category matching to tolerate minor recognition errors and Russian word inflections.
+- Added voice date recognition for today, yesterday, the day before yesterday, numeric dates, and dates with month names.
+- Standardized date entry to DD.MM.YYYY with digits-only input and automatic separators across expenses, history filters, and reporting-period settings.
+- Added a month filter to operation history; month, category, text, amount, and date filters can be combined.
+- Moved the light/dark theme switch to the bottom of the main screen.
+- Made the expense-structure chart adapt to narrow screens.
+- Added a full data reset action in Settings with a red button and explicit confirmation.
+- Kept data local and preserved the existing budget layout.
+
+# Changelog
+
 ## 1.3.1
 - Release build: versionCode 14, versionName 1.3.1.
 - Reorganized Settings into separate sections for income and savings, planning period, categories, Excel export, backups, T-Bank import, and appearance.
