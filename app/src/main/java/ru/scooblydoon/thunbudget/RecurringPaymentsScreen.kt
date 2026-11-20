@@ -437,7 +437,7 @@ private fun RecurringPaymentDetailsDialog(
 ) {
     val today = LocalDate.now()
     val dueDate = payment.dueDate(month)
-    val canConfirm = payment.active && !dueDate.isAfter(today) && !payment.isCompleted(month)
+    val canConfirm = payment.canConfirm(month, today)
     val status = when {
         payment.isCompleted(month) -> "Оплачен за этот месяц"
         !payment.active -> "Приостановлен"
