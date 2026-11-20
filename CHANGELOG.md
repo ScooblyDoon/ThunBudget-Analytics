@@ -142,3 +142,4 @@
 - Adjusted overview scroll padding to match the new docked layout.
 
 - Preserved the existing dashboard calculations and visual theme.
+- Compact mode is activated automatically on narrower screens, short layouts, or enlarged system text; standard-width phones keep their existing floating controls.
