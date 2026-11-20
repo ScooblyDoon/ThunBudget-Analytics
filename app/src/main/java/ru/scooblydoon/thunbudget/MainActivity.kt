@@ -1838,8 +1838,8 @@ private fun SettingsDialog(
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
     var sourceNames by remember { mutableStateOf(categories.map { it.name }) }
-    var from by remember { mutableStateOf(start) }
-    var to by remember { mutableStateOf(end) }
+    var from by remember { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
+    var to by remember { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
     var section by rememberSaveable { mutableStateOf("income") }
     val sections = listOf(
         "income" to "Доход",
@@ -1851,7 +1851,9 @@ private fun SettingsDialog(
     )
     val validIncome = inc.replace(',','.').toDoubleOrNull()
     val validSavings = sav.replace(',','.').toDoubleOrNull()
-    val validDates = runCatching { LocalDate.parse(from); LocalDate.parse(to); !LocalDate.parse(to).isBefore(LocalDate.parse(from)) }.getOrDefault(false)
+    val parsedFrom = parseUserDate(from)
+    val parsedTo = parseUserDate(to)
+    val validDates = parsedFrom != null && parsedTo != null && !parsedTo.isBefore(parsedFrom)
     val validCategories = cats.isNotEmpty() && cats.all { it.name.isNotBlank() && it.percent.isFinite() && it.percent >= 0.0 } &&
         cats.map { it.name.trim().lowercase() }.distinct().size == cats.size && cats.sumOf { it.percent } <= 100.0
     AlertDialog(
@@ -1874,8 +1876,8 @@ private fun SettingsDialog(
                     }
                     "period" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Период планирования",fontWeight=FontWeight.Bold)
-                        OutlinedTextField(from,{from=it},label={Text("Начало (ГГГГ-ММ-ДД)")},singleLine=true,modifier=Modifier.fillMaxWidth())
-                        OutlinedTextField(to,{to=it},label={Text("Окончание (ГГГГ-ММ-ДД)")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                        OutlinedTextField(from,{from=formatDateDigits(it)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
+                        OutlinedTextField(to,{to=formatDateDigits(it)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
                         if(!validDates) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
                     }
                     "categories" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=440.dp)) {
@@ -1930,7 +1932,7 @@ private fun SettingsDialog(
                     if(validIncome!=null && validIncome.isFinite() && validIncome>0 &&
                         validSavings!=null && validSavings.isFinite() && validSavings in 0.0..100.0 &&
                         validCategories && validDates) {
-                        onSave(validIncome,validSavings,cats.map{it.copy(name=it.name.trim())},from,to,
+                        onSave(validIncome,validSavings,cats.map{it.copy(name=it.name.trim())},parsedFrom!!.toString(),parsedTo!!.toString(),
                             sourceNames.zip(cats).filter{it.first.isNotBlank()}.associate{it.first to it.second.name.trim()})
                     }
                 },
@@ -1945,17 +1947,19 @@ private fun SettingsDialog(
 
 @Composable
 private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave:(String,String)->Unit) {
-    var from by remember(start) { mutableStateOf(start) }
-    var to by remember(end) { mutableStateOf(end) }
-    val valid=runCatching { !LocalDate.parse(to).isBefore(LocalDate.parse(from)) }.getOrDefault(false)
+    var from by remember(start) { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
+    var to by remember(end) { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
+    val parsedFrom = parseUserDate(from)
+    val parsedTo = parseUserDate(to)
+    val valid = parsedFrom != null && parsedTo != null && !parsedTo.isBefore(parsedFrom)
     AlertDialog(onDismissRequest=onDismiss,title={Text("Отчётный период")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text("Укажи любые даты. Например, с 1-го по 14-е число или с 1-го по конец месяца.")
-            OutlinedTextField(from,{from=it},label={Text("Начало (ГГГГ-ММ-ДД)")},singleLine=true)
-            OutlinedTextField(to,{to=it},label={Text("Окончание (ГГГГ-ММ-ДД)")},singleLine=true)
+            OutlinedTextField(from,{from=formatDateDigits(it)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+            OutlinedTextField(to,{to=formatDateDigits(it)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
             if(!valid) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
         }
-    },confirmButton={TextButton(onClick={if(valid) onSave(from,to)},enabled=valid){Text("Применить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+    },confirmButton={TextButton(onClick={if(valid) onSave(parsedFrom!!.toString(),parsedTo!!.toString())},enabled=valid){Text("Применить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 @Composable
@@ -2037,7 +2041,7 @@ private fun ExpenseEditDialog(
                     OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
                     ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { categories.forEach { DropdownMenuItem(text={Text(it.name)},onClick={category=it.name;expanded=false}) } }
                 }
-                OutlinedTextField(date,{date=it},label={Text("Дата (ГГГГ-ММ-ДД)")},singleLine=true)
+                OutlinedTextField(date,{date=formatDateDigits(it)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
             }
         },
         confirmButton={
@@ -2045,7 +2049,7 @@ private fun ExpenseEditDialog(
                 val v=amount.replace(',','.').toDoubleOrNull()
                 if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null)
                     onSave(expense.copy(title=title,category=category,amount=v,date=parseUserDate(date)!!.toString()))
-            },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0) { Text("Сохранить") }
+            },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0 && parseUserDate(date)!=null) { Text("Сохранить") }
         },
         dismissButton={
             Row {
