@@ -123,7 +123,11 @@ object AssistantLocalParser {
 
         val hasExpenseVerb = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход", "внеси", "внести", "купил", "купила", "оплатил", "оплатила")
             .any { normalized.contains(it) }
-        if (hasExpenseVerb) {
+        // Offline speech recognition can omit the command verb entirely while retaining
+        // the amount and category (e.g. "500 руб продукты 17 ноября"). Treat that
+        // unambiguous amount + known category combination as an expense request.
+        val hasRecognizedExpensePayload = amount != null && category != null && !isIncome
+        if (hasExpenseVerb || hasRecognizedExpensePayload) {
             return command(
                 AssistantIntent.ADD_EXPENSE,
                 amount = amount,
