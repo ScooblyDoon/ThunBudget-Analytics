@@ -21,10 +21,7 @@ object AssistantLocalParser {
             .trim()
         if (normalized.isBlank()) return null
 
-        val category = findVoiceCategory(
-            phrase,
-            availableCategories.map { BudgetCategory(it, 0.0) }
-        )?.name
+        val category = resolveCategory(phrase, availableCategories)?.name
 
         val parsedDate = parseVoiceDate(phrase, today)
         val mentionsYesterday = Regex("""\b(вчера|за вчера)\b""").containsMatchIn(normalized)
@@ -145,7 +142,7 @@ object AssistantLocalParser {
             )
         }
 
-        if (category != null && listOf("сколько потратил", "сколько я потратил", "сколько потратила", "сколько я потратила", "расходы", "потрачено").any { normalized.contains(it) }) {
+        if (category != null && listOf("сколько потратил", "сколько я потратил", "сколько потратила", "сколько я потратила", "сколько ушло", "сколько денег ушло", "расходы", "потрачено").any { normalized.contains(it) }) {
             return command(
                 AssistantIntent.QUERY_CATEGORY_SPENDING,
                 category = category,
@@ -155,7 +152,7 @@ object AssistantLocalParser {
             )
         }
 
-        if (listOf("сколько потратил", "сколько я потратил", "сколько потратила", "сколько я потратила", "общие расходы", "сумма расходов", "потрачено", "покажи расходы", "все расходы", "расходы за").any { normalized.contains(it) }) {
+        if (listOf("сколько потратил", "сколько я потратил", "сколько потратила", "сколько я потратила", "сколько ушло", "сколько денег ушло", "общие расходы", "сумма расходов", "потрачено", "покажи расходы", "все расходы", "расходы за").any { normalized.contains(it) }) {
             return command(
                 AssistantIntent.QUERY_SPENDING,
                 periodStart = periodStart,
@@ -201,6 +198,28 @@ object AssistantLocalParser {
         }
 
         return null
+    }
+
+    private fun resolveCategory(phrase: String, availableCategories: List<String>): BudgetCategory? {
+        val categories = availableCategories.map { BudgetCategory(it, 0.0) }
+        findVoiceCategory(phrase, categories)?.let { return it }
+        val normalized = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+        val aliases = mapOf(
+            "транспорт" to listOf("такси", "автобус", "метро", "проезд", "бензин", "заправка", "парковка", "электричка"),
+            "продукт" to listOf("еда", "магазин", "супермаркет", "пятерочка", "магнит", "перекресток"),
+            "кафе" to listOf("ресторан", "кофе", "доставка еды", "фастфуд", "столовая"),
+            "жиль" to listOf("коммуналка", "жкх", "аренда", "ипотека", "квартплата", "свет", "вода"),
+            "здоров" to listOf("аптека", "лекарства", "врач", "поликлиника", "анализы"),
+            "покуп" to listOf("одежда", "обувь", "маркетплейс", "озон", "вайлдберриз")
+        )
+        return categories.firstOrNull { category ->
+            val name = category.name.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+            aliases.any { (categoryStem, words) ->
+                name.contains(categoryStem) && words.any { alias ->
+                    Regex("""(?<![а-яa-z])${Regex.escape(alias)}(?![а-яa-z])""").containsMatchIn(normalized)
+                }
+            }
+        }
     }
 
     private fun extractExpenseTitle(phrase: String, category: String?): String {
