@@ -97,4 +97,21 @@ class RecurringPaymentTest {
         assertFalse(payment.isCompleted(YearMonth.of(2026, 11)))
         assertTrue(payment.copy(completedMonths=setOf("2026-11")).isCompleted(YearMonth.of(2026, 11)))
     }
+
+    @Test fun confirmationIsEnabledOnlyForActiveUncompletedPaymentsDueBySelectedDate() {
+        val month = YearMonth.of(2026, 11)
+        val duePayment = RecurringPayment(title="Интернет", amount=500.0, category="Связь", dayOfMonth=10)
+        val notYetDue = RecurringPayment(title="Аренда", amount=1000.0, category="Жильё", dayOfMonth=25)
+        assertTrue(duePayment.canConfirm(month, LocalDate.of(2026, 11, 20)))
+        assertFalse(notYetDue.canConfirm(month, LocalDate.of(2026, 11, 20)))
+        assertFalse(duePayment.copy(active=false).canConfirm(month, LocalDate.of(2026, 11, 20)))
+        assertFalse(duePayment.copy(completedMonths=setOf("2026-11")).canConfirm(month, LocalDate.of(2026, 11, 20)))
+    }
+
+    @Test fun confirmationUsesTheSelectedHistoricalMonth() {
+        val payment = RecurringPayment(title="Интернет", amount=500.0, category="Связь", dayOfMonth=31)
+        val february = YearMonth.of(2026, 2)
+        assertTrue(payment.canConfirm(february, LocalDate.of(2026, 3, 1)))
+        assertFalse(payment.copy(completedMonths=setOf("2026-02")).canConfirm(february, LocalDate.of(2026, 3, 1)))
+    }
 }
