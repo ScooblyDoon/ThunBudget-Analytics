@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "ru.scooblydoon.thunbudget"
     compileSdk = 35
+    // Release artifact: ThunBudget Analytics 1.3.14 (versionCode 27).
 
     defaultConfig {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
