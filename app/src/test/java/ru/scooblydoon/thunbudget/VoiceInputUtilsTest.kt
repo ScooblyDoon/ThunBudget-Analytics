@@ -35,7 +35,7 @@ class VoiceInputUtilsTest {
     }
 
     @Test fun parsesDateWithMonthName() {
-        assertEquals(LocalDate.parse("2026-11-05"), parseVoiceDate("пятого? 5 ноября", today))
+        assertEquals(LocalDate.parse("2026-11-05"), parseVoiceDate("за 5 ноября", today))
     }
 
     @Test fun rejectsInvalidDate() {
