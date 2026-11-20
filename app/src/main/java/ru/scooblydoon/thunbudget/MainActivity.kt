@@ -482,7 +482,7 @@ private fun ThunBudgetApp() {
     LaunchedEffect(voiceMessage, ttsReady) {
         val response = voiceMessage
         if (ttsReady && !response.isNullOrBlank()) {
-            speechOutput.speak(response, TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_response")
+            speechOutput.speak(assistantSpeechText(response), TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_response")
         }
     }
     DisposableEffect(speechOutput) {
@@ -1476,7 +1476,7 @@ private fun ThunBudgetApp() {
             confirmButton = {
                 Row {
                     TextButton(onClick = {
-                        if (ttsReady) speechOutput.speak(message, TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_manual")
+                        if (ttsReady) speechOutput.speak(assistantSpeechText(message), TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_manual")
                     }, enabled = ttsReady) { Text("Повторить голосом") }
                     TextButton(onClick = { voiceMessage = null; assistantChartData = emptyList() }) { Text("Понятно") }
                 }
