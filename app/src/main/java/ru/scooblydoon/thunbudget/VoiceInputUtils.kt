@@ -128,3 +128,14 @@ internal fun parseUserDate(input: String): LocalDate? {
     val year = digits.substring(4, 8).toIntOrNull() ?: return null
     return runCatching { LocalDate.of(year, month, day) }.getOrNull()
 }
+
+
+internal fun assistantSpeechText(message: String): String {
+    val spokenDate = java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy 'года'", Locale("ru", "RU"))
+    return Regex("""\\b(\\d{2})\\.(\\d{2})\\.(\\d{4})\\b""").replace(message) { match ->
+        val date = runCatching {
+            LocalDate.of(match.groupValues[3].toInt(), match.groupValues[2].toInt(), match.groupValues[1].toInt())
+        }.getOrNull()
+        date?.format(spokenDate) ?: match.value
+    }
+}
