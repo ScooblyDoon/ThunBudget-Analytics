@@ -782,6 +782,7 @@ private fun ThunBudgetApp() {
                 savingsGoal = store.loadSavingsGoal()
                 categories = store.loadCategories()
                 expenses = store.loadExpenses()
+                recurringPayments = store.loadRecurringPayments()
                 periodIncomes = store.loadPeriodIncomes()
                 incomeEntries = store.loadIncomeEntries()
                 periodStart = store.loadPeriodStart() ?: periodStart
@@ -1635,7 +1636,7 @@ private fun ThunBudgetApp() {
         confirmButton={TextButton(onClick={
             showUndoConfirmation=false
             if (store.restoreUndoSnapshot()) {
-                expenses=store.loadExpenses(); categories=store.loadCategories()
+                expenses=store.loadExpenses(); categories=store.loadCategories(); recurringPayments=store.loadRecurringPayments()
                 periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); income=store.loadIncome()
                 savingsGoal=store.loadSavingsGoal()
                 periodStart=store.loadPeriodStart() ?: periodStart
