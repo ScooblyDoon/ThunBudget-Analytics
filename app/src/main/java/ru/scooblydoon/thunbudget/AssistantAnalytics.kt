@@ -106,7 +106,7 @@ internal object AssistantAnalytics {
             .mapValues { (_, rows) -> rows.sumOf { it.amount.coerceAtLeast(0.0) } }
         val deficit = if (remainingBudget < 0.0) -remainingBudget else 0.0
         val candidates = totals.mapNotNull { (category, spent) ->
-            if (category.lowercase(Locale.ROOT) in protected || spent <= 0.0) return@mapNotNull null
+            if (protected.any { category.lowercase(Locale.ROOT).contains(it) } || spent <= 0.0) return@mapNotNull null
             val planned = categoryBudgets[category] ?: 0.0
             val over = (spent - planned).coerceAtLeast(0.0)
             val target = when {
