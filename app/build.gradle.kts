@@ -7,15 +7,15 @@ plugins {
 android {
     namespace = "ru.scooblydoon.thunbudget"
     compileSdk = 35
-    // Release artifact: ThunBudget Analytics 1.3.23 (versionCode 36) [final-apk].
-// Includes collapsible pending recurring payments section. [final-apk]
+    // Release artifact: ThunBudget Analytics 1.3.24 (versionCode 37) [final-apk].
+// Includes list/calendar views, editable payment details and month-aware confirmation. [final-apk]
 
     defaultConfig {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
         minSdk = 26
         targetSdk = 35
-        versionCode = 36
-        versionName = "1.3.23"
+        versionCode = 37
+        versionName = "1.3.24"
     }
 
     signingConfigs {
