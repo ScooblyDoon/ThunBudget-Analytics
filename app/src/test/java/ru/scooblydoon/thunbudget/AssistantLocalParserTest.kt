@@ -68,6 +68,18 @@ class AssistantLocalParserTest {
         assertEquals("last_expense", command?.target)
     }
 
+    @Test fun parsesExpenseWithExplicitDateAndImpreciseCategory() {
+        val command = AssistantLocalParser.parse(
+            "Добавь расход 1 250,50 рублей на продукт за 05.11.2026",
+            categories,
+            today
+        )
+        assertEquals(AssistantIntent.ADD_EXPENSE, command?.intent)
+        assertEquals("Продукты", command?.category)
+        assertEquals(1250.50, command?.amount ?: 0.0, 0.001)
+        assertEquals("2026-11-05", command?.date)
+    }
+
     @Test fun unknownPhraseDoesNotProduceCommand() {
         assertNull(AssistantLocalParser.parse("Расскажи анекдот", categories, today))
     }
