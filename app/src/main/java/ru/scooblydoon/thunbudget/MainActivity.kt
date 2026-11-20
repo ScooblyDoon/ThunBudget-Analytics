@@ -33,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -494,7 +496,14 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ThunBudgetApp() {
-    val context= LocalContext.current
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    // Use a compact layout on narrow, short, or enlarged-text screens.
+    // A standard-width Pixel keeps the existing floating-action layout.
+    val compactLayout = configuration.screenWidthDp < 400 ||
+        configuration.screenHeightDp < 700 || density.fontScale >= 1.12f
+    val navLabelStyle = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium
     val store= remember { BudgetStore(context) }
     var income by remember { mutableDoubleStateOf(store.loadIncome()) }
     var savingsGoal by remember { mutableDoubleStateOf(store.loadSavingsGoal()) }
@@ -993,15 +1002,49 @@ private fun ThunBudgetApp() {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } },
                 actions={ Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(0.dp)) {
-      TextButton(onClick={showAssistantDialog=true},contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)) { Text("Помощник",style=MaterialTheme.typography.labelLarge,maxLines=1,softWrap=false) }
-      TextButton(onClick={showSettings=true},contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)) { Text("Настройки",style=MaterialTheme.typography.labelLarge,maxLines=1,softWrap=false) }
-  } }
+                    val actionTextStyle = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge
+                    val actionPadding = if (compactLayout) 6.dp else 10.dp
+                    TextButton(onClick={showAssistantDialog=true},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
+                        Text("Помощник",style=actionTextStyle,maxLines=1,softWrap=false)
+                    }
+                    TextButton(onClick={showSettings=true},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
+                        Text("Настройки",style=actionTextStyle,maxLines=1,softWrap=false)
+                    }
+                } }
             ) },
+            floatingActionButton = {
+                if (!compactLayout && tab != 2 && tab != 5) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (quickActionsExpanded) {
+                            SmallFloatingActionButton(
+                                onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            ) { Icon(Icons.Filled.Mic, contentDescription = "Голосовой ввод") }
+                            SmallFloatingActionButton(
+                                onClick = { showPeriodIncomeEditor = true },
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            ) { Text("₽+", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer) }
+                            FloatingActionButton(onClick = { showAdd = true }) {
+                                Text("+", style = MaterialTheme.typography.headlineMedium)
+                            }
+                        }
+                        SmallFloatingActionButton(
+                            onClick = {
+                                quickActionsExpanded = !quickActionsExpanded
+                                persistUiExpanded(context, "quick_actions_panel", quickActionsExpanded)
+                            },
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Text(if (quickActionsExpanded) "›" else "‹", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
             bottomBar = {
                 Column {
-                    // Quick actions are docked into the layout instead of floating over content.
-                    // This keeps dashboard cards and headings visible on short or scaled screens.
-                    if (tab != 2 && tab != 5) {
+                    // Dock actions only on compact layouts; regular-width phones retain the floating controls.
+                    if (compactLayout && tab != 2 && tab != 5) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.End,
@@ -1077,50 +1120,50 @@ private fun ThunBudgetApp() {
                             selected = tab == 0,
                             onClick = { tab = 0 },
                             icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Обзор", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = false
+                            label = { Text("Обзор", style = navLabelStyle, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = !compactLayout
                         )
                         NavigationBarItem(
                             selected = tab == 1,
                             onClick = { tab = 1 },
                             icon = { Text("◒", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Анализ", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = false
+                            label = { Text("Анализ", style = navLabelStyle, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = !compactLayout
                         )
                         NavigationBarItem(
                             selected = tab == 2,
                             onClick = { tab = 2 },
                             icon = { Text("▥", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Графики", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = false
+                            label = { Text("Графики", style = navLabelStyle, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = !compactLayout
                         )
                         NavigationBarItem(
                             selected = tab == 3,
                             onClick = { tab = 3 },
                             icon = { Text("▤", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("За год", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = false
+                            label = { Text("За год", style = navLabelStyle, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = !compactLayout
                         )
                         NavigationBarItem(
                             selected = tab == 4,
                             onClick = { tab = 4 },
                             icon = { Text("≡", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("История", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = false
+                            label = { Text("История", style = navLabelStyle, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = !compactLayout
                         )
                         NavigationBarItem(
                             selected = tab == 5,
                             onClick = { tab = 5 },
                             icon = { Text("▣", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Платежи", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = false
+                            label = { Text("Платежи", style = navLabelStyle, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = !compactLayout
                         )
                     }
                 }
             }
         ) { padding ->
             when(tab) {
-                0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=24.dp)) {
+                0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=if(compactLayout) 24.dp else 96.dp)) {
                     item {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
