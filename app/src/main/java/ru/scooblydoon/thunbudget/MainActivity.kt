@@ -1454,13 +1454,30 @@ private fun ThunBudgetApp() {
         AlertDialog(
             onDismissRequest = { voiceMessage = null },
             title = { Text("Помощник ThunBudget") },
-            text = { Text(message) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(message)
+                    if (assistantChartData.isNotEmpty()) {
+                        Text(assistantChartTitle, fontWeight = FontWeight.SemiBold)
+                        val maxValue = assistantChartData.maxOfOrNull { it.second }?.coerceAtLeast(1.0) ?: 1.0
+                        assistantChartData.forEach { (label, value) ->
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                                    Text(money(value), style = MaterialTheme.typography.labelSmall)
+                                }
+                                LinearProgressIndicator(progress = { (value / maxValue).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 Row {
                     TextButton(onClick = {
                         if (ttsReady) speechOutput.speak(message, TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_manual")
                     }, enabled = ttsReady) { Text("Повторить голосом") }
-                    TextButton(onClick = { voiceMessage = null }) { Text("Понятно") }
+                    TextButton(onClick = { voiceMessage = null; assistantChartData = emptyList() }) { Text("Понятно") }
                 }
             }
         )
