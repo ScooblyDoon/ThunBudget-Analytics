@@ -15,8 +15,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -456,20 +454,6 @@ private fun ThunBudgetApp() {
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var pendingBankOperations by remember { mutableStateOf(BankNotificationStore.load(context)) }
-    var showBankOperationsReview by remember { mutableStateOf(false) }
-    var bankNotificationAccessEnabled by remember { mutableStateOf(BankNotificationStore.isAccessEnabled(context)) }
-    DisposableEffect(context) {
-        val activity = context as? ComponentActivity
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                bankNotificationAccessEnabled = BankNotificationStore.isAccessEnabled(context)
-                pendingBankOperations = BankNotificationStore.load(context)
-            }
-        }
-        activity?.lifecycle?.addObserver(observer)
-        onDispose { activity?.lifecycle?.removeObserver(observer) }
-    }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
@@ -1430,7 +1414,7 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,bankNotificationAccessEnabled=bankNotificationAccessEnabled,pendingBankOperationCount=pendingBankOperations.size,onEnableBankNotifications={BankNotificationStore.openAccessSettings(context)},onRefreshBankStatus={bankNotificationAccessEnabled=BankNotificationStore.isAccessEnabled(context);pendingBankOperations=BankNotificationStore.load(context)},onReviewBankOperations={pendingBankOperations=BankNotificationStore.load(context);showBankOperationsReview=true},onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onExportExcel={ exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx") },onImportExcel={ excelImportLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream")) },onClearExternalFolder={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onExportExcel={ exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx") },onImportExcel={ excelImportLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream")) },onClearExternalFolder={
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
@@ -1463,45 +1447,6 @@ private fun ThunBudgetApp() {
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; store.savePeriod(start,end)
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
     })
-    if(showBankOperationsReview) BankOperationsReviewDialog(
-        operations=pendingBankOperations,
-        categories=categories,
-        onImport={ operation, category ->
-            val duplicate = if (operation.type == BankOperationType.EXPENSE) {
-                expenses.any { it.date == operation.date && it.amount == operation.amount && it.title.equals(operation.title, true) }
-            } else {
-                incomeEntries.any { it.date == operation.date && it.amount == operation.amount && it.title.equals(operation.title, true) }
-            }
-            if (duplicate) {
-                backupMessage = "Похожая операция уже есть в истории. Повторно добавлять её не будем."
-            } else {
-                store.prepareUndoSnapshot(); canUndo = true
-                if (operation.type == BankOperationType.EXPENSE) {
-                    val updated = (listOf(Expense(System.currentTimeMillis(), operation.title, category, operation.amount, operation.date)) + expenses).sortedByDescending { it.date }
-                    expenses = updated
-                    store.saveExpenses(updated)
-                } else {
-                    val operationDate = LocalDate.parse(operation.date)
-                    val configuredFrom = LocalDate.parse(periodStart)
-                    val configuredTo = LocalDate.parse(periodEnd)
-                    val incomePeriod = if (!operationDate.isBefore(configuredFrom) && !operationDate.isAfter(configuredTo)) {
-                        periodStart to periodEnd
-                    } else when (operationDate.dayOfMonth) {
-                        in 9..23 -> operationDate.withDayOfMonth(9).toString() to operationDate.withDayOfMonth(23).toString()
-                        in 24..31 -> operationDate.withDayOfMonth(24).toString() to operationDate.plusMonths(1).withDayOfMonth(8).toString()
-                        else -> operationDate.minusMonths(1).withDayOfMonth(24).toString() to operationDate.withDayOfMonth(8).toString()
-                    }
-                    store.addIncomeEntry(operation.title, operation.amount, operation.date, incomePeriod.first, incomePeriod.second)
-                    incomeEntries = store.loadIncomeEntries()
-                    periodIncomes = store.loadPeriodIncomes()
-                }
-                BankNotificationStore.remove(context, operation.id)
-                pendingBankOperations = BankNotificationStore.load(context)
-            }
-        },
-        onSkip={ operation -> BankNotificationStore.remove(context, operation.id); pendingBankOperations=BankNotificationStore.load(context) },
-        onDismiss={showBankOperationsReview=false}
-    )
     if(showRestoreConfirmation) AlertDialog(
         onDismissRequest={showRestoreConfirmation=false},
         title={Text("Восстановить резервную копию?")},
@@ -1878,66 +1823,10 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
     },confirmButton={ TextButton(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && runCatching{LocalDate.parse(date)}.isSuccess) onSave(title,category,v,date) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BankOperationsReviewDialog(
-    operations: List<PendingBankOperation>,
-    categories: List<BudgetCategory>,
-    onImport: (PendingBankOperation, String) -> Unit,
-    onSkip: (PendingBankOperation) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest=onDismiss,
-        title={Text("Операции из Т-Банка")},
-        text={
-            if (operations.isEmpty()) {
-                Text("Новых распознанных операций нет.")
-            } else {
-                LazyColumn(
-                    modifier=Modifier.heightIn(max=520.dp),
-                    verticalArrangement=Arrangement.spacedBy(10.dp)
-                ) {
-                    items(operations,key={it.id}) { operation ->
-                        var category by remember(operation.id,categories) {
-                            mutableStateOf(categories.firstOrNull()?.name ?: "Прочее")
-                        }
-                        var expanded by remember(operation.id) { mutableStateOf(false) }
-                        Card {
-                            Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Text(if(operation.type==BankOperationType.EXPENSE) "Расход" else "Поступление",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
-                                Text(operation.title,fontWeight=FontWeight.SemiBold)
-                                Text(money(operation.amount),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
-                                Text(operation.date,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                if(operation.type==BankOperationType.EXPENSE) {
-                                    ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                                        OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor().fillMaxWidth(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
-                                        ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) {
-                                            categories.forEach { item -> DropdownMenuItem(text={Text(item.name)},onClick={category=item.name;expanded=false}) }
-                                        }
-                                    }
-                                }
-                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.fillMaxWidth()) {
-                                    Button(onClick={onImport(operation,category)},modifier=Modifier.weight(1f)) {
-                                        Text(if(operation.type==BankOperationType.EXPENSE) "Добавить расход" else "Добавить доход")
-                                    }
-                                    TextButton(onClick={onSkip(operation)}) { Text("Пропустить") }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton={TextButton(onClick=onDismiss){Text("Закрыть")}}
-    )
-}
-
 @Composable
 private fun SettingsDialog(
     income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,
-    darkTheme:Boolean,bankNotificationAccessEnabled:Boolean,pendingBankOperationCount:Int,
-    onEnableBankNotifications:()->Unit,onRefreshBankStatus:()->Unit,onReviewBankOperations:()->Unit,
+    darkTheme:Boolean,
     onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,
     externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,
     onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,onImportExcel:()->Unit,
@@ -1954,7 +1843,6 @@ private fun SettingsDialog(
     var section by rememberSaveable { mutableStateOf("income") }
     val sections = listOf(
         "income" to "Доход",
-        "bank" to "Т-Банк",
         "period" to "Период",
         "categories" to "Категории",
         "export" to "Excel",
@@ -2024,23 +1912,6 @@ private fun SettingsDialog(
                         if(hasAutomaticBackup) OutlinedButton(onClick=onRestoreAutomatic,modifier=Modifier.fillMaxWidth()) { Text("Восстановить автокопию приложения") }
                         OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из файла") }
                         if(hasPreviousRestoreBackup) OutlinedButton(onClick=onRestorePrevious,modifier=Modifier.fillMaxWidth()) { Text("Отменить последнее восстановление") }
-                    }
-                    "bank" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Text("Импорт операций из Т-Банка",fontWeight=FontWeight.Bold)
-                        Text(
-                            if(bankNotificationAccessEnabled) "Специальный доступ Android включён. Новые уведомления Т-Банка будут обрабатываться приложением."
-                            else "Специальный доступ к уведомлениям Android пока не включён. Обычного разрешения «Уведомления» недостаточно.",
-                            style=MaterialTheme.typography.bodySmall,
-                            color=if(bankNotificationAccessEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                        )
-                        OutlinedButton(onClick=onEnableBankNotifications,modifier=Modifier.fillMaxWidth()) {
-                            Text(if(bankNotificationAccessEnabled) "Открыть специальный доступ Android" else "Включить доступ к уведомлениям Android")
-                        }
-                        OutlinedButton(onClick=onRefreshBankStatus,modifier=Modifier.fillMaxWidth()) { Text("Проверить разрешение и обновить список") }
-                        OutlinedButton(onClick=onReviewBankOperations,enabled=pendingBankOperationCount>0,modifier=Modifier.fillMaxWidth()) {
-                            Text("Проверить операции Т-Банка ($pendingBankOperationCount)")
-                        }
-                        Text("В очереди: $pendingBankOperationCount. Операции добавляются в бюджет только после ручного подтверждения. Старые уведомления до включения доступа не импортируются.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     "appearance" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Оформление",fontWeight=FontWeight.Bold)
