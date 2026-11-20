@@ -121,7 +121,7 @@ object AssistantLocalParser {
             )
         }
 
-        val hasExpenseVerb = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход", "купил", "купила", "оплатил", "оплатила")
+        val hasExpenseVerb = listOf("добавь", "добавить", "запиши", "записать", "потратил", "потратила", "расход", "внеси", "внести", "купил", "купила", "оплатил", "оплатила")
             .any { normalized.contains(it) }
         if (hasExpenseVerb) {
             return command(
