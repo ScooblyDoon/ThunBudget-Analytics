@@ -147,4 +147,27 @@ class AssistantLocalParserTest {
     @Test fun unknownPhraseDoesNotProduceCommand() {
         assertNull(AssistantLocalParser.parse("Расскажи анекдот", categories, today))
     }
+    @Test fun parsesHighestSpendingCalendarDayQuery() {
+        val command = AssistantLocalParser.parse("Посчитай, в какой день было больше всего трат за месяц", categories, today)
+        assertEquals(AssistantIntent.QUERY_TOP_SPENDING_DAY, command?.intent)
+        assertEquals("2026-11-01", command?.periodStart)
+        assertEquals("2026-11-19", command?.periodEnd)
+    }
+
+    @Test fun parsesHighestSpendingWeekdayQuery() {
+        val command = AssistantLocalParser.parse("В какой день недели больше всего расходов за год?", categories, today)
+        assertEquals(AssistantIntent.QUERY_TOP_SPENDING_DAY, command?.intent)
+    }
+
+    @Test fun parsesSavingRecommendationsQuery() {
+        val command = AssistantLocalParser.parse("Что урезать, чтобы хватило до зарплаты?", categories, today)
+        assertEquals(AssistantIntent.QUERY_SAVING_RECOMMENDATIONS, command?.intent)
+    }
+
+    @Test fun parsesTopSpendingCategoryByAmountQuery() {
+        val command = AssistantLocalParser.parse("Какая категория съедает больше всего денег за месяц?", categories, today)
+        assertEquals(AssistantIntent.QUERY_TOP_SPENDING_CATEGORY, command?.intent)
+        assertEquals("2026-11-01", command?.periodStart)
+    }
+
 }
