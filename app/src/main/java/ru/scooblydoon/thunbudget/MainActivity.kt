@@ -661,21 +661,36 @@ private fun ThunBudgetApp() {
                             else plannedForPeriod(rangeIncome, category.percent, from, to)
                             category.name to cap
                         }
-                        val days = if (today.isAfter(LocalDate.parse(to))) 0L
-                            else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(from)), LocalDate.parse(to)) + 1L
-                        val daily = if (days > 0) remainingRange.coerceAtLeast(0.0) / days else 0.0
+                        val startDate = maxOf(today, LocalDate.parse(from))
+                        val endDate = LocalDate.parse(to)
+                        val days = if (today.isAfter(endDate)) 0L
+                            else java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1L
+                        val monthCount = if (startDate.isAfter(endDate)) -1L
+                            else java.time.temporal.ChronoUnit.MONTHS.between(YearMonth.from(startDate), YearMonth.from(endDate))
+                        val pendingPayments = if (monthCount < 0L) emptyList() else recurringPayments.filter { it.active }.flatMap { payment ->
+                            (0L..monthCount).mapNotNull { offset ->
+                                val month = YearMonth.from(startDate).plusMonths(offset)
+                                val due = payment.dueDate(month)
+                                due.takeIf { !it.isBefore(startDate) && !it.isAfter(endDate) && !payment.isCompleted(month) }
+                                    ?.let { payment to it }
+                            }
+                        }
+                        val pendingTotal = pendingPayments.sumOf { it.first.amount }
+                        val availableAfterBills = remainingRange - pendingTotal
+                        val daily = if (days > 0) availableAfterBills.coerceAtLeast(0.0) / days else 0.0
                         val recommendations = AssistantAnalytics.savingRecommendations(
-                            rangeExpenses, categoryBudgets, remainingRange, days
+                            rangeExpenses, categoryBudgets, availableAfterBills, days
                         )
-                        val header = "До конца выбранного периода осталось $days дн. Бюджетный остаток: ${money(remainingRange)}."
+                        val header = "До конца выбранного периода осталось $days дн. Бюджетный остаток: ${money(remainingRange)}." +
+                            if (pendingTotal > 0.0) " Неотмеченные регулярные платежи: ${money(pendingTotal)}." else ""
                         voiceMessage = if (rangeExpenses.isEmpty()) {
                             "Пока нет расходов за выбранный период. $header Добавь операции, и я смогу предложить конкретные способы экономии."
                         } else if (recommendations.isEmpty()) {
                             "$header Данных для сокращения расходов недостаточно. Проверь регулярные платежи и запланированные покупки."
                         } else {
-                            header + (if (remainingRange < 0.0) "\nЕсть дефицит бюджета. Предлагаю временно сократить:" else "\nЧтобы сохранить запас до зарплаты, можно сократить:") +
+                            header + (if (availableAfterBills < 0.0) "\nС учётом регулярных платежей есть дефицит бюджета. Предлагаю временно сократить:" else "\nЧтобы сохранить запас до зарплаты, можно сократить:") +
                                 recommendations.joinToString("\n") { "• ${it.category}: уменьшить траты примерно на ${money(it.suggestedReduction)}. Сейчас потрачено ${money(it.spent)}. ${it.reason}." } +
-                                "\nОценочный дневной лимит из остатка: ${money(daily)}. Сокращения — рекомендации, а не автоматические изменения бюджета."
+                                "\nОценочный дневной лимит после регулярных платежей: ${money(daily)}. Сокращения — рекомендации, а не автоматические изменения бюджета."
                         }
                     }
                     AssistantIntent.QUERY_TOP_SPENDING_CATEGORY -> {
