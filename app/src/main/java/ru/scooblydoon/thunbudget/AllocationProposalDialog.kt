@@ -22,14 +22,18 @@ internal fun AllocationProposalDialog(
     onSave: (List<BudgetCategory>) -> Unit
 ) {
     val regular = categories.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
-    val suggestions = remember(categories, expenses) {
+    val allocationExpenses = remember(expenses) {
+        expenses.mapNotNull { e ->
+            runCatching { AllocationExpense(e.category, e.amount, LocalDate.parse(e.date)) }.getOrNull()
+        }
+    }
+    val suggestions = remember(categories, allocationExpenses) {
         BudgetAllocationCalculator.suggest(
             regular.map { it.name },
             allocationExpenses,
             LocalDate.now()
         ).associateBy { it.category }
     }
-    val allocationExpenses = remember(expenses) { expenses.mapNotNull { e -> runCatching { AllocationExpense(e.category, e.amount, LocalDate.parse(e.date)) }.getOrNull() } }
     val window = remember(allocationExpenses) { BudgetAllocationCalculator.windowFor(LocalDate.now(), allocationExpenses) }
     val fmt = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val values = remember(categories, expenses) {
@@ -64,8 +68,8 @@ internal fun AllocationProposalDialog(
                                 Column(Modifier.weight(1f)) {
                                     Text(category.name, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        if (noHistory) "Нет расходов за 6 месяцев — укажи долю вручную"
-                                        else "Факт за 6 месяцев: ${String.format(java.util.Locale("ru", "RU"), "%,.0f ₽", suggestion!!.totalSpent)}",
+                                        if (noHistory) "Нет расходов за выбранный период — укажи долю вручную"
+                                        else "Факт за период: ${String.format(java.util.Locale("ru", "RU"), "%,.0f ₽", suggestion!!.totalSpent)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (noHistory) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
