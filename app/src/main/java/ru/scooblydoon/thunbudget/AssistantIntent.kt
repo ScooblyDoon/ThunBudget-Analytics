@@ -13,6 +13,7 @@ enum class AssistantIntent(val wireValue: String, val isMutation: Boolean = fals
     QUERY_TOP_CATEGORY_FREQUENCY("query_top_category_frequency"),
     QUERY_TOP_TITLE_FREQUENCY("query_top_title_frequency"),
     QUERY_TOP_SPENDING_DAY("query_top_spending_day"),
+    QUERY_TOP_SPENDING_CATEGORY("query_top_spending_category"),
     QUERY_SAVING_RECOMMENDATIONS("query_saving_recommendations"),
     QUERY_MAX_EXPENSE("query_max_expense"),
     QUERY_MIN_EXPENSE("query_min_expense"),
