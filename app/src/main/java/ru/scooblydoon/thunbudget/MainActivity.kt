@@ -516,7 +516,7 @@ private fun ThunBudgetApp() {
     var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
-    var canUndoDynamicAllocation by rememberSaveable { mutableStateOf(false) }
+    var canUndoDynamicAllocation by rememberSaveable { mutableStateOf(store.loadManualAllocationSnapshot()?.let { it != categories } == true) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
@@ -2646,7 +2646,7 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
     val matchedCategory = if (isIncome) null else findVoiceCategory(normalized, categories) ?: return null
 
     return VoiceExpenseDraft(
-        title = if (isIncome) "Голосовой доход" else matchedCategory!!.name,
+        title = if (isIncome) "Голосовой доход" else extractVoiceExpenseTitle(phrase, matchedCategory!!.name),
         category = if (isIncome) "Доход" else matchedCategory!!.name,
         amount = amount, date = date.toString(), isIncome = isIncome, isEdit = isEdit
     )

@@ -13,6 +13,9 @@ class VoiceInputUtilsTest {
         BudgetCategory("Кафе и развлечения", 10.0)
     )
 
+    @Test fun extractsExpenseTitleSeparatelyFromVoiceCategory() {
+        assertEquals("Автобус", extractVoiceExpenseTitle("Введи расход автобус 100 рублей в транспорт", "Транспорт"))
+    }
     @Test fun parsesDecimalAmountWithKopecks() {
         assertEquals(1250.50, (parseSpokenAmount("добавь расход 1 250 рублей 50 копеек") ?: 0.0), 0.001)
     }

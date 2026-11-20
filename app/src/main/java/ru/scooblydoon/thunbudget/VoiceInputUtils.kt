@@ -53,6 +53,14 @@ private fun editDistance(left: String, right: String): Int {
     return previous[right.length]
 }
 
+internal fun extractVoiceExpenseTitle(phrase: String, category: String): String {
+    var title = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+    title = title.replace(category.lowercase(Locale("ru", "RU")).replace('ё', 'е'), " ")
+    title = title.replace(Regex("[0-9][0-9\\s.,]*"), " ")
+        .replace(Regex("\\b(введи|введите|добавь|добавить|запиши|записать|расход|трату|потратил|потратила|внеси|внести|купил|купила|оплатил|оплатила|на|в|по|рубль|рубля|рублей|руб|р)\\b"), " ")
+        .replace(Regex("\\s+"), " ").trim()
+    return title.takeIf { it.length >= 2 }?.replaceFirstChar { it.titlecase(Locale("ru", "RU")) } ?: category
+}
 internal fun findVoiceCategory(phrase: String, categories: List<BudgetCategory>): BudgetCategory? {
     val normalized = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
     categories.sortedByDescending { it.name.length }.firstOrNull {
