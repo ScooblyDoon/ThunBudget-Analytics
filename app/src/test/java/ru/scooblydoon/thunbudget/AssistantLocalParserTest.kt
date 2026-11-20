@@ -80,6 +80,13 @@ class AssistantLocalParserTest {
         assertEquals("2026-11-05", command?.date)
     }
 
+    @Test fun parsesExpenseTitleAndCategorySeparately() {
+        val command = AssistantLocalParser.parse("Введи расход автобус 100 рублей в транспорт", categories, today)
+        assertEquals(AssistantIntent.ADD_EXPENSE, command?.intent)
+        assertEquals(100.0, command?.amount ?: 0.0, 0.001)
+        assertEquals("Транспорт", command?.category)
+        assertEquals("Автобус", command?.title)
+    }
     @Test fun parsesNaturalExpenseWithInesiCategoryAndSpokenDate() {
         val command = AssistantLocalParser.parse(
             "Внеси 500 рублей в транспорт за 15 ноября",

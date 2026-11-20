@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.14
+- Parse expense title independently from category in voice input (for example, “автобус 100 рублей в транспорт”).
+- Add rollback for applied dynamic allocations, restoring the previous manually configured category shares.
+- Add an optional persistent automatic allocation mode that recalculates category shares from actual spending in the selected Overview reporting period as expenses and income data change.
+- Add a regression test for separating an expense title from its category.
 ## 1.3.13
 - Add a choice between configured monthly income and the sum of the two reporting-period incomes for the selected month.
 - Add a dynamic allocation forecast based on actual spending recorded in the currently selected Overview reporting period, with editable proposed shares and reserve remainder.

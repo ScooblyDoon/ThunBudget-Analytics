@@ -516,6 +516,7 @@ private fun ThunBudgetApp() {
     var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
+    var canUndoDynamicAllocation by rememberSaveable { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
@@ -1055,14 +1056,15 @@ private fun ThunBudgetApp() {
                                         Text("Доли обновляются по фактическим расходам выбранного периода.", style=MaterialTheme.typography.bodySmall)
                                     }
                                     Switch(checked=autoAllocationEnabled, onCheckedChange={ enabled ->
-                                        if (enabled) { manualAllocationSnapshot = categories; store.saveManualAllocationSnapshot(categories) }
+                                        if (enabled) { manualAllocationSnapshot = categories; store.saveManualAllocationSnapshot(categories); canUndoDynamicAllocation = true }
                                         autoAllocationEnabled = enabled; store.saveAutoAllocationEnabled(enabled)
                                     })
                                 }
-                                if (autoAllocationEnabled) TextButton(onClick={
+                                if (canUndoDynamicAllocation) TextButton(onClick={
                                     categories = manualAllocationSnapshot; store.saveCategories(categories)
                                     autoAllocationEnabled = false; store.saveAutoAllocationEnabled(false)
-                                }) { Text("Отменить автоперерасчёт и вернуть ручные доли") }
+                                    canUndoDynamicAllocation = false
+                                }) { Text("Отменить рекомендацию и вернуть ручные доли") }
                             }
                         }
                     }
@@ -1548,6 +1550,8 @@ private fun ThunBudgetApp() {
             onDismiss = { showAllocationDialog = false },
             onSave = { updated ->
                 store.prepareUndoSnapshot(); canUndo = true
+                manualAllocationSnapshot = categories; store.saveManualAllocationSnapshot(categories)
+                canUndoDynamicAllocation = true
                 categories = updated
                 store.saveCategories(categories)
                 showAllocationDialog = false
@@ -1564,6 +1568,8 @@ private fun ThunBudgetApp() {
             onSave = { updated ->
                 store.prepareUndoSnapshot()
                 canUndo = true
+                manualAllocationSnapshot = categories; store.saveManualAllocationSnapshot(categories)
+                canUndoDynamicAllocation = true
                 categories = updated
                 store.saveCategories(categories)
                 showDynamicAllocationDialog = false

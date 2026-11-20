@@ -12,8 +12,8 @@ android {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.3.13"
+        versionCode = 27
+        versionName = "1.3.14"
     }
 
     signingConfigs {
