@@ -458,6 +458,8 @@ private fun ThunBudgetApp() {
     var voiceMessage by remember { mutableStateOf<String?>(null) }
     var showAssistantDialog by remember { mutableStateOf(false) }
     var assistantTextInput by remember { mutableStateOf("") }
+    var assistantChartData by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
+    var assistantChartTitle by remember { mutableStateOf("Аналитика расходов") }
     var voiceEditCandidates by remember { mutableStateOf<List<Expense>>(emptyList()) }
     var voiceSelectedExpenseId by remember { mutableStateOf<Long?>(null) }
     var voiceEditExpanded by remember { mutableStateOf(false) }
@@ -532,7 +534,7 @@ private fun ThunBudgetApp() {
     var selectedAnnualChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth <= 8) YearMonth.now().minusMonths(1) else YearMonth.now()) }
     var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
-    val formatter= remember { DateTimeFormatter.ofPattern("ddMMyyyy") }
+    val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val periodIncome = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.amount }
@@ -549,6 +551,11 @@ private fun ThunBudgetApp() {
     val monthTotal=monthExpenses.sumOf { it.amount }
 
     fun handleAssistantPhrase(phrase: String) {
+        val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+        if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
+            voiceMessage = "Я понимаю добавление доходов и расходов, поиск операций, остаток бюджета, перерасходы, частые категории и покупки, самые большие и маленькие расходы, средние расходы за неделю, месяц, квартал и год, а также графики. Например: «Какая категория самая частая за год?», «Покажи средний расход на продукты за месяц», «Построй график расходов по категориям»."
+            return
+        }
         val parsed = AssistantLocalParser.parse(phrase, categories.map { it.name }, today)
         if (parsed == null) {
             voiceMessage = "Пока не удалось понять запрос. Попробуй: «Сколько осталось до зарплаты?», «Сколько потратил на продукты в этом месяце?» или «Вчера потратил две тысячи на продукты»."
@@ -582,13 +589,15 @@ private fun ThunBudgetApp() {
                     else categories.sumOf { plannedForPeriod(rangeIncome, it.percent, from, to) }
                 val remainingRange = plannedRange - spentInRange
                 val dateLabel = "${LocalDate.parse(from).format(formatter)} — ${LocalDate.parse(to).format(formatter)}"
+                val queryRows = if (command.periodStart != null && command.periodEnd != null) expenses.filter { it.date >= from && it.date <= to } else expenses
+                val categoryRows = command.category?.let { name -> queryRows.filter { it.category.equals(name, true) } } ?: queryRows
 
                 when (command.intent) {
                     AssistantIntent.QUERY_REMAINING -> {
                         val days = if (today.isAfter(LocalDate.parse(periodEnd))) 0L
                             else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(periodStart)), LocalDate.parse(periodEnd)) + 1
                         val average = if (days > 0) remaining.coerceAtLeast(0.0) / days else 0.0
-                        voiceMessage = "За отчётный период осталось ${money(remaining)}.\nСредний доступный расход: ${money(average)} в день.\nПериод: $periodStart — $periodEnd."
+                        voiceMessage = "За отчётный период осталось ${money(remaining)}.\nСредний доступный расход: ${money(average)} в день.\nПериод: ${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}."
                     }
                     AssistantIntent.QUERY_SPENDING -> {
                         voiceMessage = "Расходы за период $dateLabel: ${money(spentInRange)}.\nОпераций: ${rangeExpenses.size}."
@@ -596,6 +605,31 @@ private fun ThunBudgetApp() {
                     AssistantIntent.QUERY_CATEGORY_SPENDING -> {
                         val rows = rangeExpenses.filter { it.category == command.category }
                         voiceMessage = "На категорию «${command.category}» потрачено ${money(rows.sumOf { it.amount })} за период $dateLabel.\nОпераций: ${rows.size}."
+                    }
+                    AssistantIntent.QUERY_TOP_CATEGORY_FREQUENCY -> {
+                        val top = AssistantAnalytics.topCategoryByFrequency(queryRows)
+                        voiceMessage = if (top == null) "За выбранный период операций нет." else "Самая частая категория: «${top.first}». Количество операций: ${top.second}."
+                    }
+                    AssistantIntent.QUERY_TOP_TITLE_FREQUENCY -> {
+                        val top = AssistantAnalytics.topTitleByFrequency(queryRows)
+                        voiceMessage = if (top == null) "За выбранный период операций нет." else "Самое частое название расхода: «${top.first}». Количество операций: ${top.second}."
+                    }
+                    AssistantIntent.QUERY_MAX_EXPENSE, AssistantIntent.QUERY_MIN_EXPENSE -> {
+                        val selected = if (command.intent == AssistantIntent.QUERY_MAX_EXPENSE) AssistantAnalytics.largest(categoryRows) else AssistantAnalytics.smallest(categoryRows)
+                        val label = if (command.intent == AssistantIntent.QUERY_MAX_EXPENSE) "Самый большой" else "Самый маленький"
+                        voiceMessage = if (selected == null) "Подходящих расходов не найдено." else "$label расход: «${selected.title}» — ${money(selected.amount)}. Категория: ${selected.category}. Дата: ${LocalDate.parse(selected.date).format(formatter)}."
+                    }
+                    AssistantIntent.QUERY_AVERAGE_SPENDING -> {
+                        val bucket = when { normalizedPhrase.contains("недел") -> SpendingBucket.WEEK; normalizedPhrase.contains("квартал") -> SpendingBucket.QUARTER; normalizedPhrase.contains("год") -> SpendingBucket.YEAR; normalizedPhrase.contains("день") -> SpendingBucket.DAY; else -> SpendingBucket.MONTH }
+                        val average = AssistantAnalytics.average(queryRows, bucket, command.category)
+                        val bucketName = when (bucket) { SpendingBucket.DAY -> "день"; SpendingBucket.WEEK -> "неделю"; SpendingBucket.MONTH -> "месяц"; SpendingBucket.QUARTER -> "квартал"; SpendingBucket.YEAR -> "год" }
+                        voiceMessage = if (average == null) "Недостаточно расходов для расчёта среднего." else "Средний расход за $bucketName: ${money(average.average)}. Всего: ${money(average.total)} за ${average.bucketCount} период(ов)." + (command.category?.let { " Категория: $it." } ?: " По всем категориям.")
+                    }
+                    AssistantIntent.QUERY_CHART -> {
+                        val values = AssistantAnalytics.categoryTotals(categoryRows).take(10)
+                        assistantChartTitle = if (command.category == null) "Расходы по категориям" else "Расходы: ${command.category}"
+                        assistantChartData = values
+                        voiceMessage = if (values.isEmpty()) "Нет данных для построения графика." else "Построен график расходов по ${values.size} категориям. Общая сумма: ${money(values.sumOf { it.second })}."
                     }
                     AssistantIntent.QUERY_OVERSPENDING -> {
                         val exceeded = categories.mapNotNull { category ->
