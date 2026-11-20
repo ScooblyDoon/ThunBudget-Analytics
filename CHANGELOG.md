@@ -126,3 +126,10 @@
 
 ## 1.3.23 (versionCode 36)
 - Added a collapsible, locally remembered pending recurring payments section.
+
+
+## 1.3.24 (versionCode 37)
+- Added a monthly calendar view for recurring payments alongside the existing list.
+- Calendar dates highlight scheduled payments and open compact payment details.
+- Added editing, pause/resume, delete and month-aware payment confirmation from the details dialog.
+- Preserved the selected list/calendar view between app launches.
