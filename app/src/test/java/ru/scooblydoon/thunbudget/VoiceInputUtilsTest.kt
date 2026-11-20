@@ -17,6 +17,11 @@ class VoiceInputUtilsTest {
         assertEquals(1250.50, parseSpokenAmount("добавь расход 1 250 рублей 50 копеек"), 0.001)
     }
 
+    @Test fun preservesDotDecimalAmount() {
+        assertEquals(1.25, parseSpokenAmount("добавь расход 1.25 рубля"), 0.001)
+        assertNull(parseVoiceDate("добавь расход 1.25 рубля", today))
+    }
+
     @Test fun parsesDecimalCommaAmount() {
         assertEquals(1250.75, parseSpokenAmount("добавь расход 1 250,75 рублей"), 0.001)
     }
