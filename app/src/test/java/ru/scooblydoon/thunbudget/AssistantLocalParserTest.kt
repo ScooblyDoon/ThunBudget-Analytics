@@ -170,4 +170,11 @@ class AssistantLocalParserTest {
         assertEquals("2026-11-01", command?.periodStart)
     }
 
+    @Test fun understandsCategoryAliasesInNaturalQueries() {
+        val command = AssistantLocalParser.parse("Сколько ушло на автобус за неделю?", categories, today)
+        assertEquals(AssistantIntent.QUERY_CATEGORY_SPENDING, command?.intent)
+        assertEquals("Транспорт", command?.category)
+        assertEquals("2026-11-13", command?.periodStart)
+    }
+
 }
