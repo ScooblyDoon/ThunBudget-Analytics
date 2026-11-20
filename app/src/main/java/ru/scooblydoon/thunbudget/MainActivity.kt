@@ -511,7 +511,7 @@ private fun ThunBudgetApp() {
     var selectedAnnualChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth <= 8) YearMonth.now().minusMonths(1) else YearMonth.now()) }
     var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
-    val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+    val formatter= remember { DateTimeFormatter.ofPattern("ddMMyyyy") }
     val periodIncome = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.amount }
@@ -1107,7 +1107,7 @@ private fun ThunBudgetApp() {
                                 }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                                 OutlinedTextField(value=historyToDate,onValueChange={historyToDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                             }
                             TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyYearFilter="Все годы";historyMonthNumberFilter="Все месяцы";historyDayFilter="Все числа";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
