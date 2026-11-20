@@ -83,7 +83,7 @@ internal object ExternalBackupStorage {
         val newestPerDay = rows
             .sortedWith(compareByDescending<Triple<Long, String, Uri>> { it.first }.thenByDescending { it.second })
             .distinctBy { row ->
-                Regex("""^ThunBudget-auto-(\\d{8})-.*\\.json$""")
+                Regex("""^ThunBudget-auto-(\d{8})-.*\.json$""")
                     .find(row.second)?.groupValues?.get(1) ?: row.second
             }
         newestPerDay.drop(KEEP_FILES).forEach { (_, _, uri) ->
