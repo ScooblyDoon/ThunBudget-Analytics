@@ -43,6 +43,11 @@ class VoiceInputUtilsTest {
         assertEquals(LocalDate.parse("2026-11-05"), parseVoiceDate("за 5 ноября", today))
     }
 
+    @Test fun parsesDayAndMonthWithoutYearAsMostRecentPastDate() {
+        assertEquals(LocalDate.parse("2026-11-15"), parseVoiceDate("внеси 500 рублей в транспорт за 15 ноября", today))
+        assertEquals(LocalDate.parse("2025-12-15"), parseVoiceDate("за 15 декабря", today))
+    }
+
     @Test fun rejectsInvalidDate() {
         assertNull(parseVoiceDate("за 32.13.2026", today))
     }
