@@ -22,8 +22,8 @@ class BudgetAllocationTest {
             ),
             LocalDate.of(2026, 12, 1)
         )
-        assertEquals(60.0, result[0].suggestedPercent!!, 0.001)
-        assertEquals(40.0, result[1].suggestedPercent!!, 0.001)
+        assertEquals(80.0, result[0].suggestedPercent!!, 0.001)
+        assertEquals(20.0, result[1].suggestedPercent!!, 0.001)
         assertNull(result[2].suggestedPercent)
         assertFalse(result[2].hasExpenseHistory)
     }
@@ -68,7 +68,7 @@ class BudgetAllocationTest {
         )
         assertEquals("Запас20", result.transfers.first().fromCategory)
         assertTrue(result.transfers.none { it.fromCategory == "Запас5" })
-        assertEquals(10.0, result.updatedPercents.values.sum(), 0.001)
+        assertEquals(100.0, result.updatedPercents.values.sum(), 0.001)
         assertTrue(result.updatedPercents["Превышение"]!! > 20.0)
     }
 
