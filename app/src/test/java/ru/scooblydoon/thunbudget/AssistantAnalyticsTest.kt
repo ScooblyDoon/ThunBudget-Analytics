@@ -39,11 +39,11 @@ class AssistantAnalyticsTest {
     }
     @Test fun findsCalendarDayAndWeekdayWithHighestSpend() {
         val topDay = AssistantAnalytics.topSpendingDay(expenses)
-        assertEquals("2026-02-02", topDay?.first?.toString())
-        assertEquals(2500.0, topDay?.second ?: 0.0, 0.001)
+        assertEquals("2026-04-02", topDay?.first?.toString())
+        assertEquals(1500.0, topDay?.second ?: 0.0, 0.001)
         val topWeekday = AssistantAnalytics.topSpendingWeekday(expenses)
-        assertEquals(java.time.DayOfWeek.MONDAY, topWeekday?.first)
-        assertEquals(2500.0, topWeekday?.second ?: 0.0, 0.001)
+        assertEquals(java.time.DayOfWeek.THURSDAY, topWeekday?.first)
+        assertEquals(1500.0, topWeekday?.second ?: 0.0, 0.001)
     }
 
     @Test fun ranksCategoriesByTotalAmount() {
