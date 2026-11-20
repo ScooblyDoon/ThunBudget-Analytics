@@ -66,6 +66,15 @@ object AssistantLocalParser {
             return command(AssistantIntent.QUERY_TOP_TITLE_FREQUENCY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
         }
         if (listOf(
+                "какая категория съедает больше всего денег", "на какую категорию больше всего потратил",
+                "куда уходит больше всего денег", "куда больше всего уходят деньги",
+                "какая категория самая дорогая", "самая затратная категория",
+                "где больше всего расходов по сумме", "в какой категории больше всего потрачено",
+                "какая статья расходов самая большая"
+            ).any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_TOP_SPENDING_CATEGORY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.96)
+        }
+        if (listOf(
                 "в какой день больше всего трат", "в какой день было больше всего трат",
                 "какой день самый затратный", "самый затратный день", "день с наибольшими расходами",
                 "когда я больше всего потратил", "в какой день я потратил больше всего",
