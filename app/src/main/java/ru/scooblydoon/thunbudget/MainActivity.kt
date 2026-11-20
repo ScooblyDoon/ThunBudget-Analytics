@@ -992,59 +992,135 @@ private fun ThunBudgetApp() {
             topBar={ TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } },
-                actions={ Row(verticalAlignment=Alignment.CenterVertically) { TextButton(onClick={showAssistantDialog=true}) { Text("Помощник") }; TextButton(onClick={showSettings=true}) { Text("Настройки") } } }
+                actions={ Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(0.dp)) {
+      TextButton(onClick={showAssistantDialog=true},contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)) { Text("Помощник",style=MaterialTheme.typography.labelLarge,maxLines=1,softWrap=false) }
+      TextButton(onClick={showSettings=true},contentPadding=PaddingValues(horizontal=6.dp,vertical=0.dp)) { Text("Настройки",style=MaterialTheme.typography.labelLarge,maxLines=1,softWrap=false) }
+  } }
             ) },
-            floatingActionButton={
-                if(tab != 2 && tab != 5) {
-                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                        if (quickActionsExpanded) {
-                            SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
-                                Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
-                            }
-                            SmallFloatingActionButton(onClick={showPeriodIncomeEditor=true},containerColor=MaterialTheme.colorScheme.tertiaryContainer) {
-                                Text("₽+",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onTertiaryContainer)
-                            }
-                            FloatingActionButton(onClick={showAdd=true}) { Text("+",style=MaterialTheme.typography.headlineMedium) }
-                        }
-                        SmallFloatingActionButton(
-                            onClick={
-                                quickActionsExpanded = !quickActionsExpanded
-                                persistUiExpanded(context, "quick_actions_panel", quickActionsExpanded)
-                            },
-                            containerColor=MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor=MaterialTheme.colorScheme.onSurfaceVariant
+            bottomBar = {
+                Column {
+                    // Quick actions are docked into the layout instead of floating over content.
+                    // This keeps dashboard cards and headings visible on short or scaled screens.
+                    if (tab != 2 && tab != 5) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(if (quickActionsExpanded) "›" else "‹", style=MaterialTheme.typography.titleLarge, fontWeight=FontWeight.Bold)
+                            if (quickActionsExpanded) {
+                                SmallFloatingActionButton(
+                                    onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Icon(Icons.Filled.Mic, contentDescription = "Голосовой ввод")
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                SmallFloatingActionButton(
+                                    onClick = { showPeriodIncomeEditor = true },
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                                ) {
+                                    Text("₽+", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                SmallFloatingActionButton(
+                                    onClick = { showAdd = true },
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ) {
+                                    Text("+", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            SmallFloatingActionButton(
+                                onClick = {
+                                    quickActionsExpanded = !quickActionsExpanded
+                                    persistUiExpanded(context, "quick_actions_panel", quickActionsExpanded)
+                                },
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ) {
+                                Text(
+                                    if (quickActionsExpanded) "›" else "‹",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
-                }
-            },
-            bottomBar={ Column {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(selected=tab==0,onClick={tab=0},icon={ Text("⌂",style=MaterialTheme.typography.titleLarge) },label={Text("Обзор")})
-                    NavigationBarItem(selected=tab==1,onClick={tab=1},icon={ Text("◒",style=MaterialTheme.typography.titleLarge) },label={Text("Аналитика")})
-                    NavigationBarItem(selected=tab==2,onClick={tab=2},icon={ Text("▥",style=MaterialTheme.typography.titleLarge) },label={Text("Графики")})
-                    NavigationBarItem(selected=tab==3,onClick={tab=3},icon={ Text("▤",style=MaterialTheme.typography.titleLarge) },label={Text("За год")})
-                    NavigationBarItem(selected=tab==4,onClick={tab=4},icon={ Text("≡",style=MaterialTheme.typography.titleLarge) },label={Text("История")})
-                    NavigationBarItem(selected=tab==5,onClick={tab=5},icon={ Text("▣",style=MaterialTheme.typography.titleLarge) },label={Text("Платежи")})
-                }
-                Row(
-                    modifier=Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(end=16.dp,bottom=4.dp),
-                    horizontalArrangement=Arrangement.End,
-                    verticalAlignment=Alignment.CenterVertically
-                ) {
-                    TextButton(onClick={darkTheme=!darkTheme;store.saveDarkTheme(darkTheme)}) {
-                        Text(if(darkTheme) "☀ Светлая тема" else "☾ Тёмная тема")
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(end = 12.dp, top = 2.dp, bottom = 2.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { darkTheme = !darkTheme; store.saveDarkTheme(darkTheme) },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                if (darkTheme) "☀ Светлая тема" else "☾ Тёмная тема",
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                    // Keep NavigationBar last so its system navigation insets are at the
+                    // bottom edge. The theme switch above it must not draw under system buttons.
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        tonalElevation = 8.dp
+                    ) {
+                        NavigationBarItem(
+                            selected = tab == 0,
+                            onClick = { tab = 0 },
+                            icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) },
+                            label = { Text("Обзор", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = false
+                        )
+                        NavigationBarItem(
+                            selected = tab == 1,
+                            onClick = { tab = 1 },
+                            icon = { Text("◒", style = MaterialTheme.typography.titleLarge) },
+                            label = { Text("Анализ", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = false
+                        )
+                        NavigationBarItem(
+                            selected = tab == 2,
+                            onClick = { tab = 2 },
+                            icon = { Text("▥", style = MaterialTheme.typography.titleLarge) },
+                            label = { Text("Графики", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = false
+                        )
+                        NavigationBarItem(
+                            selected = tab == 3,
+                            onClick = { tab = 3 },
+                            icon = { Text("▤", style = MaterialTheme.typography.titleLarge) },
+                            label = { Text("За год", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = false
+                        )
+                        NavigationBarItem(
+                            selected = tab == 4,
+                            onClick = { tab = 4 },
+                            icon = { Text("≡", style = MaterialTheme.typography.titleLarge) },
+                            label = { Text("История", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = false
+                        )
+                        NavigationBarItem(
+                            selected = tab == 5,
+                            onClick = { tab = 5 },
+                            icon = { Text("▣", style = MaterialTheme.typography.titleLarge) },
+                            label = { Text("Платежи", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) },
+                            alwaysShowLabel = false
+                        )
                     }
                 }
-            } }
+            }
         ) { padding ->
             when(tab) {
-                0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=96.dp)) {
+                0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=24.dp)) {
                     item {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
