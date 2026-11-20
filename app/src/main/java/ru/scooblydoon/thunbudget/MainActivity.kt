@@ -497,6 +497,8 @@ private fun ThunBudgetApp() {
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
     var showCategoryManager by remember { mutableStateOf(false) }
     var showAllocationDialog by remember { mutableStateOf(false) }
+    var showDynamicAllocationDialog by remember { mutableStateOf(false) }
+    var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
@@ -539,7 +541,7 @@ private fun ThunBudgetApp() {
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.amount }
     val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
-    val analyticsMonthIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==analyticsMonth }.getOrDefault(false) }.sumOf { it.amount }.let { if(it>0.0) it else income }
+    val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, analyticsIncomeMode == 1)
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(periodIncome>0.0) periodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
@@ -1005,7 +1007,7 @@ private fun ThunBudgetApp() {
                 }
                 1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
-                    item { OutlinedButton(onClick={showAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Рассчитать доли по истории расходов") } }
+                    item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick={showAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Рассчитать доли по истории расходов") }; Button(onClick={showDynamicAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Динамический прогноз по факту из «Обзора»") } } }
                     item { Text("Текущий отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
                         val currentStart = LocalDate.parse(periodStart)
@@ -1013,6 +1015,7 @@ private fun ThunBudgetApp() {
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
                     }
+                    item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; val selectedMonthIncome=AnalyticsBudgetCalculator.monthlyIncome(income,periodIncomes,analyticsMonth,analyticsIncomeMode==1); Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(selectedMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(selectedMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
