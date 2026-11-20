@@ -21,13 +21,15 @@ object AssistantLocalParser {
             .trim()
         if (normalized.isBlank()) return null
 
-        val category = availableCategories
-            .sortedByDescending { it.length }
-            .firstOrNull { normalized.contains(it.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }
+        val category = findVoiceCategory(
+            phrase,
+            availableCategories.map { BudgetCategory(it, 0.0) }
+        )?.name
 
+        val parsedDate = parseVoiceDate(phrase, today)
         val mentionsYesterday = Regex("""\b(вчера|за вчера)\b""").containsMatchIn(normalized)
         val mentionsToday = Regex("""\b(сегодня|за сегодня)\b""").containsMatchIn(normalized)
-        val date = if (mentionsYesterday) today.minusDays(1) else today
+        val date = parsedDate ?: today
 
         val month = when {
             normalized.contains("прошлом месяце") || normalized.contains("за прошлый месяц") ->
@@ -38,7 +40,7 @@ object AssistantLocalParser {
         }
         val periodBounds = when {
             month != null -> month.atDay(1) to (if (month == YearMonth.from(today)) today else month.atEndOfMonth())
-            mentionsYesterday || mentionsToday -> date to date
+            parsedDate != null -> date to date
             normalized.contains("за неделю") || normalized.contains("за последние 7 дней") -> today.minusDays(6) to today
             else -> null
         }
