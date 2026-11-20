@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.YearMonth
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun RecurringPaymentsScreen(
     payments: List<RecurringPayment>,
