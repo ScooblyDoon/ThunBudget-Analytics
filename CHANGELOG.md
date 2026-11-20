@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.7
+- Fixed the voice confirmation date being displayed in ISO digit order (for example, 20.26.1117); dates now initialize in DD.MM.YYYY order.
+- Improved offline command recovery when speech recognition drops the command verb but retains a clear amount and known category (for example, “500 руб продукты 17 ноября”).
+- Added regression tests for verb-omitted expense phrases and voice date field formatting.
+
 ## 1.3.6
 - Release candidate: versionCode 19, versionName 1.3.6; unit tests and debug compilation passed.
 - Fixed date entry cursor jumping by storing digits only and rendering separators through a visual date mask.
