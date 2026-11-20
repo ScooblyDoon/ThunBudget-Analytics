@@ -26,6 +26,13 @@ internal fun RecurringPaymentsScreen(
     onConfirm: (RecurringPayment) -> Unit
 ) {
     var showAdd by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pendingExpanded by remember {
+        mutableStateOf(
+            context.getSharedPreferences("thunbudget_ui", android.content.Context.MODE_PRIVATE)
+                .getBoolean("pending_payments_expanded", true)
+        )
+    }
     val today = LocalDate.now()
     val month = YearMonth.from(today)
     val pending = payments.filter { it.active && it.dueDate(month) <= today && !it.isCompleted(month) }
@@ -50,18 +57,41 @@ internal fun RecurringPaymentsScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
         ) {
             if (pending.isNotEmpty()) {
-                item { Text("Ожидают подтверждения", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                items(pending, key = { "pending-" + it.id }) { payment ->
-                    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(payment.title, fontWeight = FontWeight.SemiBold)
-                                    Text("${payment.category} · срок ${payment.dueDate(month)}", style = MaterialTheme.typography.bodySmall)
-                                }
-                                Text("${payment.amount.toLong()} ₽", fontWeight = FontWeight.Bold)
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Ожидают подтверждения (${pending.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = {
+                                pendingExpanded = !pendingExpanded
+                                context.getSharedPreferences("thunbudget_ui", android.content.Context.MODE_PRIVATE)
+                                    .edit().putBoolean("pending_payments_expanded", pendingExpanded).apply()
                             }
-                            Button(onClick = { onConfirm(payment) }, modifier = Modifier.fillMaxWidth()) { Text("Подтвердить оплату и внести в расходы") }
+                        ) {
+                            Text(if (pendingExpanded) "Скрыть ▲" else "Показать ▼")
+                        }
+                    }
+                }
+                if (pendingExpanded) {
+                    items(pending, key = { "pending-" + it.id }) { payment ->
+                        Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(payment.title, fontWeight = FontWeight.SemiBold)
+                                        Text("${payment.category} · срок ${payment.dueDate(month)}", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Text("${payment.amount.toLong()} ₽", fontWeight = FontWeight.Bold)
+                                }
+                                Button(onClick = { onConfirm(payment) }, modifier = Modifier.fillMaxWidth()) { Text("Подтвердить оплату и внести в расходы") }
+                            }
                         }
                     }
                 }
