@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.3.6
+- Release candidate: versionCode 19, versionName 1.3.6; unit tests and debug compilation passed.
 - Fixed date entry cursor jumping by storing digits only and rendering separators through a visual date mask.
 - Applied the corrected date input behavior to expense entry, expense editing, reporting-period settings, history range filters, and voice confirmation.
 - Replaced the combined history month selector with independent year, month, and day filters that can be combined with category, amount, text, and date-range filters.
