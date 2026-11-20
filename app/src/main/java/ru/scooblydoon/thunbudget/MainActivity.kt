@@ -678,6 +678,11 @@ private fun ThunBudgetApp() {
                                 "\nОценочный дневной лимит из остатка: ${money(daily)}. Сокращения — рекомендации, а не автоматические изменения бюджета."
                         }
                     }
+                    AssistantIntent.QUERY_TOP_SPENDING_CATEGORY -> {
+                        val top = AssistantAnalytics.topCategoryByAmount(queryRows)
+                        voiceMessage = if (top == null) "За выбранный период расходов нет."
+                            else "Больше всего денег ушло на категорию «${top.first}»: ${money(top.second)}. Это самая затратная категория по общей сумме."
+                    }
                     AssistantIntent.QUERY_TOP_CATEGORY_FREQUENCY -> {
                         val top = AssistantAnalytics.topCategoryByFrequency(queryRows)
                         voiceMessage = if (top == null) "За выбранный период операций нет." else "Самая частая категория: «${top.first}». Количество операций: ${top.second}."
@@ -789,7 +794,7 @@ private fun ThunBudgetApp() {
             startOfflineSpeechRecognition(context, offlineSpeechRecognizer, onResult = { alternatives ->
                 isListening = false
                 showAssistantDialog = false
-                val interpreted = alternatives.firstNotNullOfOrNull { phrase ->
+                val interpreted = alternatives.sortedByDescending { voiceRecognitionScore(it, categories) }.firstNotNullOfOrNull { phrase ->
                     AssistantLocalParser.parse(phrase, categories.map { it.name }, today)?.let { phrase to it }
                 }
                 if (interpreted != null) {
