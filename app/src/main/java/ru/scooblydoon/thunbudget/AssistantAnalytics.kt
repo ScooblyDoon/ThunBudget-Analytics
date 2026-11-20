@@ -57,6 +57,17 @@ internal object AssistantAnalytics {
         return SpendingAverage(total, count, total / count, category)
     }
 
+    fun monthlyTotals(expenses: List<Expense>): List<Pair<String, Double>> =
+        expenses.mapNotNull { e ->
+            runCatching { YearMonth.from(LocalDate.parse(e.date)).toString() to e.amount }.getOrNull()
+        }.groupBy({ it.first }, { it.second })
+            .toSortedMap()
+            .map { (month, amounts) ->
+                val parsed = YearMonth.parse(month)
+                parsed.month.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale("ru", "RU"))
+                    .replaceFirstChar { it.titlecase(java.util.Locale("ru", "RU")) } + " " + parsed.year to amounts.sum()
+            }
+
     fun categoryTotals(expenses: List<Expense>): List<Pair<String, Double>> =
         expenses.groupBy { it.category }.map { (category, rows) -> category to rows.sumOf { it.amount } }
             .sortedByDescending { it.second }
