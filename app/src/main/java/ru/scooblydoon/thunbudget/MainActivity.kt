@@ -165,8 +165,29 @@ internal class BudgetStore(context: Context) {
     fun saveCategories(items: List<BudgetCategory>) {
         val normalizedPairs = BudgetAllocationCalculator.withReserve(items.map { it.name to it.percent })
         val normalized = normalizedPairs.map { BudgetCategory(it.first, it.second) }
-        val a=JSONArray(); normalized.forEach { a.put(JSONObject().put("name",it.name).put("percent",it.percent)) }
-        check(prefs.edit().putString("categories",a.toString()).commit()) { "Не удалось сохранить доли категорий." }
+        persistCategories(normalized)
+    }
+
+    /**
+     * Restores a previously saved manual allocation verbatim. Unlike saveCategories(),
+     * this must not recalculate the reserve: the snapshot is the source of truth.
+     */
+    fun restoreCategoriesExactly(items: List<BudgetCategory>) {
+        require(items.map { it.name.lowercase(Locale.ROOT) }.distinct().size == items.size) {
+            "В снимке ручных долей есть повторяющиеся категории."
+        }
+        require(items.all { it.name.isNotBlank() && it.percent.isFinite() && it.percent >= 0.0 }) {
+            "Снимок ручных долей содержит некорректные значения."
+        }
+        persistCategories(items)
+    }
+
+    private fun persistCategories(items: List<BudgetCategory>) {
+        val a = JSONArray()
+        items.forEach { a.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+        check(prefs.edit().putString("categories", a.toString()).commit()) {
+            "Не удалось сохранить доли категорий."
+        }
         saveAutomaticBackup()
     }
     fun loadRecurringPayments(): List<RecurringPayment> = RecurringPaymentStore(appContext).load()
@@ -1115,11 +1136,15 @@ private fun ThunBudgetApp() {
                                     }
                                     Switch(checked=autoAllocationEnabled, onCheckedChange={ enabled ->
                                         if (enabled) {
-                                            manualAllocationSnapshot = categories
-                                            store.saveManualAllocationSnapshot(categories)
+                                            // Capture the complete manual configuration before auto mode changes it.
+                                            val snapshot = categories.map { it.copy() }
+                                            manualAllocationSnapshot = snapshot
+                                            store.saveManualAllocationSnapshot(snapshot)
                                         } else if (autoAllocationEnabled) {
-                                            categories = manualAllocationSnapshot
-                                            store.saveCategories(categories)
+                                            // Restore the exact saved list, including its original reserve share.
+                                            val restored = manualAllocationSnapshot.map { it.copy() }
+                                            store.restoreCategoriesExactly(restored)
+                                            categories = restored
                                         }
                                         autoAllocationEnabled = enabled
                                         store.saveAutoAllocationEnabled(enabled)
