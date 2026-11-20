@@ -30,7 +30,7 @@ object BudgetAllocationCalculator {
             .sorted()
             .toList()
         val firstMonth = when {
-            availableMonths.isEmpty() -> lastCompletedMonth
+            availableMonths.isEmpty() -> lastCompletedMonth.minusMonths(5)
             availableMonths.size >= 6 -> lastCompletedMonth.minusMonths(5)
             else -> availableMonths.first()
         }
