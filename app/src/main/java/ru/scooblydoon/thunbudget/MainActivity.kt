@@ -1688,8 +1688,9 @@ private fun ChartsScreen(
                 val values=categories.map { cat -> cat to monthExpenses.filter { it.category==cat.name }.sumOf { it.amount } }.filter { it.second>0 }
                 Card { Column(Modifier.fillMaxWidth().padding(16.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     if(values.isEmpty()) Text("За выбранный месяц расходов пока нет.") else {
-                        Box(contentAlignment=Alignment.Center) {
-                            Canvas(Modifier.size(210.dp)) {
+                        BoxWithConstraints(contentAlignment=Alignment.Center) {
+                            val chartSize = minOf(210.dp, maxWidth * 0.68f)
+                            Canvas(Modifier.size(chartSize)) {
                                 var angle=-90f
                                 val sum=values.sumOf { it.second }.toFloat().coerceAtLeast(1f)
                                 values.forEachIndexed { index,pair ->
@@ -1701,9 +1702,15 @@ private fun ChartsScreen(
                             Column(horizontalAlignment=Alignment.CenterHorizontally) { Text(money(total),fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleLarge); Text("Всего",style=MaterialTheme.typography.labelSmall) }
                         }
                         values.forEachIndexed { index,pair ->
-                            Row(verticalAlignment=Alignment.CenterVertically) {
+                            Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.fillMaxWidth()) {
                                 Box(Modifier.size(10.dp).background(palette[index%palette.size],RoundedCornerShape(3.dp)))
-                                Spacer(Modifier.width(8.dp)); Text(pair.first.name,modifier=Modifier.weight(1f)); Text("${money(pair.second)} · ${if(total>0)(pair.second/total*100).toInt() else 0}%",fontWeight=FontWeight.SemiBold)
+                                Spacer(Modifier.width(8.dp))
+                                Text(pair.first.name,modifier=Modifier.weight(1f),maxLines=2)
+                                Text(
+                                    "${money(pair.second)} · ${if(total>0)(pair.second/total*100).toInt() else 0}%",
+                                    fontWeight=FontWeight.SemiBold,
+                                    style=MaterialTheme.typography.labelMedium
+                                )
                             }
                         }
                     }
