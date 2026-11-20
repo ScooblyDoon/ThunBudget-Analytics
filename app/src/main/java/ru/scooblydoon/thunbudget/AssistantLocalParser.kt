@@ -65,6 +65,24 @@ object AssistantLocalParser {
         if (listOf("самое частое название", "самое частое название затрат", "название расхода встречается чаще всего", "название встречается чаще всего", "чаще всего покупаю", "частая покупка", "самая частая покупка", "какое название чаще").any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_TOP_TITLE_FREQUENCY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
         }
+        if (listOf(
+                "в какой день больше всего трат", "в какой день было больше всего трат",
+                "какой день самый затратный", "самый затратный день", "день с наибольшими расходами",
+                "когда я больше всего потратил", "в какой день я потратил больше всего",
+                "в какой день потратил больше всего", "какого дня самые большие расходы",
+                "в какой день недели больше всего расходов", "самый дорогой день"
+            ).any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_TOP_SPENDING_DAY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.96)
+        }
+        if (listOf(
+                "на чем сэкономить", "на чем можно сэкономить", "что урезать", "где урезать расходы",
+                "какие траты сократить", "какие расходы сократить", "как дотянуть до зарплаты",
+                "как хватило денег до зарплаты", "хватит ли денег до зарплаты", "как распределить остаток до зарплаты",
+                "дай рекомендации по экономии", "дай совет по расходам", "как сократить расходы",
+                "где сократить траты", "что можно урезать чтобы хватило", "как прожить до зарплаты"
+            ).any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_SAVING_RECOMMENDATIONS, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.96)
+        }
         if (listOf("самый большой расход", "наибольший расход", "максимальный расход", "самая крупная трата", "самая большая покупка").any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_MAX_EXPENSE, category = category, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
         }
