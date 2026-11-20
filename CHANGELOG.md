@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.13
+- Add a choice between configured monthly income and the sum of the two reporting-period incomes for the selected month.
+- Add a dynamic allocation forecast based on actual spending recorded in the currently selected Overview reporting period, with editable proposed shares and reserve remainder.
+- Show category free-balance percentage and required budget increase percentage in monthly and selected-period analytics.
+- Add unit tests for monthly income modes, category budget metrics, and dynamic allocation proposals.
+
 ## 1.3.12
 - Fix assistant date display to use dd.MM.yyyy and convert dates to natural Russian speech.
 - Fix date-to-speech matching and interval selection for average spending requests.
