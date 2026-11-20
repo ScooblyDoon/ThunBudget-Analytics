@@ -99,10 +99,10 @@ object BudgetAllocationCalculator {
         val donorRemaining = donors.associate { it.first to it.second }.toMutableMap()
         deficits.forEach { (target, deficit) ->
             var uncovered = deficit
-            donors.forEach { donor ->
-                if (uncovered <= 0.0001 || donor.first == target) return@forEach
+            donors.forEach donorLoop@ { donor ->
+                if (uncovered <= 0.0001 || donor.first == target) return@donorLoop
                 val available = donorRemaining[donor.first] ?: 0.0
-                if (available <= 0.0) return@forEach
+                if (available <= 0.0) return@donorLoop
                 val amount = minOf(uncovered, available)
                 transfers += Transfer(donor.first, target, amount, donor.third)
                 donorRemaining[donor.first] = available - amount
