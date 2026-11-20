@@ -29,7 +29,7 @@ object AssistantLocalParser {
         val date = parsedDate ?: today
 
         val month = when {
-            normalized.contains("прошлом месяце") || normalized.contains("за прошлый месяц") -> YearMonth.from(today).minusMonths(1)
+            normalized.contains("прошлом месяце") || normalized.contains("за прошлый месяц") || normalized.contains("в предыдущем месяце") -> YearMonth.from(today).minusMonths(1)
             normalized.contains("в этом месяце") || normalized.contains("за этот месяц") || normalized.contains("за месяц") -> YearMonth.from(today)
             else -> null
         }
@@ -46,7 +46,10 @@ object AssistantLocalParser {
                 quarterStart to today
             month != null -> month.atDay(1) to (if (month == YearMonth.from(today)) today else month.atEndOfMonth())
             parsedDate != null -> date to date
-            normalized.contains("за неделю") || normalized.contains("за последние 7 дней") -> today.minusDays(6) to today
+            normalized.contains("за последние 30 дней") || normalized.contains("за месяц от сегодня") -> today.minusDays(29) to today
+            normalized.contains("за последние 14 дней") || normalized.contains("за две недели") || normalized.contains("за 2 недели") -> today.minusDays(13) to today
+            normalized.contains("за прошлую неделю") || normalized.contains("на прошлой неделе") -> today.with(java.time.DayOfWeek.MONDAY).minusDays(7) to today.with(java.time.DayOfWeek.MONDAY).minusDays(1)
+            normalized.contains("за неделю") || normalized.contains("за последние 7 дней") || normalized.contains("на этой неделе") -> today.minusDays(6) to today
             else -> null
         }
         val periodStart = periodBounds?.first?.toString()
@@ -85,7 +88,7 @@ object AssistantLocalParser {
                 "какие траты сократить", "какие расходы сократить", "как дотянуть до зарплаты",
                 "как хватило денег до зарплаты", "хватит ли денег до зарплаты", "как распределить остаток до зарплаты",
                 "дай рекомендации по экономии", "дай совет по расходам", "как сократить расходы",
-                "где сократить траты", "что можно урезать чтобы хватило", "как прожить до зарплаты"
+                "где сократить траты", "что можно урезать чтобы хватило", "как прожить до зарплаты", "где я слишком много трачу", "что можно временно не покупать", "на чем можно урезать бюджет"
             ).any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_SAVING_RECOMMENDATIONS, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.96)
         }
