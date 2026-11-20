@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.8
+- Added six-month budget allocation suggestions based on actual spending across the previous six completed months.
+- Added manual editing of suggested category percentages and automatic reserve allocation when the total is below 100%.
+- Added recurring payments with monthly due dates, reminders, confirmation, and automatic expense entry.
+- Added recurring-payment data to backup and restore.
+
 ## 1.3.7
 - Fixed the voice confirmation date being displayed in ISO digit order (for example, 20.26.1117); dates now initialize in DD.MM.YYYY order.
 - Improved offline command recovery when speech recognition drops the command verb but retains a clear amount and known category (for example, “500 руб продукты 17 ноября”).
