@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.6
+- Fixed date entry cursor jumping by storing digits only and rendering separators through a visual date mask.
+- Applied the corrected date input behavior to expense entry, expense editing, reporting-period settings, history range filters, and voice confirmation.
+- Replaced the combined history month selector with independent year, month, and day filters that can be combined with category, amount, text, and date-range filters.
+- Removed the appearance/theme section from Settings; the main-screen theme switch remains available at the bottom.
+- Fixed the expense structure ring chart being clipped by drawing the stroked arcs inside their canvas bounds.
+- Improved voice command parsing to recognize natural phrasing such as “Внеси 500 рублей в транспорт за 15 ноября”.
+- Added “внеси/внести” as expense commands, retained fuzzy category matching, and added spoken date inference for day + month without a year.
+- If a voice command has no date, the current date is used; a day and month without a year resolve to the most recent occurrence not later than today.
+- Added regression tests for the natural voice command, default current date, and year inference.
+
+# Changelog
+
 ## 1.3.5
 - Removed the T-Bank notification listener, transaction queue, and related Settings controls.
 - Improved offline voice amount parsing, including decimal values and kopecks.
