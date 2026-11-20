@@ -508,6 +508,7 @@ private fun ThunBudgetApp() {
     var showAnnualCategoryCharts by rememberUiExpanded(context, "annual_category_charts")
     var selectedChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var showHistoryFilters by rememberUiExpanded(context, "history_filters")
+    var quickActionsExpanded by rememberUiExpanded(context, "quick_actions_panel", true)
     val today = LocalDate.now()
     val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
     var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
@@ -827,15 +828,31 @@ private fun ThunBudgetApp() {
                 title={ Column { Text("ThunBudget",fontWeight=FontWeight.Bold); Text("Личный бюджет",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant) } },
                 actions={ Row(verticalAlignment=Alignment.CenterVertically) { TextButton(onClick={showAssistantDialog=true}) { Text("Помощник") }; TextButton(onClick={showSettings=true}) { Text("Настройки") } } }
             ) },
-            floatingActionButton={ if(tab != 2 && tab != 5) Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
-                    Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
+            floatingActionButton={
+                if(tab != 2 && tab != 5) {
+                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
+                        if (quickActionsExpanded) {
+                            SmallFloatingActionButton(onClick={voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)},containerColor=MaterialTheme.colorScheme.secondaryContainer) {
+                                Icon(Icons.Filled.Mic,contentDescription="Голосовой ввод")
+                            }
+                            SmallFloatingActionButton(onClick={showPeriodIncomeEditor=true},containerColor=MaterialTheme.colorScheme.tertiaryContainer) {
+                                Text("₽+",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onTertiaryContainer)
+                            }
+                            FloatingActionButton(onClick={showAdd=true}) { Text("+",style=MaterialTheme.typography.headlineMedium) }
+                        }
+                        SmallFloatingActionButton(
+                            onClick={
+                                quickActionsExpanded = !quickActionsExpanded
+                                persistUiExpanded(context, "quick_actions_panel", quickActionsExpanded)
+                            },
+                            containerColor=MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor=MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Text(if (quickActionsExpanded) "›" else "‹", style=MaterialTheme.typography.titleLarge, fontWeight=FontWeight.Bold)
+                        }
+                    }
                 }
-                SmallFloatingActionButton(onClick={showPeriodIncomeEditor=true},containerColor=MaterialTheme.colorScheme.tertiaryContainer) {
-                    Text("₽+",fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onTertiaryContainer)
-                }
-                FloatingActionButton(onClick={showAdd=true}) { Text("+",style=MaterialTheme.typography.headlineMedium) }
-            } },
+            },
             bottomBar={ Column {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
