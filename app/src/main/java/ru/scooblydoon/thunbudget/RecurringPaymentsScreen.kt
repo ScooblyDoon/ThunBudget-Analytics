@@ -96,7 +96,7 @@ internal fun RecurringPaymentsScreen(
                 }
             },
             confirmButton = {
-                TextButton(enabled = title.isNotBlank() && parsedAmount != null && parsedAmount.isFinite() && parsedAmount > 0 && parsedDay in 1..31,
+                TextButton(enabled = title.isNotBlank() && parsedAmount != null && parsedAmount.isFinite() && parsedAmount > 0 && parsedDay != null && parsedDay in 1..31,
                     onClick = { onAdd(RecurringPayment(title = title.trim(), amount = parsedAmount!!, category = category, dayOfMonth = parsedDay!!)); showAdd = false }) { Text("Сохранить") }
             },
             dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Отмена") } }
