@@ -318,7 +318,7 @@ private fun RecurringPaymentsCalendar(
     val today = LocalDate.now()
     val firstWeekdayOffset = month.atDay(1).dayOfWeek.value - 1
     val dateSlots: List<LocalDate?> =
-        List(firstWeekdayOffset) { null } + (1..month.lengthOfMonth()).map { month.atDay(it) }
+        List<LocalDate?>(firstWeekdayOffset) { null } + (1..month.lengthOfMonth()).map { month.atDay(it) }
     val weeks = dateSlots.chunked(7)
     val weekdayLabels = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
@@ -330,7 +330,7 @@ private fun RecurringPaymentsCalendar(
         ) {
             TextButton(onClick = onPreviousMonth) { Text("‹") }
             Text(
-                month.format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru"))).replaceFirstChar { it.uppercase(Locale("ru")) },
+                month.format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru"))).replaceFirstChar { it.uppercase() },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -388,8 +388,7 @@ private fun RecurringPaymentsCalendar(
                                 Text(
                                     if (dayPayments.size > 1) dayPayments.size.toString() else "●",
                                     color = contentColor,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    lineHeight = MaterialTheme.typography.labelSmall.lineHeight
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             } else if (isToday) {
                                 Text("•", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
