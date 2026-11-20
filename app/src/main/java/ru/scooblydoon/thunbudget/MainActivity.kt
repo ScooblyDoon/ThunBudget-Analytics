@@ -358,7 +358,7 @@ internal class BudgetStore(context: Context) {
 
     private fun isCurrentDataValid(): Boolean = isBackupSnapshotValid(exportBackup())
 
-    fun saveAutomaticBackup() {
+    fun saveAutomaticBackup(scheduleExternal: Boolean = true) {
         val snapshot = exportBackup()
         if (!isBackupSnapshotValid(snapshot)) return
         val previous = prefs.getString("_auto_backup", null)
@@ -372,7 +372,7 @@ internal class BudgetStore(context: Context) {
         val internalSaved = editor.commit()
         // External backup is scheduled independently so an internal storage failure
         // does not suppress the second protection layer.
-        if (!externalBackupFolder().isNullOrBlank()) runCatching { ExternalBackupSettings.schedule(appContext) }
+        if (scheduleExternal && !externalBackupFolder().isNullOrBlank()) runCatching { ExternalBackupSettings.schedule(appContext) }
         check(internalSaved) { "Не удалось сохранить автоматическую резервную копию." }
         BudgetWidgetProvider.refreshAll(appContext)
     }
@@ -402,7 +402,7 @@ internal class BudgetStore(context: Context) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        BudgetStore(applicationContext).saveAutomaticBackup()
+        BudgetStore(applicationContext).saveAutomaticBackup(scheduleExternal = false)
         setContent { ThunBudgetApp() }
     }
 }
@@ -733,7 +733,7 @@ private fun ThunBudgetApp() {
                 if (!previousFolder.isNullOrBlank() && previousFolder != uri.toString()) {
                     runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(previousFolder), flags) }
                 }
-                "Папка выбрана. Автоматическое резервирование будет выполняться в неё после изменения данных."
+                "Папка выбрана. Автокопия будет сохраняться через 10 минут после последнего изменения; хранится до 7 последних копий."
             }.getOrElse { "Не удалось подключить папку: ${it.message ?: "ошибка доступа"}" }
         }
     }
@@ -2014,6 +2014,7 @@ private fun SettingsDialog(
                     "backup" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Text("Резервное копирование",fontWeight=FontWeight.Bold)
                         Text("Резервные копии предназначены для восстановления данных приложения.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Автокопия создаётся через 10 минут после последнего изменения. Хранятся до 7 последних дневных копий. Выбери папку облачного хранилища, чтобы копии сохранялись вне телефона.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(if(externalBackupFolder.isNullOrBlank()) "Автоматическое сохранение во внешнюю папку выключено" else "Автоматическое сохранение во внешнюю папку включено",style=MaterialTheme.typography.bodySmall)
                         externalBackupLastSuccess?.let { Text("Последняя внешняя копия: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                         externalBackupLastError?.let { Text("Ошибка внешнего резервирования: $it",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error) }
