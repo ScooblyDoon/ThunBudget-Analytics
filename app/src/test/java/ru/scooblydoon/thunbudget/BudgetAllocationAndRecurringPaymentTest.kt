@@ -56,14 +56,14 @@ class BudgetAllocationTest {
         assertEquals(LocalDate.of(2026, 6, 1), window.from)
         assertEquals(LocalDate.of(2026, 11, 30), window.to)
         val suggestion = BudgetAllocationCalculator.suggest(listOf("Продукты"), history, LocalDate.of(2026, 12, 1)).single()
-        assertEquals(10.0 + 20.0 + 30.0 + 40.0 + 50.0 + 60.0 + 70.0 + 80.0 + 90.0 + 100.0 + 110.0, suggestion.totalSpent, 0.001)
+        assertEquals(60.0 + 70.0 + 80.0 + 90.0 + 100.0 + 110.0, suggestion.totalSpent, 0.001)
     }
 
     @Test fun redistributionUsesDonorsInTwentyFifteenTenPercentTiersAndLeavesSmallReserves() {
         val categories = listOf("Превышение" to 20.0, "Запас20" to 30.0, "Запас15" to 30.0, "Запас10" to 10.0, "Запас5" to 10.0)
         val result = BudgetAllocationCalculator.redistribute(
             categories,
-            mapOf("Превышение" to 300.0, "Запас20" to 210.0, "Запас15" to 255.0, "Запас10" to 95.0, "Запас5" to 99.0),
+            mapOf("Превышение" to 300.0, "Запас20" to 240.0, "Запас15" to 255.0, "Запас10" to 90.0, "Запас5" to 99.0),
             10.0
         )
         assertEquals("Запас20", result.transfers.first().fromCategory)
