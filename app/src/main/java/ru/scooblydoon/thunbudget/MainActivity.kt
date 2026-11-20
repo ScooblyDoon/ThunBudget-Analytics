@@ -2568,6 +2568,27 @@ private fun startOfflineSpeechRecognition(
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
     }
     recognizer.startListening(intent)
+    if(showDashboardArrangeDialog) {
+        AlertDialog(
+            onDismissRequest={showDashboardArrangeDialog=false},
+            title={Text("Настроить окна обзора")},
+            text={
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Меняй порядок блоков кнопками ↑ и ↓. Порядок сохранится на этом устройстве.")
+                    dashboardOrder.forEachIndexed { index,key ->
+                        val label=when(key) { "period"->"Отчётный период"; "budget"->"Доступный бюджет"; "income"->"Операции дохода"; else->"Бюджет по категориям" }
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Text(label,modifier=Modifier.weight(1f))
+                            IconButton(enabled=index>0,onClick={val next=dashboardOrder.toMutableList();val value=next.removeAt(index);next.add(index-1,value);dashboardOrder=next;store.saveDashboardOrder(next)}) { Text("↑") }
+                            IconButton(enabled=index<dashboardOrder.lastIndex,onClick={val next=dashboardOrder.toMutableList();val value=next.removeAt(index);next.add(index+1,value);dashboardOrder=next;store.saveDashboardOrder(next)}) { Text("↓") }
+                        }
+                    }
+                }
+            },
+            confirmButton={TextButton(onClick={showDashboardArrangeDialog=false}) { Text("Готово") }},
+            dismissButton={TextButton(onClick={val defaults=listOf("period","budget","income","categories");dashboardOrder=defaults;store.saveDashboardOrder(defaults)}) { Text("Сбросить") }}
+        )
+    }
 }
 
 private fun parseSpokenAmountCore(normalized: String): Double? {
@@ -2740,26 +2761,6 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
         category = if (isIncome) "Доход" else matchedCategory!!.name,
         amount = amount, date = date.toString(), isIncome = isIncome, isEdit = isEdit
     )
-    if(showDashboardArrangeDialog) {
-        AlertDialog(
-            onDismissRequest={showDashboardArrangeDialog=false},
-            title={Text("Настроить окна обзора")},
-            text={
-                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Text("Меняй порядок блоков кнопками ↑ и ↓. Порядок сохранится на этом устройстве.")
-                    dashboardOrder.forEachIndexed { index,key ->
-                        val label=when(key) { "period"->"Отчётный период"; "budget"->"Доступный бюджет"; "income"->"Операции дохода"; else->"Бюджет по категориям" }
-                        Row(verticalAlignment=Alignment.CenterVertically) {
-                            Text(label,modifier=Modifier.weight(1f))
-                            IconButton(enabled=index>0,onClick={val next=dashboardOrder.toMutableList();val value=next.removeAt(index);next.add(index-1,value);dashboardOrder=next;store.saveDashboardOrder(next)}) { Text("↑") }
-                            IconButton(enabled=index<dashboardOrder.lastIndex,onClick={val next=dashboardOrder.toMutableList();val value=next.removeAt(index);next.add(index+1,value);dashboardOrder=next;store.saveDashboardOrder(next)}) { Text("↓") }
-                        }
-                    }
-                }
-            },
-            confirmButton={TextButton(onClick={showDashboardArrangeDialog=false}) { Text("Готово") }},
-            dismissButton={TextButton(onClick={val defaults=listOf("period","budget","income","categories");dashboardOrder=defaults;store.saveDashboardOrder(defaults)}) { Text("Сбросить") }}
-        )
-    }
+
 
 }
