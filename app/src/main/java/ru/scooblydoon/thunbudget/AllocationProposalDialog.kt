@@ -35,7 +35,7 @@ internal fun AllocationProposalDialog(
         mutableStateMapOf<String, String>().apply {
             regular.forEach { c ->
                 val suggested = suggestions[c.name]?.suggestedPercent
-                put(c.name, String.format(java.util.Locale.US, "%.1f", suggested ?: c.percent))
+                put(c.name, String.format(java.util.Locale.US, "%.1f", suggested ?: 0.0))
             }
         }
     }
