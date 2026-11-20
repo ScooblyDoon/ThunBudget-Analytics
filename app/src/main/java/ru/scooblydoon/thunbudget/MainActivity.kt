@@ -1503,6 +1503,22 @@ private fun ThunBudgetApp() {
             }
         )
     }
+    if (showDynamicAllocationDialog) {
+        DynamicAllocationDialog(
+            categories = categories,
+            expenses = expenses,
+            periodStart = periodStart,
+            periodEnd = periodEnd,
+            onDismiss = { showDynamicAllocationDialog = false },
+            onSave = { updated ->
+                store.prepareUndoSnapshot()
+                canUndo = true
+                categories = updated
+                store.saveCategories(categories)
+                showDynamicAllocationDialog = false
+            }
+        )
+    }
     if (showAssistantDialog) {
         AlertDialog(
             onDismissRequest = { showAssistantDialog = false },
