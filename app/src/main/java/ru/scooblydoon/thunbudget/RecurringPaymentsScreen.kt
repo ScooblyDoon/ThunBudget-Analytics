@@ -32,7 +32,8 @@ internal fun RecurringPaymentsScreen(
 
     // Keep the title and Add action outside the scrolling list so they remain
     // visible regardless of how many recurring payments have been created.
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+      Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -97,6 +98,11 @@ internal fun RecurringPaymentsScreen(
                 }
             }
         }
+      }
+      FloatingActionButton(
+          onClick = { showAdd = true },
+          modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 20.dp)
+      ) { Text("+", style = MaterialTheme.typography.headlineMedium) }
     }
 
     if (showAdd) {
