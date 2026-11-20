@@ -151,6 +151,9 @@ internal class BudgetStore(context: Context) {
         prefs.edit().putString("categories",a.toString()).commit()
         saveAutomaticBackup()
     }
+    fun loadRecurringPayments(): List<RecurringPayment> = RecurringPaymentStore(appContext).load()
+    fun saveRecurringPayments(items: List<RecurringPayment>) { RecurringPaymentStore(appContext).save(items); saveAutomaticBackup() }
+
     fun loadExpenses(): List<Expense> {
         val raw=prefs.getString("expenses","[]") ?: "[]"
         return runCatching {
@@ -168,7 +171,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end")
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1")
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -296,7 +299,7 @@ internal class BudgetStore(context: Context) {
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme")) {
+            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1")) {
                 "В резервной копии обнаружено неизвестное поле."
             }
             val value = data.get(key)
@@ -417,6 +420,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         BudgetStore(applicationContext).saveAutomaticBackup(scheduleExternal = false)
+        RecurringPaymentNotifications.schedule(applicationContext)
         setContent { ThunBudgetApp() }
     }
 }
@@ -430,6 +434,7 @@ private fun ThunBudgetApp() {
     var savingsGoal by remember { mutableDoubleStateOf(store.loadSavingsGoal()) }
     var categories by remember { mutableStateOf(store.loadCategories()) }
     var expenses by remember { mutableStateOf(store.loadExpenses()) }
+    var recurringPayments by remember { mutableStateOf(store.loadRecurringPayments()) }
     var periodIncomes by remember { mutableStateOf(store.loadPeriodIncomes()) }
     var incomeEntries by remember { mutableStateOf(store.loadIncomeEntries()) }
     var selectedIncomeEntry by remember { mutableStateOf<IncomeEntry?>(null) }
@@ -825,6 +830,7 @@ private fun ThunBudgetApp() {
                     NavigationBarItem(selected=tab==2,onClick={tab=2},icon={ Text("▥",style=MaterialTheme.typography.titleLarge) },label={Text("Графики")})
                     NavigationBarItem(selected=tab==3,onClick={tab=3},icon={ Text("▤",style=MaterialTheme.typography.titleLarge) },label={Text("За год")})
                     NavigationBarItem(selected=tab==4,onClick={tab=4},icon={ Text("≡",style=MaterialTheme.typography.titleLarge) },label={Text("История")})
+                    NavigationBarItem(selected=tab==5,onClick={tab=5},icon={ Text("▣",style=MaterialTheme.typography.titleLarge) },label={Text("Платежи")})
                 }
                 Row(
                     modifier=Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(end=16.dp,bottom=4.dp),
@@ -1060,6 +1066,21 @@ private fun ThunBudgetApp() {
                 3 -> Box(Modifier.padding(padding).fillMaxSize()) {
                     AnnualChartsScreen(expenses=expenses,categories=categories,year=annualChartYear,onYearChange={annualChartYear=it},selectedCategoryNames=selectedAnnualChartCategoryNames,onSelectedCategoryNamesChange={selectedAnnualChartCategoryNames=it},showCategoryCharts=showAnnualCategoryCharts,onShowCategoryChartsChange={showAnnualCategoryCharts=it; persistUiExpanded(context,"annual_category_charts",it)})
                 }
+                5 -> RecurringPaymentsScreen(
+                    payments = recurringPayments,
+                    categories = categories,
+                    onAdd = { payment -> recurringPayments = recurringPayments + payment; store.saveRecurringPayments(recurringPayments) },
+                    onToggle = { payment -> recurringPayments = recurringPayments.map { if (it.id == payment.id) it.copy(active = !it.active) else it }; store.saveRecurringPayments(recurringPayments) },
+                    onDelete = { payment -> recurringPayments = recurringPayments.filterNot { it.id == payment.id }; store.saveRecurringPayments(recurringPayments) },
+                    onConfirm = { payment ->
+                        val due = payment.dueDate(YearMonth.from(today))
+                        store.prepareUndoSnapshot(); canUndo = true
+                        expenses = (expenses + Expense(System.currentTimeMillis(), payment.title, payment.category, payment.amount, due.toString())).sortedByDescending { it.date }
+                        store.saveExpenses(expenses)
+                        recurringPayments = recurringPayments.map { if (it.id == payment.id) it.copy(completedMonths = it.completedMonths + YearMonth.from(today).toString()) else it }
+                        store.saveRecurringPayments(recurringPayments)
+                    }
+                )
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item { Row(verticalAlignment=Alignment.CenterVertically) {
