@@ -68,7 +68,29 @@ internal fun RecurringPaymentsScreen(
                 }
             }
         }
-        if (payments.isEmpty()) item { Text("Пока нет регулярных платежей. Добавь, например, аренду, интернет или подписку.") }
+        if (payments.isEmpty()) item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Пока нет регулярных платежей. Добавь, например, аренду, интернет или подписку.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(
+                        onClick = { showAdd = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("+ Добавить регулярный платёж")
+                    }
+                }
+            }
+        }
     }
     if (showAdd) {
         var title by remember { mutableStateOf("") }
