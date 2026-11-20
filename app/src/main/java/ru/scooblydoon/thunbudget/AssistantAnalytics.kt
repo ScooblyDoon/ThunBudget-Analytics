@@ -57,6 +57,63 @@ internal object AssistantAnalytics {
         return SpendingAverage(total, count, total / count, category)
     }
 
+    fun topSpendingDay(expenses: List<Expense>): Pair<LocalDate, Double>? =
+        expenses.mapNotNull { expense ->
+            val date = runCatching { LocalDate.parse(expense.date) }.getOrNull() ?: return@mapNotNull null
+            date to expense.amount.coerceAtLeast(0.0)
+        }.groupBy({ it.first }, { it.second })
+            .mapValues { (_, amounts) -> amounts.sum() }
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<LocalDate, Double>> { it.value }.thenBy { it.key })
+            .firstOrNull()?.let { it.key to it.value }
+
+    data class SavingRecommendation(
+        val category: String,
+        val spent: Double,
+        val planned: Double,
+        val suggestedReduction: Double,
+        val reason: String
+    )
+
+    fun savingRecommendations(
+        expenses: List<Expense>,
+        categoryBudgets: Map<String, Double>,
+        remainingBudget: Double,
+        daysUntilPayday: Long
+    ): List<SavingRecommendation> {
+        if (expenses.isEmpty()) return emptyList()
+        val protected = setOf("жилье", "жильё", "жкх", "ипотека", "аренда", "лекарства", "здоровье", "накопления")
+        val totals = expenses.groupBy { it.category }
+            .mapValues { (_, rows) -> rows.sumOf { it.amount.coerceAtLeast(0.0) } }
+        val deficit = if (remainingBudget < 0.0) -remainingBudget else 0.0
+        val candidates = totals.mapNotNull { (category, spent) ->
+            if (category.lowercase(Locale.ROOT) in protected || spent <= 0.0) return@mapNotNull null
+            val planned = categoryBudgets[category] ?: 0.0
+            val over = (spent - planned).coerceAtLeast(0.0)
+            val target = when {
+                deficit > 0.0 -> minOf(spent, maxOf(over, deficit / 2.0))
+                planned > 0.0 && over > 0.0 -> over
+                else -> spent * 0.10
+            }.coerceAtMost(spent)
+            val reason = when {
+                over > 0.0 -> "Превышен план категории на ${over.toLong()} ₽"
+                deficit > 0.0 -> "Поможет закрыть нехватку бюджета до зарплаты"
+                else -> "Можно временно сократить необязательные покупки на 10%"
+            }
+            SavingRecommendation(category, spent, planned, target, reason)
+        }.sortedWith(
+            compareByDescending<SavingRecommendation> { if (it.planned > 0.0) (it.spent - it.planned).coerceAtLeast(0.0) else 0.0 }
+                .thenByDescending { it.spent }
+        )
+        if (candidates.isEmpty()) return emptyList()
+        var needed = deficit
+        return candidates.map { candidate ->
+            val reduction = if (deficit > 0.0) minOf(candidate.suggestedReduction, needed).also { needed -= it }
+                else candidate.suggestedReduction
+            candidate.copy(suggestedReduction = reduction)
+        }.filter { it.suggestedReduction > 0.0 }.take(4)
+    }
+
     fun monthlyTotals(expenses: List<Expense>): List<Pair<String, Double>> =
         expenses.mapNotNull { e ->
             runCatching { YearMonth.from(LocalDate.parse(e.date)).toString() to e.amount }.getOrNull()
