@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.11
+- Add a persistent collapse/expand toggle for the floating quick-action buttons (voice input, income, add expense).
+
 ## 1.3.10
 - Fix recurring payments empty state: add a prominent full-width button to create the first payment.
 
