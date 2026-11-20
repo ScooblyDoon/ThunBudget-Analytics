@@ -42,13 +42,12 @@ internal fun RecurringPaymentsScreen(
                 Text("Регулярные платежи", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("Подтверждай оплату — только тогда она попадёт в историю расходов.", style = MaterialTheme.typography.bodySmall)
             }
-            Button(onClick = { showAdd = true }) { Text("+ Добавить") }
         }
 
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 104.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
         ) {
             if (pending.isNotEmpty()) {
                 item { Text("Ожидают подтверждения", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
@@ -98,13 +97,13 @@ internal fun RecurringPaymentsScreen(
                 }
             }
         }
+        Button(
+            onClick = { showAdd = true },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text("+ Добавить плановый расход")
+        }
       }
-      ExtendedFloatingActionButton(
-          onClick = { showAdd = true },
-          modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 16.dp),
-          icon = { Text("+", style = MaterialTheme.typography.headlineMedium) },
-          text = { Text("Добавить плановый расход") }
-      )
     }
 
     if (showAdd) {
