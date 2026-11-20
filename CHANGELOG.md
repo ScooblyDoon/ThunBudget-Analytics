@@ -122,3 +122,7 @@
 ### Compatibility
 - Keep local-first storage and existing navigation, main-screen layout, theme, and 2×2 widget.
 - No cloud synchronization or remote financial-data storage.
+
+
+## 1.3.23 (versionCode 36)
+- Added a collapsible, locally remembered pending recurring payments section.
