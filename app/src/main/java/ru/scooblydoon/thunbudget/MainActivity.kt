@@ -483,6 +483,7 @@ private fun ThunBudgetApp() {
     var historyAscending by remember { mutableStateOf(false) }
     var historyQuery by remember { mutableStateOf("") }
     var historyCategoryFilter by remember { mutableStateOf("Все категории") }
+    var historyMonthFilter by remember { mutableStateOf("Все месяцы") }
     var historyFromDate by remember { mutableStateOf("") }
     var historyToDate by remember { mutableStateOf("") }
     var amountLimit by remember { mutableFloatStateOf(100000f) }
@@ -793,16 +794,27 @@ private fun ThunBudgetApp() {
                 }
                 FloatingActionButton(onClick={showAdd=true}) { Text("+",style=MaterialTheme.typography.headlineMedium) }
             } },
-            bottomBar={ NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                tonalElevation = 8.dp
-            ) {
-                NavigationBarItem(selected=tab==0,onClick={tab=0},icon={ Text("⌂",style=MaterialTheme.typography.titleLarge) },label={Text("Обзор")})
-                NavigationBarItem(selected=tab==1,onClick={tab=1},icon={ Text("◒",style=MaterialTheme.typography.titleLarge) },label={Text("Аналитика")})
-                NavigationBarItem(selected=tab==2,onClick={tab=2},icon={ Text("▥",style=MaterialTheme.typography.titleLarge) },label={Text("Графики")})
-                NavigationBarItem(selected=tab==3,onClick={tab=3},icon={ Text("▤",style=MaterialTheme.typography.titleLarge) },label={Text("За год")})
-                NavigationBarItem(selected=tab==4,onClick={tab=4},icon={ Text("≡",style=MaterialTheme.typography.titleLarge) },label={Text("История")})
+            bottomBar={ Column {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 8.dp
+                ) {
+                    NavigationBarItem(selected=tab==0,onClick={tab=0},icon={ Text("⌂",style=MaterialTheme.typography.titleLarge) },label={Text("Обзор")})
+                    NavigationBarItem(selected=tab==1,onClick={tab=1},icon={ Text("◒",style=MaterialTheme.typography.titleLarge) },label={Text("Аналитика")})
+                    NavigationBarItem(selected=tab==2,onClick={tab=2},icon={ Text("▥",style=MaterialTheme.typography.titleLarge) },label={Text("Графики")})
+                    NavigationBarItem(selected=tab==3,onClick={tab=3},icon={ Text("▤",style=MaterialTheme.typography.titleLarge) },label={Text("За год")})
+                    NavigationBarItem(selected=tab==4,onClick={tab=4},icon={ Text("≡",style=MaterialTheme.typography.titleLarge) },label={Text("История")})
+                }
+                Row(
+                    modifier=Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(end=16.dp,bottom=4.dp),
+                    horizontalArrangement=Arrangement.End,
+                    verticalAlignment=Alignment.CenterVertically
+                ) {
+                    TextButton(onClick={darkTheme=!darkTheme;store.saveDarkTheme(darkTheme)}) {
+                        Text(if(darkTheme) "☀ Светлая тема" else "☾ Тёмная тема")
+                    }
+                }
             } }
         ) { padding ->
             when(tab) {
@@ -1045,11 +1057,26 @@ private fun ThunBudgetApp() {
                                     }
                                 }
                             }
+                            var expandedMonth by rememberSaveable { mutableStateOf(false) }
+                            val availableHistoryMonths = expenses.mapNotNull { runCatching { YearMonth.from(LocalDate.parse(it.date)).toString() }.getOrNull() }.distinct().sortedDescending()
+                            ExposedDropdownMenuBox(expanded=expandedMonth,onExpandedChange={expandedMonth=it}) {
+                                OutlinedTextField(
+                                    value=if(historyMonthFilter=="Все месяцы") historyMonthFilter else runCatching { YearMonth.parse(historyMonthFilter).format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))) }.getOrDefault(historyMonthFilter),
+                                    onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),
+                                    label={Text("Месяц")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedMonth)}
+                                )
+                                ExposedDropdownMenu(expanded=expandedMonth,onDismissRequest={expandedMonth=false}) {
+                                    (listOf("Все месяцы")+availableHistoryMonths).forEach { option ->
+                                        val label=if(option=="Все месяцы") option else runCatching { YearMonth.parse(option).format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))) }.getOrDefault(option)
+                                        DropdownMenuItem(text={Text(label)},onClick={historyMonthFilter=option;expandedMonth=false})
+                                    }
+                                }
+                            }
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                                 OutlinedTextField(value=historyToDate,onValueChange={historyToDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                             }
-                            TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
+                            TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyMonthFilter="Все месяцы";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
                         }
                     }
                     item {
@@ -1076,6 +1103,7 @@ private fun ThunBudgetApp() {
                         expense.amount<=amountLimit.toDouble() &&
                         (normalizedQuery.isBlank() || expense.title.lowercase(Locale("ru","RU")).contains(normalizedQuery) || expense.category.lowercase(Locale("ru","RU")).contains(normalizedQuery)) &&
                         (historyCategoryFilter=="Все категории" || expense.category==historyCategoryFilter) &&
+                        (historyMonthFilter=="Все месяцы" || expense.date.startsWith(historyMonthFilter)) &&
                         (validFrom==null || expense.date>=validFrom) &&
                         (validTo==null || expense.date<=validTo)
                     }
