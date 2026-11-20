@@ -475,6 +475,7 @@ private fun ThunBudgetApp() {
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
     var showCategoryManager by remember { mutableStateOf(false) }
+    var showAllocationDialog by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(0) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
@@ -918,6 +919,7 @@ private fun ThunBudgetApp() {
                 }
                 1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
+                    item { OutlinedButton(onClick={showAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Рассчитать распределение бюджета на 6 месяцев") } }
                     item { Text("Текущий отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
                         val currentStart = LocalDate.parse(periodStart)
@@ -1333,6 +1335,19 @@ private fun ThunBudgetApp() {
                     }, enabled = ttsReady) { Text("Повторить голосом") }
                     TextButton(onClick = { voiceMessage = null }) { Text("Понятно") }
                 }
+            }
+        )
+    }
+    if (showAllocationDialog) {
+        AllocationProposalDialog(
+            categories = categories,
+            expenses = expenses,
+            onDismiss = { showAllocationDialog = false },
+            onSave = { updated ->
+                store.prepareUndoSnapshot(); canUndo = true
+                categories = updated
+                store.saveCategories(categories)
+                showAllocationDialog = false
             }
         )
     }
