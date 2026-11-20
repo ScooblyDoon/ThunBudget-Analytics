@@ -32,13 +32,21 @@ object AssistantLocalParser {
         val date = parsedDate ?: today
 
         val month = when {
-            normalized.contains("прошлом месяце") || normalized.contains("за прошлый месяц") ->
-                YearMonth.from(today).minusMonths(1)
-            normalized.contains("в этом месяце") || normalized.contains("за этот месяц") ||
-                normalized.contains("за месяц") -> YearMonth.from(today)
+            normalized.contains("прошлом месяце") || normalized.contains("за прошлый месяц") -> YearMonth.from(today).minusMonths(1)
+            normalized.contains("в этом месяце") || normalized.contains("за этот месяц") || normalized.contains("за месяц") -> YearMonth.from(today)
             else -> null
         }
+        val quarterStart = LocalDate.of(today.year, ((today.monthValue - 1) / 3) * 3 + 1, 1)
+        val previousQuarterEnd = quarterStart.minusDays(1)
         val periodBounds = when {
+            normalized.contains("за прошлый год") || normalized.contains("в прошлом году") ->
+                LocalDate.of(today.year - 1, 1, 1) to LocalDate.of(today.year - 1, 12, 31)
+            normalized.contains("за год") || normalized.contains("в этом году") || normalized.contains("за текущий год") ->
+                LocalDate.of(today.year, 1, 1) to today
+            normalized.contains("за прошлый квартал") || normalized.contains("в прошлом квартале") ->
+                previousQuarterEnd.minusMonths(2).withDayOfMonth(1) to previousQuarterEnd
+            normalized.contains("за квартал") || normalized.contains("в этом квартале") ->
+                quarterStart to today
             month != null -> month.atDay(1) to (if (month == YearMonth.from(today)) today else month.atEndOfMonth())
             parsedDate != null -> date to date
             normalized.contains("за неделю") || normalized.contains("за последние 7 дней") -> today.minusDays(6) to today
@@ -46,6 +54,29 @@ object AssistantLocalParser {
         }
         val periodStart = periodBounds?.first?.toString()
         val periodEnd = periodBounds?.second?.toString()
+
+        val mentionsChart = listOf("график", "диаграмм", "построй график", "покажи график").any { normalized.contains(it) }
+        if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalized == it }) {
+            return command(AssistantIntent.UNKNOWN, confidence = 0.9)
+        }
+        if (listOf("самая частая категория", "чаще всего трачу", "самая популярная категория", "где чаще всего расходы", "больше всего операций по категории").any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_TOP_CATEGORY_FREQUENCY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
+        }
+        if (listOf("самое частое название", "чаще всего покупаю", "частая покупка", "самая частая покупка", "какое название чаще").any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_TOP_TITLE_FREQUENCY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
+        }
+        if (listOf("самый большой расход", "наибольший расход", "максимальный расход", "самая крупная трата", "самая большая покупка").any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_MAX_EXPENSE, category = category, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
+        }
+        if (listOf("самый маленький расход", "наименьший расход", "минимальный расход", "самая маленькая трата").any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_MIN_EXPENSE, category = category, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
+        }
+        if (listOf("средний расход", "средние расходы", "в среднем трачу", "средняя трата").any { normalized.contains(it) }) {
+            return command(AssistantIntent.QUERY_AVERAGE_SPENDING, category = category, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
+        }
+        if (mentionsChart) {
+            return command(AssistantIntent.QUERY_CHART, category = category, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.92)
+        }
 
         if (listOf("удали последний расход", "удалить последний расход", "удали последнюю операцию", "удалить последнюю операцию", "отмени последнюю операцию").any { normalized.contains(it) }) {
             return command(
