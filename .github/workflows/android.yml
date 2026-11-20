@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: thunbudget-android-${{ github.ref }}
+  group: thunbudget-android-responsive-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
