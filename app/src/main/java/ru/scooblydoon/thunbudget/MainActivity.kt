@@ -626,10 +626,11 @@ private fun ThunBudgetApp() {
                         voiceMessage = if (average == null) "Недостаточно расходов для расчёта среднего." else "Средний расход за $bucketName: ${money(average.average)}. Всего: ${money(average.total)} за ${average.bucketCount} период(ов)." + (command.category?.let { " Категория: $it." } ?: " По всем категориям.")
                     }
                     AssistantIntent.QUERY_CHART -> {
-                        val values = AssistantAnalytics.categoryTotals(categoryRows).take(10)
-                        assistantChartTitle = if (command.category == null) "Расходы по категориям" else "Расходы: ${command.category}"
+                        val monthly = normalizedPhrase.contains("по месяц") || normalizedPhrase.contains("динамик") || normalizedPhrase.contains("тренд")
+                        val values = if (monthly) AssistantAnalytics.monthlyTotals(categoryRows) else AssistantAnalytics.categoryTotals(categoryRows).take(10)
+                        assistantChartTitle = if (monthly) "Динамика расходов по месяцам" else if (command.category == null) "Расходы по категориям" else "Расходы: ${command.category}"
                         assistantChartData = values
-                        voiceMessage = if (values.isEmpty()) "Нет данных для построения графика." else "Построен график расходов по ${values.size} категориям. Общая сумма: ${money(values.sumOf { it.second })}."
+                        voiceMessage = if (values.isEmpty()) "Нет данных для построения графика." else "Построен график: ${values.size} показателей. Общая сумма: ${money(values.sumOf { it.second })}."
                     }
                     AssistantIntent.QUERY_OVERSPENDING -> {
                         val exceeded = categories.mapNotNull { category ->
