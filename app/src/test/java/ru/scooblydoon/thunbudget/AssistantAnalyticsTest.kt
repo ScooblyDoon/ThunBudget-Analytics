@@ -26,10 +26,10 @@ class AssistantAnalyticsTest {
     @Test fun calculatesMonthlyAndCategoryAverageAcrossCalendarMonths() {
         val monthly = AssistantAnalytics.average(expenses, SpendingBucket.MONTH)
         assertNotNull(monthly)
-        assertEquals(3L, monthly!!.bucketCount)
-        assertEquals(1150.0, monthly.average, 0.001)
+        assertEquals(4L, monthly!!.bucketCount)
+        assertEquals(862.5, monthly.average, 0.001)
         val category = AssistantAnalytics.average(expenses, SpendingBucket.MONTH, "Продукты")
-        assertEquals(1250.0, category!!.average, 0.001)
+        assertEquals(833.333333, category!!.average, 0.001)
     }
 
     @Test fun buildsCategoryTotalsForChart() {
