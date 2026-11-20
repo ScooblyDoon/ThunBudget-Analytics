@@ -37,4 +37,35 @@ class AssistantAnalyticsTest {
         assertEquals("Продукты", totals.first().first)
         assertEquals(2500.0, totals.first().second, 0.001)
     }
+    @Test fun findsCalendarDayAndWeekdayWithHighestSpend() {
+        val topDay = AssistantAnalytics.topSpendingDay(expenses)
+        assertEquals("2026-02-02", topDay?.first?.toString())
+        assertEquals(2500.0, topDay?.second ?: 0.0, 0.001)
+        val topWeekday = AssistantAnalytics.topSpendingWeekday(expenses)
+        assertEquals(java.time.DayOfWeek.MONDAY, topWeekday?.first)
+        assertEquals(2500.0, topWeekday?.second ?: 0.0, 0.001)
+    }
+
+    @Test fun ranksCategoriesByTotalAmount() {
+        val top = AssistantAnalytics.topCategoryByAmount(expenses)
+        assertEquals("Продукты", top?.first)
+        assertEquals(2500.0, top?.second ?: 0.0, 0.001)
+    }
+
+    @Test fun recommendsCutsWithoutSuggestingCutsToHousing() {
+        val rows = listOf(
+            Expense(10, "Кафе", "Кафе", 900.0, "2026-01-02"),
+            Expense(11, "Продукты", "Продукты", 2000.0, "2026-01-03"),
+            Expense(12, "Аренда", "Жильё и ЖКХ", 5000.0, "2026-01-04")
+        )
+        val recommendations = AssistantAnalytics.savingRecommendations(
+            rows,
+            mapOf("Кафе" to 500.0, "Продукты" to 2500.0, "Жильё и ЖКХ" to 5000.0),
+            remainingBudget = -500.0,
+            daysUntilPayday = 5
+        )
+        assertEquals(listOf("Кафе", "Продукты"), recommendations.map { it.category })
+        assertEquals(500.0, recommendations.sumOf { it.suggestedReduction }, 0.001)
+    }
+
 }
