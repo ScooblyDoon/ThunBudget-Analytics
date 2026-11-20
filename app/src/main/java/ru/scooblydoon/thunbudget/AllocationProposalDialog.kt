@@ -25,11 +25,12 @@ internal fun AllocationProposalDialog(
     val suggestions = remember(categories, expenses) {
         BudgetAllocationCalculator.suggest(
             regular.map { it.name },
-            expenses.mapNotNull { e -> runCatching { AllocationExpense(e.category, e.amount, LocalDate.parse(e.date)) }.getOrNull() },
+            allocationExpenses,
             LocalDate.now()
         ).associateBy { it.category }
     }
-    val window = remember { BudgetAllocationCalculator.windowFor(LocalDate.now()) }
+    val allocationExpenses = remember(expenses) { expenses.mapNotNull { e -> runCatching { AllocationExpense(e.category, e.amount, LocalDate.parse(e.date)) }.getOrNull() } }
+    val window = remember(allocationExpenses) { BudgetAllocationCalculator.windowFor(LocalDate.now(), allocationExpenses) }
     val fmt = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val values = remember(categories, expenses) {
         mutableStateMapOf<String, String>().apply {
@@ -51,7 +52,7 @@ internal fun AllocationProposalDialog(
         title = { Text("Распределение бюджета") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 540.dp)) {
-                Text("Расчёт по расходам за ${window.from.format(fmt)} — ${window.to.format(fmt)}", style = MaterialTheme.typography.bodySmall)
+                Text("Расчёт по доступной истории: ${window.from.format(fmt)} — ${window.to.format(fmt)}", style = MaterialTheme.typography.bodySmall)
                 Text("Карандаш рядом с каждой долей открывает ручное редактирование. Категории без расходов выделены.", style = MaterialTheme.typography.bodySmall)
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(regular, key = { it.name }) { category ->
