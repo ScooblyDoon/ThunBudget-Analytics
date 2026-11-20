@@ -620,7 +620,7 @@ private fun ThunBudgetApp() {
                         voiceMessage = if (selected == null) "Подходящих расходов не найдено." else "$label расход: «${selected.title}» — ${money(selected.amount)}. Категория: ${selected.category}. Дата: ${LocalDate.parse(selected.date).format(formatter)}."
                     }
                     AssistantIntent.QUERY_AVERAGE_SPENDING -> {
-                        val bucket = when { normalizedPhrase.contains("недел") -> SpendingBucket.WEEK; normalizedPhrase.contains("квартал") -> SpendingBucket.QUARTER; normalizedPhrase.contains("год") -> SpendingBucket.YEAR; normalizedPhrase.contains("день") -> SpendingBucket.DAY; else -> SpendingBucket.MONTH }
+                        val bucket = when { normalizedPhrase.contains("недел") -> SpendingBucket.WEEK; normalizedPhrase.contains("квартал") -> SpendingBucket.QUARTER; normalizedPhrase.contains("месяц") || normalizedPhrase.contains("месяч") -> SpendingBucket.MONTH; normalizedPhrase.contains("год") -> SpendingBucket.YEAR; normalizedPhrase.contains("день") -> SpendingBucket.DAY; else -> SpendingBucket.MONTH }
                         val average = AssistantAnalytics.average(queryRows, bucket, command.category)
                         val bucketName = when (bucket) { SpendingBucket.DAY -> "день"; SpendingBucket.WEEK -> "неделю"; SpendingBucket.MONTH -> "месяц"; SpendingBucket.QUARTER -> "квартал"; SpendingBucket.YEAR -> "год" }
                         voiceMessage = if (average == null) "Недостаточно расходов для расчёта среднего." else "Средний расход за $bucketName: ${money(average.average)}. Всего: ${money(average.total)} за ${average.bucketCount} период(ов)." + (command.category?.let { " Категория: $it." } ?: " По всем категориям.")
