@@ -2077,8 +2077,8 @@ private fun SettingsDialog(
 
 @Composable
 private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave:(String,String)->Unit) {
-    var from by remember(start) { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
-    var to by remember(end) { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
+    var from by remember(start) { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
+    var to by remember(end) { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     val parsedFrom = parseUserDate(from)
     val parsedTo = parseUserDate(to)
     val valid = parsedFrom != null && parsedTo != null && !parsedTo.isBefore(parsedFrom)
