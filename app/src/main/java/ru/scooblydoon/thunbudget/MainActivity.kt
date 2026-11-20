@@ -2287,7 +2287,7 @@ private fun parseSpokenAmountCore(normalized: String): Double? {
 }
 
 internal fun parseSpokenAmount(normalized: String): Double? {
-    val withoutDate = normalized.replace(Regex("""\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b"""), " ")
+    val withoutDate = normalized.replace(Regex("""\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b"""), " ")
     val kopecksMatch = Regex("""(?<!\d)(\d{1,2})\s*(?:коп(?:еек|ейки)?|коп\.)""").find(withoutDate.lowercase(Locale("ru", "RU")))
     val kopecks = kopecksMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 99) ?: 0
     val withoutKopecks = if (kopecksMatch != null) withoutDate.removeRange(kopecksMatch.range) else withoutDate
