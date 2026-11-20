@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.9
+- Calculate suggested category shares from all available completed-month expense history, up to the latest six months, excluding the current month.
+- Show each category's free budget balance as a percentage on the overview screen.
+- Add prioritized budget redistribution suggestions for overspent categories, using donor categories with at least 20%, 15%, then 10% remaining budget; categories with 5% or less are excluded.
+- Allow applying the suggested redistribution directly to category percentages, with undo support.
+- Added tests for short and six-month history windows, free-balance percentages, and redistribution priorities.
+
 ## 1.3.8
 - Added six-month budget allocation suggestions based on actual spending across the previous six completed months.
 - Added manual editing of suggested category percentages and automatic reserve allocation when the total is below 100%.
