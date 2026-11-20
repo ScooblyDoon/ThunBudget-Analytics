@@ -586,7 +586,7 @@ private fun ThunBudgetApp() {
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
         if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
-            voiceMessage = "Я понимаю добавление доходов и расходов, поиск операций, остаток бюджета, перерасходы, частые категории и покупки, самые большие и маленькие расходы, средние расходы за неделю, месяц, квартал и год, а также графики. Например: «Какая категория самая частая за год?», «Покажи средний расход на продукты за месяц», «Построй график расходов по категориям»."
+            voiceMessage = "Я умею добавлять доходы и расходы, искать операции, считать остаток до зарплаты, находить самый затратный день и день недели, сравнивать категории по сумме и частоте, показывать крупнейшие и средние траты, строить графики и давать рекомендации по экономии. Например: «В какой день было больше всего трат за месяц?», «Какая категория съедает больше всего денег?», «Что урезать, чтобы хватило до зарплаты?», «Сколько потратил на транспорт за неделю?»."
             return
         }
         val parsed = AssistantLocalParser.parse(phrase, categories.map { it.name }, today)
@@ -638,6 +638,45 @@ private fun ThunBudgetApp() {
                     AssistantIntent.QUERY_CATEGORY_SPENDING -> {
                         val rows = rangeExpenses.filter { it.category == command.category }
                         voiceMessage = "На категорию «${command.category}» потрачено ${money(rows.sumOf { it.amount })} за период $dateLabel.\nОпераций: ${rows.size}."
+                    }
+                    AssistantIntent.QUERY_TOP_SPENDING_DAY -> {
+                        if (normalizedPhrase.contains("день недели") || normalizedPhrase.contains("по каким дням недели")) {
+                            val top = AssistantAnalytics.topSpendingWeekday(queryRows)
+                            val dayName = top?.first?.getDisplayName(java.time.format.TextStyle.FULL, Locale("ru", "RU"))
+                                ?.replaceFirstChar { it.titlecase(Locale("ru", "RU")) }
+                            voiceMessage = if (top == null) "За выбранный период расходов нет."
+                                else "Больше всего потрачено по ${dayName?.lowercase(Locale("ru", "RU"))}: ${money(top.second)} за выбранный период."
+                        } else {
+                            val top = AssistantAnalytics.topSpendingDay(queryRows)
+                            val dayName = top?.first?.dayOfWeek?.getDisplayName(java.time.format.TextStyle.FULL, Locale("ru", "RU"))
+                                ?.replaceFirstChar { it.titlecase(Locale("ru", "RU")) }
+                            voiceMessage = if (top == null) "За выбранный период расходов нет."
+                                else "Самый затратный день — ${top.first.format(formatter)} ($dayName). Потрачено: ${money(top.second)}."
+                        }
+                    }
+                    AssistantIntent.QUERY_SAVING_RECOMMENDATIONS -> {
+                        val categoryBudgets = categories.associate { category ->
+                            val cap = if (from == periodStart && to == periodEnd && periodIncome > 0.0)
+                                periodIncome * category.percent / 100.0
+                            else plannedForPeriod(rangeIncome, category.percent, from, to)
+                            category.name to cap
+                        }
+                        val days = if (today.isAfter(LocalDate.parse(to))) 0L
+                            else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(from)), LocalDate.parse(to)) + 1L
+                        val daily = if (days > 0) remainingRange.coerceAtLeast(0.0) / days else 0.0
+                        val recommendations = AssistantAnalytics.savingRecommendations(
+                            rangeExpenses, categoryBudgets, remainingRange, days
+                        )
+                        val header = "До конца выбранного периода осталось $days дн. Бюджетный остаток: ${money(remainingRange)}."
+                        voiceMessage = if (rangeExpenses.isEmpty()) {
+                            "Пока нет расходов за выбранный период. $header Добавь операции, и я смогу предложить конкретные способы экономии."
+                        } else if (recommendations.isEmpty()) {
+                            "$header Данных для сокращения расходов недостаточно. Проверь регулярные платежи и запланированные покупки."
+                        } else {
+                            header + (if (remainingRange < 0.0) "\nЕсть дефицит бюджета. Предлагаю временно сократить:" else "\nЧтобы сохранить запас до зарплаты, можно сократить:") +
+                                recommendations.joinToString("\n") { "• ${it.category}: уменьшить траты примерно на ${money(it.suggestedReduction)}. Сейчас потрачено ${money(it.spent)}. ${it.reason}." } +
+                                "\nОценочный дневной лимит из остатка: ${money(daily)}. Сокращения — рекомендации, а не автоматические изменения бюджета."
+                        }
                     }
                     AssistantIntent.QUERY_TOP_CATEGORY_FREQUENCY -> {
                         val top = AssistantAnalytics.topCategoryByFrequency(queryRows)
