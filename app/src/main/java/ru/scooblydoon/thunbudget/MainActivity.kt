@@ -931,7 +931,18 @@ private fun ThunBudgetApp() {
                         val cap=if(periodIncome>0.0) periodIncome*cat.percent/100.0 else plannedForPeriod(income,cat.percent,periodStart,periodEnd)
                         Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) {
                             Row(verticalAlignment=Alignment.CenterVertically) {
-                                Text(cat.name,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                Column(Modifier.weight(1f)) {
+                                    Text(cat.name,fontWeight=FontWeight.SemiBold)
+                                    val free = BudgetAllocationCalculator.freePercent(cap, spent)
+                                    Text(
+                                        free?.let {
+                                            if (it >= 0.0) "Свободный остаток: ${String.format(Locale("ru","RU"), "%.1f", it)}%"
+                                            else "Превышение: ${String.format(Locale("ru","RU"), "%.1f", -it)}%"
+                                        } ?: "Нет бюджета на период",
+                                        style=MaterialTheme.typography.labelSmall,
+                                        color=if ((free ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 IconButton(onClick={editingCategory=cat}) { Text("✎",color=MaterialTheme.colorScheme.primary) }
                                 Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -1054,19 +1065,43 @@ private fun ThunBudgetApp() {
                     }
                     item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={showAdvice=!showAdvice; persistUiExpanded(context,"analytics_advice",showAdvice)}) { Text(if(showAdvice) "Скрыть" else "Показать") } } }
                     if(showAdvice) item {
-                        val periodFacts=categories.associate { cat -> cat.name to expenses.filter { it.category==cat.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount } }
-                        val deficits=categories.map { cat -> cat.name to (periodFacts[cat.name]!!-plannedForPeriod(income,cat.percent,periodStart,periodEnd)) }.filter { it.second>0 }.sortedByDescending { it.second }
-                        val donors=categories.map { cat -> cat.name to (plannedForPeriod(income,cat.percent,periodStart,periodEnd)-periodFacts[cat.name]!!) }.filter { it.second>0 && it.first!="Накопления" }.sortedByDescending { it.second }.toMutableList()
-                        if(deficits.isEmpty()) Text("Превышений за текущий период нет.")
-                        else deficits.forEach { deficit ->
-                            var left=deficit.second
-                            donors.toList().forEach { donor -> if(left>0 && donor.first!=deficit.first && donor.second>0) {
-                                val transfer=minOf(left,donor.second)
-                                Text("Для «${deficit.first}» можно перенести ${money(transfer)} из «${donor.first}».",style=MaterialTheme.typography.bodySmall)
-                                left-=transfer
-                                val idx=donors.indexOfFirst { it.first==donor.first }; if(idx>=0) donors[idx]=donor.first to (donor.second-transfer)
-                            } }
-                            if(left>0) Text("Непокрытое превышение «${deficit.first}»: ${money(left)}.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
+                        val periodFacts = categories.associate { cat ->
+                            cat.name to expenses.filter { it.category == cat.name && it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
+                        }
+                        val budgetPerPercent = if (periodIncome > 0.0) periodIncome / 100.0
+                            else plannedForPeriod(income, 1.0, periodStart, periodEnd)
+                        val redistribution = BudgetAllocationCalculator.redistribute(
+                            categories.map { it.name to it.percent },
+                            periodFacts,
+                            budgetPerPercent
+                        )
+                        if (redistribution.transfers.isEmpty()) {
+                            Text("Превышений, которые можно покрыть за счёт категорий с достаточным свободным остатком, нет.")
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Предлагаемое перераспределение бюджета:", fontWeight = FontWeight.SemiBold)
+                                redistribution.transfers.forEach { transfer ->
+                                    Text(
+                                        "«${transfer.toCategory}»: +${money(transfer.amount)} из «${transfer.fromCategory}» (свободный остаток до переноса: ${String.format(Locale("ru","RU"), "%.1f", transfer.donorFreePercent)}%).",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                Text(
+                                    "Сначала используются категории с запасом от 20%, затем от 15% и от 10%. Категории с запасом 5% и менее не затрагиваются.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                FilledTonalButton(
+                                    onClick = {
+                                        store.prepareUndoSnapshot(); canUndo = true
+                                        categories = categories.map { cat ->
+                                            cat.copy(percent = redistribution.updatedPercents[cat.name] ?: cat.percent)
+                                        }
+                                        store.saveCategories(categories)
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Применить перераспределение") }
+                            }
                         }
                     }
                     item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
