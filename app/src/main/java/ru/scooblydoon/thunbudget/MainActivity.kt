@@ -1121,42 +1121,42 @@ private fun ThunBudgetApp() {
                             onClick = { tab = 0 },
                             icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) },
                             label = { Text("Обзор", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = !compactLayout
+                            alwaysShowLabel = true
                         )
                         NavigationBarItem(
                             selected = tab == 1,
                             onClick = { tab = 1 },
                             icon = { Text("◒", style = MaterialTheme.typography.titleLarge) },
                             label = { Text("Анализ", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = !compactLayout
+                            alwaysShowLabel = true
                         )
                         NavigationBarItem(
                             selected = tab == 2,
                             onClick = { tab = 2 },
                             icon = { Text("▥", style = MaterialTheme.typography.titleLarge) },
                             label = { Text("Графики", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = !compactLayout
+                            alwaysShowLabel = true
                         )
                         NavigationBarItem(
                             selected = tab == 3,
                             onClick = { tab = 3 },
                             icon = { Text("▤", style = MaterialTheme.typography.titleLarge) },
                             label = { Text("За год", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = !compactLayout
+                            alwaysShowLabel = true
                         )
                         NavigationBarItem(
                             selected = tab == 4,
                             onClick = { tab = 4 },
                             icon = { Text("≡", style = MaterialTheme.typography.titleLarge) },
                             label = { Text("История", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = !compactLayout
+                            alwaysShowLabel = true
                         )
                         NavigationBarItem(
                             selected = tab == 5,
                             onClick = { tab = 5 },
                             icon = { Text("▣", style = MaterialTheme.typography.titleLarge) },
                             label = { Text("Платежи", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = !compactLayout
+                            alwaysShowLabel = true
                         )
                     }
                 }
