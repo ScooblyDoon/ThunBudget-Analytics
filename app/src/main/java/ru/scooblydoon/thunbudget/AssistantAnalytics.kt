@@ -3,6 +3,8 @@ package ru.scooblydoon.thunbudget
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
+import java.time.DayOfWeek
+import java.util.Locale
 
 internal enum class SpendingBucket { DAY, WEEK, MONTH, QUARTER, YEAR }
 
@@ -17,6 +19,23 @@ internal object AssistantAnalytics {
     fun topCategoryByFrequency(expenses: List<Expense>): Pair<String, Int>? =
         expenses.groupingBy { it.category }.eachCount().entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+            .firstOrNull()?.let { it.key to it.value }
+
+    fun topCategoryByAmount(expenses: List<Expense>): Pair<String, Double>? =
+        expenses.groupBy { it.category }
+            .mapValues { (_, rows) -> rows.sumOf { it.amount.coerceAtLeast(0.0) } }
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
+            .firstOrNull()?.let { it.key to it.value }
+
+    fun topSpendingWeekday(expenses: List<Expense>): Pair<DayOfWeek, Double>? =
+        expenses.mapNotNull { expense ->
+            val day = runCatching { LocalDate.parse(expense.date).dayOfWeek }.getOrNull() ?: return@mapNotNull null
+            day to expense.amount.coerceAtLeast(0.0)
+        }.groupBy({ it.first }, { it.second })
+            .mapValues { (_, amounts) -> amounts.sum() }
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<DayOfWeek, Double>> { it.value }.thenBy { it.key.value })
             .firstOrNull()?.let { it.key to it.value }
 
     fun topTitleByFrequency(expenses: List<Expense>): Pair<String, Int>? =
