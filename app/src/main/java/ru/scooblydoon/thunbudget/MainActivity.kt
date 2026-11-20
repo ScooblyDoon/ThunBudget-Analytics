@@ -1046,8 +1046,8 @@ private fun ThunBudgetApp() {
                                 }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=it},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ГГГГ-ММ-ДД")},singleLine=true)
-                                OutlinedTextField(value=historyToDate,onValueChange={historyToDate=it},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ГГГГ-ММ-ДД")},singleLine=true)
+                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                                OutlinedTextField(value=historyToDate,onValueChange={historyToDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                             }
                             TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
                         }
@@ -1070,8 +1070,8 @@ private fun ThunBudgetApp() {
                         }
                     }
                     val normalizedQuery = historyQuery.trim().lowercase(Locale("ru","RU"))
-                    val validFrom = runCatching { LocalDate.parse(historyFromDate).toString() }.getOrNull()
-                    val validTo = runCatching { LocalDate.parse(historyToDate).toString() }.getOrNull()
+                    val validFrom = parseUserDate(historyFromDate)?.toString()
+                    val validTo = parseUserDate(historyToDate)?.toString()
                     val filteredExpenses=expenses.filter { expense ->
                         expense.amount<=amountLimit.toDouble() &&
                         (normalizedQuery.isBlank() || expense.title.lowercase(Locale("ru","RU")).contains(normalizedQuery) || expense.category.lowercase(Locale("ru","RU")).contains(normalizedQuery)) &&
@@ -1809,7 +1809,7 @@ private fun MetricCard(label:String,value:String,modifier:Modifier=Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:String?=null,onDismiss:()->Unit,onSave:(String,String,Double,String)->Unit) {
-    var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember(initialCategory,categories) { mutableStateOf(initialCategory ?: categories.firstOrNull()?.name ?: "Прочее") }; var date by remember { mutableStateOf(LocalDate.now().toString()) }; var expanded by remember { mutableStateOf(false) }
+    var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember(initialCategory,categories) { mutableStateOf(initialCategory ?: categories.firstOrNull()?.name ?: "Прочее") }; var date by remember { mutableStateOf(LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))) }; var expanded by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest=onDismiss,title={Text("Новый расход")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
@@ -1818,9 +1818,9 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
                 OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
                 ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { categories.forEach { DropdownMenuItem(text={Text(it.name)},onClick={category=it.name;expanded=false}) } }
             }
-            OutlinedTextField(date,{date=it},label={Text("Дата (ГГГГ-ММ-ДД)")},singleLine=true)
+            OutlinedTextField(date,{date=formatDateDigits(it)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
         }
-    },confirmButton={ TextButton(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && runCatching{LocalDate.parse(date)}.isSuccess) onSave(title,category,v,date) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+    },confirmButton={ TextButton(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null) onSave(title,category,v,parseUserDate(date)!!.toString()) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0 && parseUserDate(date)!=null) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 @Composable
@@ -2024,7 +2024,7 @@ private fun ExpenseEditDialog(
     var title by remember(expense.id) { mutableStateOf(expense.title) }
     var amount by remember(expense.id) { mutableStateOf(expense.amount.toString()) }
     var category by remember(expense.id) { mutableStateOf(expense.category) }
-    var date by remember(expense.id) { mutableStateOf(expense.date) }
+    var date by remember(expense.id) { mutableStateOf(runCatching { LocalDate.parse(expense.date).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
     var expanded by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest=onDismiss,
@@ -2043,8 +2043,8 @@ private fun ExpenseEditDialog(
         confirmButton={
             TextButton(onClick={
                 val v=amount.replace(',','.').toDoubleOrNull()
-                if(title.isNotBlank() && v!=null && v>0 && runCatching{LocalDate.parse(date)}.isSuccess)
-                    onSave(expense.copy(title=title,category=category,amount=v,date=date))
+                if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null)
+                    onSave(expense.copy(title=title,category=category,amount=v,date=parseUserDate(date)!!.toString()))
             },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0) { Text("Сохранить") }
         },
         dismissButton={
@@ -2106,7 +2106,7 @@ private fun startOfflineSpeechRecognition(
     recognizer.startListening(intent)
 }
 
-internal fun parseSpokenAmount(normalized: String): Double? {
+private fun parseSpokenAmountCore(normalized: String): Double? {
     // SpeechRecognizer may use narrow/non-breaking spaces in grouped numbers (e.g. «2 000»).
     // A dot followed by three digits is treated as a thousands separator («2.000»).
     val canonical = normalized.replace(Regex("""[\s\p{Z}]+"""), " ").trim()
@@ -2182,6 +2182,14 @@ internal fun parseSpokenAmount(normalized: String): Double? {
     return result.takeIf { found && it > 0.0 }
 }
 
+internal fun parseSpokenAmount(normalized: String): Double? {
+    val kopecksMatch = Regex("""(?<!\\d)(\\d{1,2})\\s*(?:коп(?:еек|ейки)?|коп\\.)""").find(normalized.lowercase(Locale("ru", "RU")))
+    val kopecks = kopecksMatch?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 99) ?: 0
+    val withoutKopecks = if (kopecksMatch != null) normalized.removeRange(kopecksMatch.range) else normalized
+    val amount = parseSpokenAmountCore(withoutKopecks) ?: return null
+    return amount + kopecks / 100.0
+}
+
 private fun voiceRecognitionScore(phrase: String, categories: List<BudgetCategory>): Int {
     val normalized = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
     var score = normalized.length.coerceAtMost(120)
@@ -2195,7 +2203,7 @@ private fun voiceRecognitionScore(phrase: String, categories: List<BudgetCategor
 
 private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>): VoiceExpenseDraft? {
     val normalized = spoken.lowercase(Locale("ru", "RU")).replace('ё', 'е').trim()
-    val date = if (normalized.contains("вчера")) LocalDate.now().minusDays(1) else LocalDate.now()
+    val date = parseVoiceDate(normalized, LocalDate.now()) ?: LocalDate.now()
 
     val renameMatch = Regex("""(?:переименуй|переименовать|назови|назвать)\s+категори(?:ю|и)\s+(.+?)\s+(?:в|на)\s+(.+)$""").find(normalized)
     if (renameMatch != null) {
@@ -2260,10 +2268,7 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
     ).any { normalized.contains(it) }
     if (!isIncome && !hasExpenseCommand) return null
 
-    val matchedCategory = if (isIncome) null else categories
-        .sortedByDescending { it.name.length }
-        .firstOrNull { normalized.contains(it.name.lowercase(Locale("ru", "RU")).replace('ё', 'е')) }
-        ?: return null
+    val matchedCategory = if (isIncome) null else findVoiceCategory(normalized, categories) ?: return null
 
     return VoiceExpenseDraft(
         title = if (isIncome) "Голосовой доход" else matchedCategory!!.name,
