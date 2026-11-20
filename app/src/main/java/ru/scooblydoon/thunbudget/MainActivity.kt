@@ -1222,7 +1222,7 @@ private fun ThunBudgetApp() {
                 enabled = (draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit ||
                     (if (draft.isDelete) voiceEditCandidates.any { it.id == voiceSelectedExpenseId }
                     else ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId }))) &&
-                    (draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit || draft.isDelete || parseUserDate(voiceDate) != null),
+                    (draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit || draft.isDelete || parseUserDate(voiceDate) != null)),
                 onClick={
                 val confirmedAmount = voiceAmount.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
                 val confirmedDate = parseUserDate(voiceDate)?.toString() ?: draft.date
