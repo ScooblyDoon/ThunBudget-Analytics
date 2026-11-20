@@ -72,6 +72,22 @@ internal class BudgetStore(context: Context) {
 
     fun loadDarkTheme(): Boolean = prefs.getBoolean("dark_theme", false)
     fun saveDarkTheme(enabled: Boolean) { prefs.edit().putBoolean("dark_theme", enabled).apply() }
+    fun loadDashboardOrder(): List<String> {
+        val defaults = listOf("period", "budget", "income", "categories")
+        val saved = runCatching {
+            val array = JSONArray(prefs.getString("dashboard_order", "[]") ?: "[]")
+            (0 until array.length()).map { array.getString(it) }.filter { it in defaults }.distinct()
+        }.getOrDefault(emptyList())
+        return saved + defaults.filterNot { it in saved }
+    }
+    fun saveDashboardOrder(order: List<String>) {
+        val allowed = setOf("period", "budget", "income", "categories")
+        require(order.size == allowed.size && order.toSet() == allowed)
+        val array = JSONArray()
+        order.forEach { array.put(it) }
+        check(prefs.edit().putString("dashboard_order", array.toString()).commit())
+        saveAutomaticBackup()
+    }
 
     fun loadIncomeEntries(): List<IncomeEntry> = runCatching { incomeLedger.load() }.getOrDefault(emptyList())
 
@@ -539,6 +555,8 @@ private fun ThunBudgetApp() {
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
+    var dashboardOrder by remember { mutableStateOf(store.loadDashboardOrder()) }
+    var showDashboardArrangeDialog by remember { mutableStateOf(false) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
     var showPeriodCategories by rememberUiExpanded(context, "period_categories")
     var showYearCategories by rememberUiExpanded(context, "year_categories")
@@ -1028,92 +1046,79 @@ private fun ThunBudgetApp() {
             when(tab) {
                 0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=96.dp)) {
                     item {
-                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                            SegmentedButton(selected=selectedPeriod==0,onClick={ selectedPeriod=0; periodStart=baseMonth.withDayOfMonth(9).toString(); periodEnd=baseMonth.withDayOfMonth(23).toString(); store.savePeriod(periodStart,periodEnd) },shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
-                            SegmentedButton(selected=selectedPeriod==1,onClick={ selectedPeriod=1; periodStart=baseMonth.withDayOfMonth(24).toString(); periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString(); store.savePeriod(periodStart,periodEnd) },shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
+                            TextButton(onClick={showDashboardArrangeDialog=true}) { Text("Настроить окна") }
                         }
-                        TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                     }
-                    item { Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    item {
-                        Card(
-                            colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primary),
-                            shape=RoundedCornerShape(26.dp)
-                        ) {
-                            Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Text("Доступно в бюджете",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
-                                Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onPrimary)
-                                Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=MaterialTheme.colorScheme.onPrimary)
-                                val periodEndDate = LocalDate.parse(periodEnd)
-                                val remainingDays = if (today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today, LocalDate.parse(periodStart)), periodEndDate) + 1
-                                val averageRemainingPerDay = if (remainingDays > 0) remaining.coerceAtLeast(0.0) / remainingDays else 0.0
-                                Text("Средний остаток на день: ${money(averageRemainingPerDay)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.92f),style=MaterialTheme.typography.bodyMedium)
-                                LinearProgressIndicator(
-                                    progress={ if(planned>0) (totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f },
-                                    modifier=Modifier.fillMaxWidth().padding(top=4.dp),
-                                    color=MaterialTheme.colorScheme.onPrimary,
-                                    trackColor=MaterialTheme.colorScheme.onPrimary.copy(alpha=.22f)
-                                )
+                    items(dashboardOrder,key={it}) { section ->
+                        when(section) {
+                            "period" -> Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                    SegmentedButton(selected=selectedPeriod==0,onClick={selectedPeriod=0;periodStart=baseMonth.withDayOfMonth(9).toString();periodEnd=baseMonth.withDayOfMonth(23).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
+                                    SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=baseMonth.withDayOfMonth(24).toString();periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                                }
+                                TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
+                                Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        }
-                    }
-                    if (canUndo) item {
-                        OutlinedButton(onClick={showUndoConfirmation=true},modifier=Modifier.fillMaxWidth()) {
-                            Text("Отменить последнее действие")
-                        }
-                    }
-
-                    item {
-                        Card(shape=RoundedCornerShape(16.dp)) {
-                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Text("Операции дохода за период", fontWeight=FontWeight.SemiBold)
-                                val visibleIncomeEntries = incomeEntries.filter { it.periodStart == periodStart && it.periodEnd == periodEnd }.sortedByDescending { it.date }
-                                if (visibleIncomeEntries.isEmpty()) {
-                                    Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                } else {
-                                    visibleIncomeEntries.forEach { entry ->
+                            "budget" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primary),shape=RoundedCornerShape(26.dp)) {
+                                    Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                        Text("Доступно в бюджете",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
+                                        Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onPrimary)
+                                        Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=MaterialTheme.colorScheme.onPrimary)
+                                        val periodEndDate=LocalDate.parse(periodEnd)
+                                        val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
+                                        val averageRemainingPerDay=if(remainingDays>0) remaining.coerceAtLeast(0.0)/remainingDays else 0.0
+                                        Text("Средний остаток на день: ${money(averageRemainingPerDay)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.92f),style=MaterialTheme.typography.bodyMedium)
+                                        LinearProgressIndicator(progress={if(planned>0)(totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(top=4.dp),color=MaterialTheme.colorScheme.onPrimary,trackColor=MaterialTheme.colorScheme.onPrimary.copy(alpha=.22f))
+                                    }
+                                }
+                                if(canUndo) OutlinedButton(onClick={showUndoConfirmation=true},modifier=Modifier.fillMaxWidth()) { Text("Отменить последнее действие") }
+                            }
+                            "income" -> Card(shape=RoundedCornerShape(16.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    Text("Операции дохода за период",fontWeight=FontWeight.SemiBold)
+                                    val visibleIncomeEntries=incomeEntries.filter{it.periodStart==periodStart&&it.periodEnd==periodEnd}.sortedByDescending{it.date}
+                                    if(visibleIncomeEntries.isEmpty()) Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                    else visibleIncomeEntries.forEach { entry ->
                                         Row(verticalAlignment=Alignment.CenterVertically) {
                                             Column(Modifier.weight(1f)) {
-                                                Text(entry.title, fontWeight=FontWeight.Medium)
-                                                Text("${entry.date}${if (entry.isLegacyAggregate) " · перенесено из старой версии" else ""}", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(entry.title,fontWeight=FontWeight.Medium)
+                                                Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
-                                            Text(money(entry.amount), fontWeight=FontWeight.SemiBold)
+                                            Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
                                             TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
-                    item {
-                        Row(verticalAlignment=Alignment.CenterVertically) {
-                            Text("Бюджет по категориям",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                            IconButton(onClick={showCategoryManager=true}) { Text("+",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary) }
-                        }
-                    }
-                    items(categories) { cat ->
-                        val spent=expenses.filter { it.category==cat.name && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
-                        val cap=if(periodIncome>0.0) periodIncome*cat.percent/100.0 else plannedForPeriod(income,cat.percent,periodStart,periodEnd)
-                        Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                            Row(verticalAlignment=Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(cat.name,fontWeight=FontWeight.SemiBold)
-                                    val free = BudgetAllocationCalculator.freePercent(cap, spent)
-                                    Text(
-                                        free?.let {
-                                            if (it >= 0.0) "Свободный остаток: ${String.format(Locale("ru","RU"), "%.1f", it)}%"
-                                            else "Превышение: ${String.format(Locale("ru","RU"), "%.1f", -it)}%"
-                                        } ?: "Нет бюджета на период",
-                                        style=MaterialTheme.typography.labelSmall,
-                                        color=if ((free ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                            "categories" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment=Alignment.CenterVertically) {
+                                    Text("Бюджет по категориям",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
+                                    IconButton(onClick={showCategoryManager=true}) { Text("+",style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary) }
                                 }
-                                IconButton(onClick={editingCategory=cat}) { Text("✎",color=MaterialTheme.colorScheme.primary) }
-                                Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                categories.forEach { cat ->
+                                    val spent=expenses.filter{it.category==cat.name&&it.date>=periodStart&&it.date<=periodEnd}.sumOf{it.amount}
+                                    val cap=if(periodIncome>0.0) periodIncome*cat.percent/100.0 else plannedForPeriod(income,cat.percent,periodStart,periodEnd)
+                                    Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) {
+                                        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(cat.name,fontWeight=FontWeight.SemiBold)
+                                                    val free=BudgetAllocationCalculator.freePercent(cap,spent)
+                                                    Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                IconButton(onClick={editingCategory=cat}) { Text("✎",color=MaterialTheme.colorScheme.primary) }
+                                                Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
+                                            Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72)) }
+                                        }
+                                    }
+                                }
                             }
-                            LinearProgressIndicator(progress={ if(cap>0) (spent/cap).coerceIn(0.0,1.0).toFloat() else 0f },modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
-                            Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72)) }
-                        } }
+                        }
                     }
                 }
                 1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
@@ -2735,4 +2740,26 @@ private fun parseVoiceExpense(spoken: String, categories: List<BudgetCategory>):
         category = if (isIncome) "Доход" else matchedCategory!!.name,
         amount = amount, date = date.toString(), isIncome = isIncome, isEdit = isEdit
     )
+    if(showDashboardArrangeDialog) {
+        AlertDialog(
+            onDismissRequest={showDashboardArrangeDialog=false},
+            title={Text("Настроить окна обзора")},
+            text={
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Меняй порядок блоков кнопками ↑ и ↓. Порядок сохранится на этом устройстве.")
+                    dashboardOrder.forEachIndexed { index,key ->
+                        val label=when(key) { "period"->"Отчётный период"; "budget"->"Доступный бюджет"; "income"->"Операции дохода"; else->"Бюджет по категориям" }
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Text(label,modifier=Modifier.weight(1f))
+                            IconButton(enabled=index>0,onClick={val next=dashboardOrder.toMutableList();val value=next.removeAt(index);next.add(index-1,value);dashboardOrder=next;store.saveDashboardOrder(next)}) { Text("↑") }
+                            IconButton(enabled=index<dashboardOrder.lastIndex,onClick={val next=dashboardOrder.toMutableList();val value=next.removeAt(index);next.add(index+1,value);dashboardOrder=next;store.saveDashboardOrder(next)}) { Text("↓") }
+                        }
+                    }
+                }
+            },
+            confirmButton={TextButton(onClick={showDashboardArrangeDialog=false}) { Text("Готово") }},
+            dismissButton={TextButton(onClick={val defaults=listOf("period","budget","income","categories");dashboardOrder=defaults;store.saveDashboardOrder(defaults)}) { Text("Сбросить") }}
+        )
+    }
+
 }
