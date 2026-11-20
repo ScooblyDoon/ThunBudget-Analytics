@@ -62,7 +62,7 @@ object AssistantLocalParser {
         if (listOf("самая частая категория", "самая частая категория затрат", "чаще всего трачу", "самая популярная категория", "где чаще всего расходы", "больше всего операций по категории", "категория с наибольшим числом операций").any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_TOP_CATEGORY_FREQUENCY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
         }
-        if (listOf("самое частое название", "самое частое название затрат", "чаще всего покупаю", "частая покупка", "самая частая покупка", "какое название чаще").any { normalized.contains(it) }) {
+        if (listOf("самое частое название", "самое частое название затрат", "название расхода встречается чаще всего", "название встречается чаще всего", "чаще всего покупаю", "частая покупка", "самая частая покупка", "какое название чаще").any { normalized.contains(it) }) {
             return command(AssistantIntent.QUERY_TOP_TITLE_FREQUENCY, periodStart = periodStart, periodEnd = periodEnd, confidence = 0.94)
         }
         if (listOf("самый большой расход", "наибольший расход", "максимальный расход", "самая крупная трата", "самая большая покупка").any { normalized.contains(it) }) {
