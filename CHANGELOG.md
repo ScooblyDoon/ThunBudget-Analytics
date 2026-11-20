@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.12
+- Fix assistant date display to use dd.MM.yyyy and convert dates to natural Russian speech.
+- Add deterministic queries for most frequent spending category and expense title, largest and smallest expenses, average spending by day/week/month/quarter/year and category.
+- Add assistant spending charts by category and monthly trend.
+- Add a discoverable “Что я могу сказать?” help response with command examples.
+- Add tests for analytics queries, calculations, charts, and spoken date formatting.
+
 ## 1.3.11
 - Fix the empty-history date window and align allocation tests with the adaptive completed-month history rules.
 - Fix allocation dialog initialization order so available expense history is prepared before suggestions are calculated.
