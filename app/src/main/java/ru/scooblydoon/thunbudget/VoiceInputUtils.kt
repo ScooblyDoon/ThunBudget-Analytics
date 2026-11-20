@@ -9,7 +9,7 @@ internal fun parseVoiceDate(phrase: String, today: LocalDate): LocalDate? {
     if (Regex("""\b(вчера|за вчера)\b""").containsMatchIn(normalized)) return today.minusDays(1)
     if (Regex("""\b(позавчера|за позавчера)\b""").containsMatchIn(normalized)) return today.minusDays(2)
 
-    val numeric = Regex("""(?<!\d)(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?(?!\d)""").find(normalized)
+    val numeric = Regex("""(?<!\d)(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?(?!\d)""").find(normalized)?.takeIf { it.groupValues[3].isNotBlank() || Regex("""\b(за|от|дата)\b""").containsMatchIn(normalized) }
     if (numeric != null) {
         val day = numeric.groupValues[1].toIntOrNull() ?: return null
         val month = numeric.groupValues[2].toIntOrNull() ?: return null
