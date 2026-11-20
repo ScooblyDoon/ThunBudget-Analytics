@@ -155,7 +155,7 @@ internal fun RecurringPaymentsScreen(
                                                 style = MaterialTheme.typography.bodySmall
                                             )
                                         }
-                                        Text(money(payment.amount), fontWeight = FontWeight.Bold)
+                                        Text(recurringPaymentMoney(payment.amount), fontWeight = FontWeight.Bold)
                                     }
                                     Button(
                                         onClick = { onConfirm(payment, currentMonth) },
@@ -208,7 +208,7 @@ internal fun RecurringPaymentsScreen(
                                 ) {
                                     Text(payment.title, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        "${money(payment.amount)} · ${payment.category} · ${payment.dayOfMonth}-е число каждого месяца",
+                                        "${recurringPaymentMoney(payment.amount)} · ${payment.category} · ${payment.dayOfMonth}-е число каждого месяца",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
@@ -468,7 +468,7 @@ private fun RecurringPaymentDetailsDialog(
                     }
                 }
                 Text(payment.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(money(payment.amount), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Text(recurringPaymentMoney(payment.amount), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Категория: ${payment.category}", style = MaterialTheme.typography.bodyMedium)
                     Text("Периодичность: ежемесячно, ${payment.dayOfMonth}-е число", style = MaterialTheme.typography.bodyMedium)
@@ -575,23 +575,27 @@ private fun RecurringPaymentEditorDialog(
                 enabled = title.isNotBlank() && parsedAmount != null && parsedAmount.isFinite() &&
                     parsedAmount > 0 && parsedDay != null && parsedDay in 1..31,
                 onClick = {
-                    val amountValue = parsedAmount ?: return@TextButton
-                    val dayValue = parsedDay ?: return@TextButton
-                    val updated = payment?.copy(
-                        title = title.trim(),
-                        amount = amountValue,
-                        category = category,
-                        dayOfMonth = dayValue
-                    ) ?: RecurringPayment(
-                        title = title.trim(),
-                        amount = amountValue,
-                        category = category,
-                        dayOfMonth = dayValue
-                    )
-                    onSave(updated)
+                    if (parsedAmount != null && parsedDay != null) {
+                        val updated = payment?.copy(
+                            title = title.trim(),
+                            amount = parsedAmount,
+                            category = category,
+                            dayOfMonth = parsedDay
+                        ) ?: RecurringPayment(
+                            title = title.trim(),
+                            amount = parsedAmount,
+                            category = category,
+                            dayOfMonth = parsedDay
+                        )
+                        onSave(updated)
+                    }
                 }
             ) { Text("Сохранить") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )
 }
+
+
+private fun recurringPaymentMoney(value: Double): String =
+    String.format(Locale("ru", "RU"), "%,.0f ₽", value)
