@@ -65,6 +65,11 @@ class VoiceInputUtilsTest {
         assertEquals("05.11.2026", formatDateDigits("05.11.2026"))
     }
 
+    @Test fun convertsIsoVoiceDateToDigitsInDayMonthYearOrder() {
+        assertEquals("17112026", voiceDateDigits("2026-11-17"))
+        assertEquals("", voiceDateDigits("not-a-date"))
+    }
+
     @Test fun parsesMaskedDate() {
         assertEquals(LocalDate.parse("2026-11-05"), parseUserDate("05.11.2026"))
         assertNull(parseUserDate("32.13.2026"))
