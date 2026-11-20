@@ -56,7 +56,7 @@ object AssistantLocalParser {
         }
 
         if (listOf("измени последний расход", "изменить последний расход", "поменяй последний расход", "исправь последний расход", "измени последнюю операцию").any { normalized.contains(it) }) {
-            val replacementAmount = parseSpokenAmount(normalized)
+            val replacementAmount = parseSpokenAmount(phrase)
             return command(
                 AssistantIntent.UPDATE_EXPENSE,
                 amount = replacementAmount,
@@ -76,7 +76,7 @@ object AssistantLocalParser {
         }
 
         if (listOf("если буду тратить", "если тратить", "в день", "прогноз", "сколько останется к").any { normalized.contains(it) }) {
-            val dailyAmount = parseSpokenAmount(normalized)
+            val dailyAmount = parseSpokenAmount(phrase)
             return command(
                 AssistantIntent.FORECAST,
                 amount = dailyAmount,
@@ -108,7 +108,7 @@ object AssistantLocalParser {
 
         val isIncome = listOf("доход", "зарплата", "получил", "получила", "поступление", "зачислили", "мне перевели")
             .any { normalized.contains(it) }
-        val amount = parseSpokenAmount(normalized)
+        val amount = parseSpokenAmount(phrase)
 
         if (isIncome && listOf("добавь", "добавить", "запиши", "внеси", "получил", "получила", "мне перевели").any { normalized.contains(it) }) {
             return command(
