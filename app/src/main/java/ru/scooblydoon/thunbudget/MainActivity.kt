@@ -1166,7 +1166,7 @@ private fun ThunBudgetApp() {
         }
     }
     voiceDraft?.let { draft ->
-        var voiceDate by remember(draft.date) { mutableStateOf(draft.date.filter(Char::isDigit)) }
+        var voiceDate by remember(draft.date) { mutableStateOf(voiceDateDigits(draft.date)) }
         AlertDialog(
             onDismissRequest={voiceDraft=null},
             title={Text(when { draft.isCategoryRename -> "Проверь переименование категории"; draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncomeEdit -> "Проверь изменение дохода"; draft.isDelete -> "Подтверди удаление операции"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
