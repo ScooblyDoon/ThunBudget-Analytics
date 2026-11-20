@@ -46,7 +46,7 @@ object AssistantLocalParser {
                 quarterStart to today
             month != null -> month.atDay(1) to (if (month == YearMonth.from(today)) today else month.atEndOfMonth())
             parsedDate != null -> date to date
-            normalized.contains("за последние 30 дней") || normalized.contains("за месяц от сегодня") -> today.minusDays(29) to today
+            normalized.contains("за последние 30 дней") -> today.minusDays(29) to today
             normalized.contains("за последние 14 дней") || normalized.contains("за две недели") || normalized.contains("за 2 недели") -> today.minusDays(13) to today
             normalized.contains("за прошлую неделю") || normalized.contains("на прошлой неделе") -> today.with(java.time.DayOfWeek.MONDAY).minusDays(7) to today.with(java.time.DayOfWeek.MONDAY).minusDays(1)
             normalized.contains("за неделю") || normalized.contains("за последние 7 дней") || normalized.contains("на этой неделе") -> today.minusDays(6) to today
