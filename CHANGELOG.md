@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.10
+- Fix recurring payments empty state: add a prominent full-width button to create the first payment.
+
 ## 1.3.9
 - Calculate suggested category shares from all available completed-month expense history, up to the latest six months, excluding the current month.
 - Show each category's free budget balance as a percentage on the overview screen.
