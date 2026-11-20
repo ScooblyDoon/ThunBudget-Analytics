@@ -200,6 +200,22 @@ internal class BudgetStore(context: Context) {
         true
     }.getOrDefault(false)
 
+    fun resetAllData(): Boolean = runCatching {
+        val rawFolder = prefs.getString(ExternalBackupSettings.URI_KEY, null)
+        if (!rawFolder.isNullOrBlank()) {
+            runCatching {
+                appContext.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(rawFolder),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+        }
+        check(prefs.edit().clear().commit()) { "Не удалось полностью очистить локальные данные." }
+        saveAutomaticBackup()
+        BudgetWidgetProvider.refreshAll(appContext)
+        true
+    }.getOrDefault(false)
+
     fun exportBackup(): String {
         val data = JSONObject()
         prefs.all.forEach { (key, value) ->
@@ -453,6 +469,7 @@ private fun ThunBudgetApp() {
     }
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
+    var showResetConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
     var showPeriodEditor by remember { mutableStateOf(false) }
@@ -1442,7 +1459,7 @@ private fun ThunBudgetApp() {
             expenses=expenses.filterNot { it.id==selected.id }; store.saveExpenses(expenses); selectedExpense=null
         })
     }
-    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onExportExcel={ exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx") },onImportExcel={ excelImportLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream")) },onClearExternalFolder={
+    if(showSettings) SettingsDialog(income,savingsGoal,categories,periodStart,periodEnd,darkTheme=darkTheme,onThemeChange={ darkTheme=it; store.saveDarkTheme(it) },onRequestReset={showResetConfirmation=true},hasPreviousRestoreBackup=store.hasPreviousRestoreBackup(),hasAutomaticBackup=store.hasAutomaticBackup(),externalBackupFolder=externalBackupFolder,externalBackupLastSuccess=store.externalBackupLastSuccess(),externalBackupLastError=store.externalBackupLastError(),onChooseExternalFolder={ externalBackupFolderLauncher.launch(null) },onExportExcel={ exportLauncher.launch("thunbudget-${LocalDate.now()}.xlsx") },onImportExcel={ excelImportLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream")) },onClearExternalFolder={
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
@@ -1475,6 +1492,44 @@ private fun ThunBudgetApp() {
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; store.savePeriod(start,end)
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
     })
+    if(showResetConfirmation) AlertDialog(
+        onDismissRequest={showResetConfirmation=false},
+        title={Text("Полностью сбросить данные?")},
+        text={Text("Все операции, доходы, категории, настройки бюджета и локальные резервные копии будут удалены без возможности отмены. Внешние экспортированные файлы не затрагиваются.")},
+        confirmButton={
+            TextButton(onClick={
+                showResetConfirmation=false
+                val reset = store.resetAllData()
+                if (reset) {
+                    income=store.loadIncome()
+                    savingsGoal=store.loadSavingsGoal()
+                    categories=store.loadCategories()
+                    expenses=store.loadExpenses()
+                    periodIncomes=store.loadPeriodIncomes()
+                    incomeEntries=store.loadIncomeEntries()
+                    periodStart=store.loadPeriodStart() ?: (if(today.dayOfMonth<=8 || today.dayOfMonth>=24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()
+                    periodEnd=store.loadPeriodEnd() ?: (if(today.dayOfMonth<=8) today.withDayOfMonth(8) else if(today.dayOfMonth>=24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()
+                    selectedPeriod=if(today.dayOfMonth>=24 || today.dayOfMonth<=8) 1 else 0
+                    selectedExpense=null
+                    selectedCategory=null
+                    historyQuery=""
+                    historyCategoryFilter="Все категории"
+                    historyMonthFilter="Все месяцы"
+                    historyFromDate=""
+                    historyToDate=""
+                    amountLimit=100000f
+                    darkTheme=store.loadDarkTheme()
+                    externalBackupFolder=null
+                    tab=0
+                    backupMessage="Все данные приложения сброшены. Можно начать новый бюджет."
+                } else {
+                    backupMessage="Не удалось выполнить полный сброс. Данные не были очищены полностью."
+                }
+                showSettings=false
+            }) { Text("Да, удалить всё",color=Color(0xFFC62828)) }
+        },
+        dismissButton={TextButton(onClick={showResetConfirmation=false}) { Text("Отмена") }}
+    )
     if(showRestoreConfirmation) AlertDialog(
         onDismissRequest={showRestoreConfirmation=false},
         title={Text("Восстановить резервную копию?")},
@@ -1855,7 +1910,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
 private fun SettingsDialog(
     income:Double,savings:Double,categories:List<BudgetCategory>,start:String,end:String,
     darkTheme:Boolean,
-    onThemeChange:(Boolean)->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,
+    onThemeChange:(Boolean)->Unit,onRequestReset:()->Unit,hasPreviousRestoreBackup:Boolean,hasAutomaticBackup:Boolean,
     externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,
     onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,onImportExcel:()->Unit,
     onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,
@@ -1875,7 +1930,8 @@ private fun SettingsDialog(
         "categories" to "Категории",
         "export" to "Excel",
         "backup" to "Копирование",
-        "appearance" to "Оформление"
+        "appearance" to "Оформление",
+        "reset" to "Сброс данных"
     )
     val validIncome = inc.replace(',','.').toDoubleOrNull()
     val validSavings = sav.replace(',','.').toDoubleOrNull()
@@ -1950,6 +2006,15 @@ private fun SettingsDialog(
                             SegmentedButton(selected=!darkTheme,onClick={onThemeChange(false)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Светлая") }
                             SegmentedButton(selected=darkTheme,onClick={onThemeChange(true)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("Тёмная") }
                         }
+                    }
+                    "reset" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Полный сброс данных",fontWeight=FontWeight.Bold)
+                        Text("Удалит все операции, доходы, категории, настройки бюджета и локальные резервные копии. Внешние файлы, которые ты ранее экспортировал или сохранил в облачную папку, останутся отдельно.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(
+                            onClick=onRequestReset,
+                            modifier=Modifier.fillMaxWidth(),
+                            colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFC62828),contentColor=Color.White)
+                        ) { Text("Полностью сбросить данные") }
                     }
                 }
             }
