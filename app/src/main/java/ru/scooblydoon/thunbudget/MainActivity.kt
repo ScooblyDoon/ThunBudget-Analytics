@@ -1315,7 +1315,8 @@ private fun ThunBudgetApp() {
                 3 -> Box(Modifier.padding(padding).fillMaxSize()) {
                     AnnualChartsScreen(expenses=expenses,categories=categories,year=annualChartYear,onYearChange={annualChartYear=it},selectedCategoryNames=selectedAnnualChartCategoryNames,onSelectedCategoryNamesChange={selectedAnnualChartCategoryNames=it},showCategoryCharts=showAnnualCategoryCharts,onShowCategoryChartsChange={showAnnualCategoryCharts=it; persistUiExpanded(context,"annual_category_charts",it)})
                 }
-                5 -> RecurringPaymentsScreen(
+                5 -> Box(Modifier.padding(padding).fillMaxSize()) {
+                    RecurringPaymentsScreen(
                     payments = recurringPayments,
                     categories = categories,
                     onAdd = { payment ->
@@ -1332,7 +1333,8 @@ private fun ThunBudgetApp() {
                         recurringPayments = recurringPayments.map { if (it.id == payment.id) it.copy(completedMonths = it.completedMonths + YearMonth.from(today).toString()) else it }
                         store.saveRecurringPayments(recurringPayments)
                     }
-                )
+                    )
+                }
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item { Row(verticalAlignment=Alignment.CenterVertically) {
