@@ -1108,7 +1108,7 @@ private fun ThunBudgetApp() {
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
-                                OutlinedTextField(value=historyToDate,onValueChange={historyToDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                                OutlinedTextField(value=historyToDate,onValueChange={historyToDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                             }
                             TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyYearFilter="Все годы";historyMonthNumberFilter="Все месяцы";historyDayFilter="Все числа";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
                         }
@@ -1294,7 +1294,12 @@ private fun ThunBudgetApp() {
                     draft.isIncome -> {
                         val amount = confirmedAmount ?: return@TextButton
                         store.prepareUndoSnapshot(); canUndo=true
-                        val incomePeriod = reportingPeriodFor(LocalDate.parse(confirmedDate))
+                        val incomeDate = LocalDate.parse(confirmedDate)
+                        val incomePeriod = when {
+                            incomeDate.dayOfMonth in 9..23 -> incomeDate.withDayOfMonth(9).toString() to incomeDate.withDayOfMonth(23).toString()
+                            incomeDate.dayOfMonth >= 24 -> incomeDate.withDayOfMonth(24).toString() to incomeDate.plusMonths(1).withDayOfMonth(8).toString()
+                            else -> incomeDate.minusMonths(1).withDayOfMonth(24).toString() to incomeDate.withDayOfMonth(8).toString()
+                        }
                         store.addIncomeEntry(draft.title, amount, confirmedDate, incomePeriod.first, incomePeriod.second)
                         periodIncomes = store.loadPeriodIncomes()
                         incomeEntries = store.loadIncomeEntries()
@@ -1545,7 +1550,7 @@ private fun ThunBudgetApp() {
                     selectedCategory=null
                     historyQuery=""
                     historyCategoryFilter="Все категории"
-                    historyMonthFilter="Все месяцы"
+                    historyYearFilter="Все годы";historyMonthNumberFilter="Все месяцы";historyDayFilter="Все числа"
                     historyFromDate=""
                     historyToDate=""
                     amountLimit=100000f
