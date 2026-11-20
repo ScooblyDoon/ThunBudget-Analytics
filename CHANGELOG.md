@@ -140,3 +140,5 @@
 - Reduced bottom navigation label wrapping on narrow screens and larger system font scales.
 - Moved the theme switch above the navigation bar so it respects Android system navigation insets.
 - Adjusted overview scroll padding to match the new docked layout.
+
+- Preserved the existing dashboard calculations and visual theme.
