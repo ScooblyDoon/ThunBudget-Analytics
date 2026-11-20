@@ -2,6 +2,7 @@
 
 ## 1.3.12
 - Fix assistant date display to use dd.MM.yyyy and convert dates to natural Russian speech.
+- Fix date-to-speech matching and interval selection for average spending requests.
 - Add deterministic queries for most frequent spending category and expense title, largest and smallest expenses, average spending by day/week/month/quarter/year and category.
 - Add assistant spending charts by category and monthly trend.
 - Add a discoverable “Что я могу сказать?” help response with command examples.
