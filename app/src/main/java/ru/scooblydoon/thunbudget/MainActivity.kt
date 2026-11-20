@@ -500,7 +500,9 @@ private fun ThunBudgetApp() {
     var historyAscending by remember { mutableStateOf(false) }
     var historyQuery by remember { mutableStateOf("") }
     var historyCategoryFilter by remember { mutableStateOf("Все категории") }
-    var historyMonthFilter by remember { mutableStateOf("Все месяцы") }
+    var historyYearFilter by remember { mutableStateOf("Все годы") }
+    var historyMonthNumberFilter by remember { mutableStateOf("Все месяцы") }
+    var historyDayFilter by remember { mutableStateOf("Все числа") }
     var historyFromDate by remember { mutableStateOf("") }
     var historyToDate by remember { mutableStateOf("") }
     var amountLimit by remember { mutableFloatStateOf(100000f) }
@@ -1074,18 +1076,33 @@ private fun ThunBudgetApp() {
                                     }
                                 }
                             }
-                            var expandedMonth by rememberSaveable { mutableStateOf(false) }
-                            val availableHistoryMonths = expenses.mapNotNull { runCatching { YearMonth.from(LocalDate.parse(it.date)).toString() }.getOrNull() }.distinct().sortedDescending()
-                            ExposedDropdownMenuBox(expanded=expandedMonth,onExpandedChange={expandedMonth=it}) {
-                                OutlinedTextField(
-                                    value=if(historyMonthFilter=="Все месяцы") historyMonthFilter else runCatching { YearMonth.parse(historyMonthFilter).format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))) }.getOrDefault(historyMonthFilter),
-                                    onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),
-                                    label={Text("Месяц")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedMonth)}
-                                )
-                                ExposedDropdownMenu(expanded=expandedMonth,onDismissRequest={expandedMonth=false}) {
-                                    (listOf("Все месяцы")+availableHistoryMonths).forEach { option ->
-                                        val label=if(option=="Все месяцы") option else runCatching { YearMonth.parse(option).format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))) }.getOrDefault(option)
-                                        DropdownMenuItem(text={Text(label)},onClick={historyMonthFilter=option;expandedMonth=false})
+                            val historyDates = expenses.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
+                            val historyYears = (historyDates.map { it.year }.distinct().sortedDescending().map { it.toString() } + LocalDate.now().year.toString()).distinct()
+                            val historyMonths = listOf("Все месяцы") + (1..12).map { it.toString().padStart(2,'0') }
+                            val historyDays = listOf("Все числа") + (1..31).map { it.toString().padStart(2,'0') }
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
+                                var expandedYear by rememberSaveable { mutableStateOf(false) }
+                                ExposedDropdownMenuBox(expanded=expandedYear,onExpandedChange={expandedYear=it},modifier=Modifier.weight(1f)) {
+                                    OutlinedTextField(value=historyYearFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Год")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedYear)},singleLine=true)
+                                    ExposedDropdownMenu(expanded=expandedYear,onDismissRequest={expandedYear=false}) {
+                                        (listOf("Все годы")+historyYears).forEach { option -> DropdownMenuItem(text={Text(option)},onClick={historyYearFilter=option;expandedYear=false}) }
+                                    }
+                                }
+                                var expandedMonth by rememberSaveable { mutableStateOf(false) }
+                                ExposedDropdownMenuBox(expanded=expandedMonth,onExpandedChange={expandedMonth=it},modifier=Modifier.weight(1f)) {
+                                    OutlinedTextField(value=historyMonthNumberFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Месяц")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedMonth)},singleLine=true)
+                                    ExposedDropdownMenu(expanded=expandedMonth,onDismissRequest={expandedMonth=false}) {
+                                        historyMonths.forEach { option ->
+                                            val label=if(option=="Все месяцы") option else runCatching { java.time.Month.of(option.toInt()).getDisplayName(java.time.format.TextStyle.FULL,Locale("ru","RU")).replaceFirstChar { it.uppercase(Locale("ru","RU")) } }.getOrDefault(option)
+                                            DropdownMenuItem(text={Text(label)},onClick={historyMonthNumberFilter=option;expandedMonth=false})
+                                        }
+                                    }
+                                }
+                                var expandedDay by rememberSaveable { mutableStateOf(false) }
+                                ExposedDropdownMenuBox(expanded=expandedDay,onExpandedChange={expandedDay=it},modifier=Modifier.weight(0.8f)) {
+                                    OutlinedTextField(value=historyDayFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Число")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedDay)},singleLine=true)
+                                    ExposedDropdownMenu(expanded=expandedDay,onDismissRequest={expandedDay=false}) {
+                                        historyDays.forEach { option -> DropdownMenuItem(text={Text(option)},onClick={historyDayFilter=option;expandedDay=false}) }
                                     }
                                 }
                             }
@@ -1093,7 +1110,7 @@ private fun ThunBudgetApp() {
                                 OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                                 OutlinedTextField(value=historyToDate,onValueChange={historyToDate=formatDateDigits(it)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                             }
-                            TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyMonthFilter="Все месяцы";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
+                            TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyYearFilter="Все годы";historyMonthNumberFilter="Все месяцы";historyDayFilter="Все числа";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
                         }
                     }
                     item {
@@ -1120,7 +1137,9 @@ private fun ThunBudgetApp() {
                         expense.amount<=amountLimit.toDouble() &&
                         (normalizedQuery.isBlank() || expense.title.lowercase(Locale("ru","RU")).contains(normalizedQuery) || expense.category.lowercase(Locale("ru","RU")).contains(normalizedQuery)) &&
                         (historyCategoryFilter=="Все категории" || expense.category==historyCategoryFilter) &&
-                        (historyMonthFilter=="Все месяцы" || expense.date.startsWith(historyMonthFilter)) &&
+                        (historyYearFilter=="Все годы" || expense.date.startsWith(historyYearFilter)) &&
+                        (historyMonthNumberFilter=="Все месяцы" || expense.date.substring(5,7)==historyMonthNumberFilter) &&
+                        (historyDayFilter=="Все числа" || expense.date.substring(8,10)==historyDayFilter) &&
                         (validFrom==null || expense.date>=validFrom) &&
                         (validTo==null || expense.date<=validTo)
                     }
@@ -1147,6 +1166,7 @@ private fun ThunBudgetApp() {
         }
     }
     voiceDraft?.let { draft ->
+        var voiceDate by remember(draft.date) { mutableStateOf(draft.date.filter(Char::isDigit)) }
         AlertDialog(
             onDismissRequest={voiceDraft=null},
             title={Text(when { draft.isCategoryRename -> "Проверь переименование категории"; draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncomeEdit -> "Проверь изменение дохода"; draft.isDelete -> "Подтверди удаление операции"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
@@ -1184,18 +1204,28 @@ private fun ThunBudgetApp() {
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
                         singleLine=true
                     )
-                    Text("Дата: ${LocalDate.parse(draft.date).format(formatter)}")
+                    if (!draft.isDelete) OutlinedTextField(
+                        value=voiceDate,
+                        onValueChange={voiceDate=it.filter(Char::isDigit).take(8)},
+                        label={Text("Дата операции (ДД.ММ.ГГГГ)")},
+                        placeholder={Text("ДД.ММ.ГГГГ")},
+                        visualTransformation=DateDigitsVisualTransformation,
+                        keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),
+                        singleLine=true
+                    )
                     Text("Описание: ${draft.title}")
                     Text("Если распознавание пропустило слово «тысяч», исправь сумму здесь. Неверную сумму не сохраняй.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
             confirmButton={TextButton(
-                enabled = draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit ||
+                enabled = (draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit ||
                     (if (draft.isDelete) voiceEditCandidates.any { it.id == voiceSelectedExpenseId }
-                    else ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId }))),
+                    else ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId }))) &&
+                    (draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit || draft.isDelete || parseUserDate(voiceDate) != null),
                 onClick={
                 val confirmedAmount = voiceAmount.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
+                val confirmedDate = parseUserDate(voiceDate)?.toString() ?: draft.date
                 when {
                     draft.isCategoryRename -> {
                         val oldName = draft.category
@@ -1238,7 +1268,7 @@ private fun ThunBudgetApp() {
                         store.prepareUndoSnapshot(); canUndo=true
                         val targetId = voiceSelectedExpenseId ?: return@TextButton
                         val target = expenses.firstOrNull { it.id == targetId } ?: return@TextButton
-                        expenses = expenses.map { if (it.id == targetId) it.copy(amount = amount) else it }.sortedByDescending { it.date }
+                        expenses = expenses.map { if (it.id == targetId) it.copy(amount = amount, date = confirmedDate) else it }.sortedByDescending { it.date }
                         store.saveExpenses(expenses)
                         voiceMessage = "Операция «${target.title}» от ${target.date} изменена: ${money(target.amount)} → ${money(amount)}."
                     }
@@ -1264,7 +1294,8 @@ private fun ThunBudgetApp() {
                     draft.isIncome -> {
                         val amount = confirmedAmount ?: return@TextButton
                         store.prepareUndoSnapshot(); canUndo=true
-                        store.addIncomeEntry(draft.title, amount, draft.date, periodStart, periodEnd)
+                        val incomePeriod = reportingPeriodFor(LocalDate.parse(confirmedDate))
+                        store.addIncomeEntry(draft.title, amount, confirmedDate, incomePeriod.first, incomePeriod.second)
                         periodIncomes = store.loadPeriodIncomes()
                         incomeEntries = store.loadIncomeEntries()
                         voiceMessage = "Доход ${money(amount)} сохранён отдельной операцией за отчётный период. Общий доход за период: ${money(periodIncome + amount)}."
@@ -1272,7 +1303,7 @@ private fun ThunBudgetApp() {
                     else -> {
                         val amount = confirmedAmount ?: return@TextButton
                         store.prepareUndoSnapshot(); canUndo=true
-                        val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,amount,draft.date))+expenses).sortedByDescending { it.date }
+                        val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,amount,confirmedDate))+expenses).sortedByDescending { it.date }
                         expenses=updated; store.saveExpenses(expenses)
                         val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
                         val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
@@ -1693,9 +1724,12 @@ private fun ChartsScreen(
                             Canvas(Modifier.size(chartSize)) {
                                 var angle=-90f
                                 val sum=values.sumOf { it.second }.toFloat().coerceAtLeast(1f)
+                                val strokeWidth=size.minDimension*0.22f
+                                val inset=strokeWidth/2f
+                                val arcSize=androidx.compose.ui.geometry.Size(size.width-strokeWidth,size.height-strokeWidth)
                                 values.forEachIndexed { index,pair ->
                                     val sweep=pair.second.toFloat()/sum*360f
-                                    drawArc(color=palette[index%palette.size],startAngle=angle,sweepAngle=sweep,useCenter=false,style=Stroke(width=size.minDimension*0.22f))
+                                    drawArc(color=palette[index%palette.size],startAngle=angle,sweepAngle=sweep,useCenter=false,topLeft=androidx.compose.ui.geometry.Offset(inset,inset),size=arcSize,style=Stroke(width=strokeWidth))
                                     angle+=sweep
                                 }
                             }
@@ -1937,7 +1971,6 @@ private fun SettingsDialog(
         "categories" to "Категории",
         "export" to "Excel",
         "backup" to "Копирование",
-        "appearance" to "Оформление",
         "reset" to "Сброс данных"
     )
     val validIncome = inc.replace(',','.').toDoubleOrNull()
@@ -2005,14 +2038,6 @@ private fun SettingsDialog(
                         if(hasAutomaticBackup) OutlinedButton(onClick=onRestoreAutomatic,modifier=Modifier.fillMaxWidth()) { Text("Восстановить автокопию приложения") }
                         OutlinedButton(onClick=onRestore,modifier=Modifier.fillMaxWidth()) { Text("Восстановить из файла") }
                         if(hasPreviousRestoreBackup) OutlinedButton(onClick=onRestorePrevious,modifier=Modifier.fillMaxWidth()) { Text("Отменить последнее восстановление") }
-                    }
-                    "appearance" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Text("Оформление",fontWeight=FontWeight.Bold)
-                        Text("Тема приложения")
-                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                            SegmentedButton(selected=!darkTheme,onClick={onThemeChange(false)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Светлая") }
-                            SegmentedButton(selected=darkTheme,onClick={onThemeChange(true)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("Тёмная") }
-                        }
                     }
                     "reset" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Полный сброс данных",fontWeight=FontWeight.Bold)
