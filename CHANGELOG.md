@@ -4,6 +4,7 @@
 - Removed the T-Bank notification listener, transaction queue, and related Settings controls.
 - Improved offline voice amount parsing, including decimal values and kopecks.
 - Improved voice category matching to tolerate minor recognition errors and Russian word inflections.
+- Added regression tests for decimal amounts, kopecks, explicit dates, fuzzy categories, and digit-only date formatting.
 - Added voice date recognition for today, yesterday, the day before yesterday, numeric dates, and dates with month names.
 - Standardized date entry to DD.MM.YYYY with digits-only input and automatic separators across expenses, history filters, and reporting-period settings.
 - Added a month filter to operation history; month, category, text, amount, and date filters can be combined.
