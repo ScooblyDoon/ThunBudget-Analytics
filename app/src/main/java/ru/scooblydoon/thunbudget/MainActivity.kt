@@ -1107,7 +1107,7 @@ private fun ThunBudgetApp() {
                                 }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                                 OutlinedTextField(value=historyToDate,onValueChange={historyToDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
                             }
                             TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyYearFilter="Все годы";historyMonthNumberFilter="Все месяцы";historyDayFilter="Все числа";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
@@ -1938,7 +1938,7 @@ private fun MetricCard(label:String,value:String,modifier:Modifier=Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:String?=null,onDismiss:()->Unit,onSave:(String,String,Double,String)->Unit) {
-    var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember(initialCategory,categories) { mutableStateOf(initialCategory ?: categories.firstOrNull()?.name ?: "Прочее") }; var date by remember { mutableStateOf(LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))) }; var expanded by remember { mutableStateOf(false) }
+    var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember(initialCategory,categories) { mutableStateOf(initialCategory ?: categories.firstOrNull()?.name ?: "Прочее") }; var date by remember { mutableStateOf(LocalDate.now().format(DateTimeFormatter.ofPattern("ddMMyyyy"))) }; var expanded by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest=onDismiss,title={Text("Новый расход")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
@@ -1947,7 +1947,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
                 OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
                 ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { categories.forEach { DropdownMenuItem(text={Text(it.name)},onClick={category=it.name;expanded=false}) } }
             }
-            OutlinedTextField(date,{date=formatDateDigits(it)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+            OutlinedTextField(date,{date=it.filter(Char::isDigit).take(8)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
         }
     },confirmButton={ TextButton(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null) onSave(title,category,v,parseUserDate(date)!!.toString()) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0 && parseUserDate(date)!=null) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
@@ -1967,8 +1967,8 @@ private fun SettingsDialog(
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
     var sourceNames by remember { mutableStateOf(categories.map { it.name }) }
-    var from by remember { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
-    var to by remember { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
+    var from by remember { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
+    var to by remember { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     var section by rememberSaveable { mutableStateOf("income") }
     val sections = listOf(
         "income" to "Доход",
@@ -2158,7 +2158,7 @@ private fun ExpenseEditDialog(
     var title by remember(expense.id) { mutableStateOf(expense.title) }
     var amount by remember(expense.id) { mutableStateOf(expense.amount.toString()) }
     var category by remember(expense.id) { mutableStateOf(expense.category) }
-    var date by remember(expense.id) { mutableStateOf(runCatching { LocalDate.parse(expense.date).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) }.getOrDefault("")) }
+    var date by remember(expense.id) { mutableStateOf(runCatching { LocalDate.parse(expense.date).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     var expanded by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest=onDismiss,
