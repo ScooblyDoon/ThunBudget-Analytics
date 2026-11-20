@@ -133,3 +133,10 @@
 - Calendar dates highlight scheduled payments and open compact payment details.
 - Added editing, pause/resume, delete and month-aware payment confirmation from the details dialog.
 - Preserved the selected list/calendar view between app launches.
+
+
+## 1.3.25 (versionCode 38)
+- Reworked the bottom quick actions into a docked row so they no longer cover dashboard cards.
+- Reduced bottom navigation label wrapping on narrow screens and larger system font scales.
+- Moved the theme switch above the navigation bar so it respects Android system navigation insets.
+- Adjusted overview scroll padding to match the new docked layout.
