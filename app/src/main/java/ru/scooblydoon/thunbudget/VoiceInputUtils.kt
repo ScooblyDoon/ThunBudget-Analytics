@@ -132,7 +132,7 @@ internal fun parseUserDate(input: String): LocalDate? {
 
 internal fun assistantSpeechText(message: String): String {
     val spokenDate = java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy 'года'", Locale("ru", "RU"))
-    return Regex("""\\b(\\d{2})\\.(\\d{2})\\.(\\d{4})\\b""").replace(message) { match ->
+    return Regex("""\b(\d{2})\.(\d{2})\.(\d{4})\b""").replace(message) { match ->
         val date = runCatching {
             LocalDate.of(match.groupValues[3].toInt(), match.groupValues[2].toInt(), match.groupValues[1].toInt())
         }.getOrNull()
