@@ -25,6 +25,9 @@ data class RecurringPayment(
 
     fun dueDate(month: YearMonth): LocalDate = month.atDay(dayOfMonth.coerceAtMost(month.lengthOfMonth()))
     fun isCompleted(month: YearMonth): Boolean = month.toString() in completedMonths
+
+    fun canConfirm(month: YearMonth, today: LocalDate): Boolean =
+        active && !dueDate(month).isAfter(today) && !isCompleted(month)
 }
 
 class RecurringPaymentStore(context: Context) {
