@@ -17,6 +17,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.consume
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
@@ -89,6 +92,20 @@ internal class BudgetStore(context: Context) {
         order.forEach { array.put(it) }
         check(prefs.edit().putString("dashboard_order", array.toString()).commit())
         saveAutomaticBackup()
+    }
+    fun loadNavigationOrder(): List<Int> {
+        val defaults = (0..5).toList()
+        val saved = runCatching {
+            val array = JSONArray(prefs.getString("navigation_order", "[]") ?: "[]")
+            (0 until array.length()).map { array.getInt(it) }.filter { it in defaults }.distinct()
+        }.getOrDefault(emptyList())
+        return saved + defaults.filterNot { it in saved }
+    }
+    fun saveNavigationOrder(order: List<Int>) {
+        require(order.size == 6 && order.toSet() == (0..5).toSet())
+        val array = JSONArray()
+        order.forEach { array.put(it) }
+        check(prefs.edit().putString("navigation_order", array.toString()).commit())
     }
 
     fun loadIncomeEntries(): List<IncomeEntry> = runCatching { incomeLedger.load() }.getOrDefault(emptyList())
@@ -563,7 +580,9 @@ private fun ThunBudgetApp() {
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
+    var navigationOrder by remember { mutableStateOf(store.loadNavigationOrder()) }
     var dashboardOrder by remember { mutableStateOf(store.loadDashboardOrder()) }
+    var showPeriodDetails by rememberUiExpanded(context, "overview_period_details", true)
     var showDashboardArrangeDialog by remember { mutableStateOf(false) }
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
     var showPeriodCategories by rememberUiExpanded(context, "period_categories")
@@ -1004,6 +1023,9 @@ private fun ThunBudgetApp() {
                 actions={ Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(0.dp)) {
                     val actionTextStyle = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge
                     val actionPadding = if (compactLayout) 6.dp else 10.dp
+                    TextButton(onClick={darkTheme = !darkTheme; store.saveDarkTheme(darkTheme)},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
+                        Text(if (darkTheme) "☀" else "☾", style=actionTextStyle, maxLines=1)
+                    }
                     TextButton(onClick={showAssistantDialog=true},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
                         Text("Помощник",style=actionTextStyle,maxLines=1,softWrap=false)
                     }
@@ -1090,74 +1112,56 @@ private fun ThunBudgetApp() {
                             }
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(end = 12.dp, top = 2.dp, bottom = 2.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { darkTheme = !darkTheme; store.saveDarkTheme(darkTheme) },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                if (darkTheme) "☀ Светлая тема" else "☾ Тёмная тема",
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-                    // Keep NavigationBar last so its system navigation insets are at the
-                    // bottom edge. The theme switch above it must not draw under system buttons.
+                    // Keep NavigationBar last so its system navigation insets are at the bottom edge.
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         tonalElevation = 8.dp
                     ) {
-                        NavigationBarItem(
-                            selected = tab == 0,
-                            onClick = { tab = 0 },
-                            icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Обзор", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
+                        val navItems = listOf(
+                            Triple(0, "⌂", "Обзор"),
+                            Triple(1, "◒", "Анализ"),
+                            Triple(2, "▥", "Графики"),
+                            Triple(3, "▤", "За год"),
+                            Triple(4, "≡", "История"),
+                            Triple(5, "▣", "Платежи")
                         )
-                        NavigationBarItem(
-                            selected = tab == 1,
-                            onClick = { tab = 1 },
-                            icon = { Text("◒", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Анализ", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 2,
-                            onClick = { tab = 2 },
-                            icon = { Text("▥", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Графики", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 3,
-                            onClick = { tab = 3 },
-                            icon = { Text("▤", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("За год", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 4,
-                            onClick = { tab = 4 },
-                            icon = { Text("≡", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("История", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 5,
-                            onClick = { tab = 5 },
-                            icon = { Text("▣", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Платежи", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
+                        navigationOrder.forEach { destination ->
+                            val item = navItems.first { it.first == destination }
+                            NavigationBarItem(
+                                modifier = Modifier.pointerInput(destination, navigationOrder) {
+                                    var dragDistance = 0f
+                                    val threshold = size.width * 0.45f
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { dragDistance = 0f },
+                                        onDragEnd = { },
+                                        onDragCancel = { },
+                                        onDrag = { change, dragAmount ->
+                                            dragDistance += dragAmount.x
+                                            if (kotlin.math.abs(dragDistance) >= threshold) {
+                                                val currentIndex = navigationOrder.indexOf(destination)
+                                                val direction = if (dragDistance < 0f) -1 else 1
+                                                val targetIndex = (currentIndex + direction).coerceIn(0, navigationOrder.lastIndex)
+                                                if (targetIndex != currentIndex) {
+                                                    val reordered = navigationOrder.toMutableList()
+                                                    val moved = reordered.removeAt(currentIndex)
+                                                    reordered.add(targetIndex, moved)
+                                                    navigationOrder = reordered
+                                                    store.saveNavigationOrder(reordered)
+                                                }
+                                                dragDistance = 0f
+                                            }
+                                            change.consume()
+                                        }
+                                    )
+                                },
+                                selected = tab == destination,
+                                onClick = { tab = destination },
+                                icon = { Text(item.second, style = MaterialTheme.typography.titleLarge) },
+                                label = { Text(item.third, style = navLabelStyle, maxLines = 1, softWrap = false) },
+                                alwaysShowLabel = true
+                            )
+                        }
                     }
                 }
             }
@@ -1173,11 +1177,17 @@ private fun ThunBudgetApp() {
                     items(dashboardOrder,key={it}) { section ->
                         when(section) {
                             "period" -> Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                                    SegmentedButton(selected=selectedPeriod==0,onClick={selectedPeriod=0;periodStart=baseMonth.withDayOfMonth(9).toString();periodEnd=baseMonth.withDayOfMonth(23).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
-                                    SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=baseMonth.withDayOfMonth(24).toString();periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                                TextButton(
+                                    onClick = { showPeriodDetails = !showPeriodDetails; persistUiExpanded(context, "overview_period_details", showPeriodDetails) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text(if (showPeriodDetails) "Отчётный период ▲" else "Отчётный период ▼") }
+                                if (showPeriodDetails) {
+                                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                        SegmentedButton(selected=selectedPeriod==0,onClick={selectedPeriod=0;periodStart=baseMonth.withDayOfMonth(9).toString();periodEnd=baseMonth.withDayOfMonth(23).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
+                                        SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=baseMonth.withDayOfMonth(24).toString();periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                                    }
+                                    TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                                 }
-                                TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                                 Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             "budget" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -1906,7 +1916,7 @@ private fun ThunBudgetApp() {
                                     Divider(Modifier.padding(vertical=6.dp))
                                     Text("Категория: ${expense.category}",style=MaterialTheme.typography.bodySmall)
                                     Text("Дата: ${expense.date}",style=MaterialTheme.typography.bodySmall)
-                                    TextButton(onClick={selectedExpense=expense;selectedCategory=null}) { Text("Изменить операцию") }
+                                    TextButton(onClick={selectedExpense=expense;selectedCategory=null}) { Text("Изменить / удалить операцию") }
                                 }
                             }
                         }
