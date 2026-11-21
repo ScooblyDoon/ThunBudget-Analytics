@@ -1,0 +1,2 @@
+Release APK build trigger for commit 98643dae545e9762246f61145d0c058a99c2eada.
+No application source, version, package ID, or signing configuration changes.
