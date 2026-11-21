@@ -1,3 +1,4 @@
+# Release APK trigger: commits marked [final-apk] build and upload the signed APK.
 name: Android APK and BrowserStack
 
 on:
