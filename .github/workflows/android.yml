@@ -25,6 +25,7 @@ on:
       - feature/recurring-payments-calendar-2026-11-20
       - fix/responsive-layout-2026-11-20
       - ci/android-testlab-integration
+      - fix/browserstack-422-release-apk-2026-11-21
   workflow_dispatch:
     inputs:
       run_browserstack:
@@ -127,16 +128,24 @@ jobs:
             app: $app,
             testSuite: $suite,
             project: "ThunBudget Analytics Android compatibility",
-            devices: [
-              {"device": "Samsung Galaxy S21 FE", "os_version": ".*"},
-              {"device": "Google Pixel 8", "os_version": ".*"}
-            ]
+            devices: ["Samsung Galaxy S21 FE-14.0", "Google Pixel 8-14.0"]
           }')
-          RESPONSE=$(curl --fail --silent --show-error -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+          HTTP_STATUS=$(curl --silent --show-error -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+            -o browserstack-response.json -w "%{http_code}" \
             -X POST "https://api-cloud.browserstack.com/app-automate/espresso/v2/build" \
             -H "Content-Type: application/json" -d "$PAYLOAD")
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "BrowserStack rejected the build request (HTTP $HTTP_STATUS):"
+            cat browserstack-response.json
+            exit 1
+          fi
+          RESPONSE=$(cat browserstack-response.json)
           BUILD_ID=$(echo "$RESPONSE" | jq -r '.build_id // empty')
-          test -n "$BUILD_ID"
+          if [[ -z "$BUILD_ID" ]]; then
+            echo "BrowserStack response did not contain build_id:"
+            echo "$RESPONSE"
+            exit 1
+          fi
           echo "BrowserStack build started: $BUILD_ID"
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
 
