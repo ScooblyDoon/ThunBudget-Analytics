@@ -144,41 +144,124 @@ jobs:
           echo "Discovered ${#DEVICE_LIST[@]} Android device/OS combinations:"
           printf '%s\n' "${DEVICE_LIST[@]}"
 
-      - name: Run Espresso compatibility suite on all discovered Android 8–16 devices
+      - name: Run Espresso compatibility suite sequentially on all discovered Android 8–16 devices
         if: ${{ steps.browserstack_devices.outcome == 'success' }}
         id: browserstack_run
+        timeout-minutes: 350
         env:
           APP_URL: ${{ steps.browserstack_upload.outputs.app_url }}
           TEST_URL: ${{ steps.browserstack_upload.outputs.test_url }}
         run: |
           set -euo pipefail
-          mapfile -t DEVICE_LIST < browserstack-selected-devices.txt
-          DEVICES_JSON=$(printf '%s\n' "${DEVICE_LIST[@]}" | jq -R . | jq -s .)
-          PAYLOAD=$(jq -n --arg app "$APP_URL" --arg suite "$TEST_URL" --argjson devices "$DEVICES_JSON" '{
-            app: $app,
-            testSuite: $suite,
-            project: "ThunBudget Analytics Android 8-16 compatibility",
-            devices: $devices
-          }')
-          echo "Submitting Espresso tests for ${#DEVICE_LIST[@]} device/OS combinations."
-          HTTP_STATUS=$(curl --silent --show-error -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
-            -o browserstack-response.json -w "%{http_code}" \
-            -X POST "https://api-cloud.browserstack.com/app-automate/espresso/v2/build" \
-            -H "Content-Type: application/json" -d "$PAYLOAD")
-          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
-            echo "BrowserStack rejected the build request (HTTP $HTTP_STATUS):"
-            cat browserstack-response.json
+          RESULTS_FILE="browserstack-results.tsv"
+          printf 'device\tbuild_id\tstatus\tduration_seconds\n' > "$RESULTS_FILE"
+          PASSED=0
+          FAILED=0
+          TOTAL=0
+
+          while IFS= read -r DEVICE; do
+            [[ -n "$DEVICE" ]] || continue
+            TOTAL=$((TOTAL + 1))
+            echo "::group::BrowserStack device $TOTAL: $DEVICE"
+            PAYLOAD=$(jq -n --arg app "$APP_URL" --arg suite "$TEST_URL" --arg device "$DEVICE" '{
+              app: $app,
+              testSuite: $suite,
+              project: "ThunBudget Analytics Android 8-16 compatibility",
+              devices: [$device]
+            }')
+
+            BUILD_ID=""
+            for ATTEMPT in $(seq 1 60); do
+              HTTP_STATUS=$(curl --silent --show-error -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+                -o browserstack-response.json -w "%{http_code}" \
+                -X POST "https://api-cloud.browserstack.com/app-automate/espresso/v2/build" \
+                -H "Content-Type: application/json" -d "$PAYLOAD")
+              RESPONSE=$(cat browserstack-response.json)
+              if [[ "$HTTP_STATUS" -ge 200 && "$HTTP_STATUS" -lt 300 ]]; then
+                BUILD_ID=$(echo "$RESPONSE" | jq -r '.build_id // empty')
+                if [[ -n "$BUILD_ID" ]]; then
+                  break
+                fi
+                echo "BrowserStack returned success without build_id: $RESPONSE"
+              elif [[ "$RESPONSE" == *"BROWSERSTACK_ALL_PARALLELS_IN_USE"* ]]; then
+                echo "All BrowserStack parallel slots are occupied (attempt $ATTEMPT/60). Waiting 60 seconds."
+                sleep 60
+              else
+                echo "BrowserStack rejected $DEVICE (HTTP $HTTP_STATUS): $RESPONSE"
+                break
+              fi
+            done
+
+            if [[ -z "$BUILD_ID" ]]; then
+              echo "Could not start a BrowserStack build for $DEVICE."
+              printf '%s\t%s\t%s\t%s\n' "$DEVICE" "-" "submission_failed" "0" >> "$RESULTS_FILE"
+              FAILED=$((FAILED + 1))
+              echo "::endgroup::"
+              continue
+            fi
+
+            echo "Started BrowserStack build $BUILD_ID for $DEVICE"
+            START_EPOCH=$(date +%s)
+            FINAL_STATUS=""
+            for POLL in $(seq 1 120); do
+              STATUS_HTTP=$(curl --silent --show-error -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+                -o browserstack-status.json -w "%{http_code}" \
+                "https://api-cloud.browserstack.com/app-automate/espresso/v2/builds/$BUILD_ID")
+              if [[ "$STATUS_HTTP" -ge 200 && "$STATUS_HTTP" -lt 300 ]]; then
+                CURRENT_STATUS=$(jq -r '.status // empty' browserstack-status.json)
+                echo "Build $BUILD_ID status: ${CURRENT_STATUS:-unknown} (poll $POLL/120)"
+                case "$CURRENT_STATUS" in
+                  running|queued|pending|initializing|started|in_progress|"")
+                    sleep 30
+                    ;;
+                  *)
+                    FINAL_STATUS="$CURRENT_STATUS"
+                    break
+                    ;;
+                esac
+              else
+                echo "Could not read build status (HTTP $STATUS_HTTP); retrying."
+                sleep 30
+              fi
+            done
+
+            DURATION=$(( $(date +%s) - START_EPOCH ))
+            if [[ -z "$FINAL_STATUS" ]]; then
+              FINAL_STATUS="poll_timeout"
+            fi
+            printf '%s\t%s\t%s\t%s\n' "$DEVICE" "$BUILD_ID" "$FINAL_STATUS" "$DURATION" >> "$RESULTS_FILE"
+            if [[ "$FINAL_STATUS" == "passed" || "$FINAL_STATUS" == "success" ]]; then
+              PASSED=$((PASSED + 1))
+            else
+              FAILED=$((FAILED + 1))
+            fi
+            echo "Finished $DEVICE: $FINAL_STATUS (${DURATION}s)"
+            echo "::endgroup::"
+          done < browserstack-selected-devices.txt
+
+          echo "BrowserStack device compatibility summary: total=$TOTAL passed=$PASSED failed=$FAILED"
+          {
+            echo "### BrowserStack Android 8–16 compatibility"
+            echo "- Device/OS combinations: $TOTAL"
+            echo "- Passed: $PASSED"
+            echo "- Failed or timed out: $FAILED"
+            echo ""
+            echo "| Device | Build ID | Status | Duration (s) |"
+            echo "|---|---|---:|---:|"
+            awk -F '\\t' 'NR>1 {printf "| %s | %s | %s | %s |\\n", $1, $2, $3, $4}' "$RESULTS_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$FAILED" -gt 0 ]]; then
             exit 1
           fi
-          RESPONSE=$(cat browserstack-response.json)
-          BUILD_ID=$(echo "$RESPONSE" | jq -r '.build_id // empty')
-          if [[ -z "$BUILD_ID" ]]; then
-            echo "BrowserStack response did not contain build_id:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-          echo "BrowserStack build started: $BUILD_ID"
-          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Upload BrowserStack compatibility results
+        if: ${{ always() && steps.browserstack_devices.outcome == 'success' && hashFiles('browserstack-results.tsv') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThunBudget-BrowserStack-Android-8-16-results
+          path: browserstack-results.tsv
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: BrowserStack credentials not configured
         if: ${{ (github.event_name == 'push' || inputs.run_browserstack) && (env.BROWSERSTACK_USERNAME == '' || env.BROWSERSTACK_ACCESS_KEY == '') }}
