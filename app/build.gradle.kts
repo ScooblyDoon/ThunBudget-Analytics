@@ -8,7 +8,7 @@ android {
     namespace = "ru.scooblydoon.thunbudget"
     compileSdk = 35
     // Release artifact: ThunBudget Analytics 1.3.25 (versionCode 38) [final-apk].
-// Includes list/calendar views, editable payment details and month-aware confirmation. Final signed release. [final-apk]
+    // Includes list/calendar views, editable payment details and month-aware confirmation. Final signed release. [final-apk]
 
     defaultConfig {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
@@ -16,6 +16,7 @@ android {
         targetSdk = 35
         versionCode = 38
         versionName = "1.3.25"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -56,6 +57,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
