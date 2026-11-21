@@ -116,20 +116,51 @@ jobs:
           echo "test_url=$TEST_URL" >> "$GITHUB_OUTPUT"
           echo "Uploaded app and Espresso test APK to BrowserStack."
 
-      - name: Run Espresso smoke test on Samsung Galaxy S21 FE and Google Pixel 8
+      - name: Discover all BrowserStack Android devices from Android 8 to 16
         if: ${{ steps.browserstack_upload.outcome == 'success' }}
+        id: browserstack_devices
+        run: |
+          set -euo pipefail
+          HTTP_STATUS=$(curl --silent --show-error -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+            -o browserstack-devices.json -w "%{http_code}" \
+            "https://api-cloud.browserstack.com/app-automate/devices.json")
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "BrowserStack device catalog request failed (HTTP $HTTP_STATUS):"
+            cat browserstack-devices.json
+            exit 1
+          fi
+          mapfile -t DEVICE_LIST < <(jq -r '
+            .[]
+            | select(.os == "android")
+            | select((.os_version | split(".")[0] | tonumber) >= 8 and (.os_version | split(".")[0] | tonumber) <= 16)
+            | "\(.device)-\(.os_version)"
+          ' browserstack-devices.json | sort -u)
+          if [[ "${#DEVICE_LIST[@]}" -eq 0 ]]; then
+            echo "No BrowserStack Android devices found for Android 8–16."
+            exit 1
+          fi
+          printf '%s\n' "${DEVICE_LIST[@]}" > browserstack-selected-devices.txt
+          echo "device_count=${#DEVICE_LIST[@]}" >> "$GITHUB_OUTPUT"
+          echo "Discovered ${#DEVICE_LIST[@]} Android device/OS combinations:"
+          printf '%s\n' "${DEVICE_LIST[@]}"
+
+      - name: Run Espresso compatibility suite on all discovered Android 8–16 devices
+        if: ${{ steps.browserstack_devices.outcome == 'success' }}
         id: browserstack_run
         env:
           APP_URL: ${{ steps.browserstack_upload.outputs.app_url }}
           TEST_URL: ${{ steps.browserstack_upload.outputs.test_url }}
         run: |
           set -euo pipefail
-          PAYLOAD=$(jq -n --arg app "$APP_URL" --arg suite "$TEST_URL" '{
+          mapfile -t DEVICE_LIST < browserstack-selected-devices.txt
+          DEVICES_JSON=$(printf '%s\n' "${DEVICE_LIST[@]}" | jq -R . | jq -s .)
+          PAYLOAD=$(jq -n --arg app "$APP_URL" --arg suite "$TEST_URL" --argjson devices "$DEVICES_JSON" '{
             app: $app,
             testSuite: $suite,
-            project: "ThunBudget Analytics Android compatibility",
-            devices: ["Samsung Galaxy S21 FE-14.0", "Google Pixel 8-14.0"]
+            project: "ThunBudget Analytics Android 8-16 compatibility",
+            devices: $devices
           }')
+          echo "Submitting Espresso tests for ${#DEVICE_LIST[@]} device/OS combinations."
           HTTP_STATUS=$(curl --silent --show-error -u "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
             -o browserstack-response.json -w "%{http_code}" \
             -X POST "https://api-cloud.browserstack.com/app-automate/espresso/v2/build" \
