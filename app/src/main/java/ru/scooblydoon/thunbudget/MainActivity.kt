@@ -1198,8 +1198,8 @@ private fun ThunBudgetApp() {
                                         SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=secondPeriodStart.toString();periodEnd=secondPeriodEnd.toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("${secondPeriodStart.dayOfMonth}–${secondPeriodEnd.dayOfMonth}") }
                                     }
                                     TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
+                                    Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             "budget" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                 Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primary),shape=RoundedCornerShape(26.dp)) {
@@ -2757,6 +2757,7 @@ private fun SettingsDialog(
 private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (Int, Int) -> Unit) {
     var startText by remember(startDay) { mutableStateOf(startDay.toString()) }
     var endText by remember(endDay) { mutableStateOf(endDay.toString()) }
+    var showConfirmation by remember { mutableStateOf(false) }
     val start = startText.toIntOrNull()
     val end = endText.toIntOrNull()
     val valid = start != null && end != null && start in 1..31 && end in start..31
@@ -2767,9 +2768,29 @@ private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (
         OutlinedTextField(value=endText,onValueChange={endText=it.filter(Char::isDigit).take(2)},label={Text("Окончание первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
         if (preview != null) {
             Text("Предлагаемое второе окно: ${preview.second.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.second.end.format(DateTimeFormatter.ofPattern("dd.MM"))}.")
-            Text("Даты учитывают длину месяца, включая февраль и високосный год. Подтверждение сохранит оба окна.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Расчёт учитывает фактическое число дней месяца, включая февраль и високосный год.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         } else Text("Укажи корректные дни: окончание не может быть раньше начала.",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
-        Button(onClick={if(valid) onSave(start!!,end!!)},enabled=valid,modifier=Modifier.fillMaxWidth()) { Text("Подтвердить настройки окон") }
+        Button(onClick={if(valid) showConfirmation=true},enabled=valid,modifier=Modifier.fillMaxWidth()) { Text("Проверить второе окно") }
+    }
+    if (showConfirmation && preview != null && start != null && end != null) {
+        AlertDialog(
+            onDismissRequest={showConfirmation=false},
+            title={Text("Подтвердить отчётные окна")},
+            text={
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Первое окно: ${preview.first.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.first.end.format(DateTimeFormatter.ofPattern("dd.MM"))}")
+                    Text("Второе окно: ${preview.second.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.second.end.format(DateTimeFormatter.ofPattern("dd.MM"))}")
+                    Text("Второе окно автоматически заполнит оставшиеся календарные дни до следующего первого окна.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton={TextButton(onClick={showConfirmation=false;onSave(start,end)}){Text("Подтвердить")}},
+            dismissButton={
+                Row {
+                    TextButton(onClick={showConfirmation=false}){Text("Изменить период")}
+                    TextButton(onClick={startText=startDay.toString();endText=endDay.toString();showConfirmation=false}){Text("Отменить действие")}
+                }
+            }
+        )
     }
 }
 
