@@ -588,7 +588,7 @@ private fun ThunBudgetApp() {
     var showHistoryFilters by rememberUiExpanded(context, "history_filters")
     var quickActionsExpanded by rememberUiExpanded(context, "quick_actions_panel", true)
     val today = LocalDate.now()
-    val baseMonth = if (today.dayOfMonth < firstPeriodStartDay) today.minusMonths(1) else today
+    val baseMonth = YearMonth.from(if (today.dayOfMonth < firstPeriodStartDay) today.minusMonths(1) else today)
     val firstPeriodStart = baseMonth.atDay(firstPeriodStartDay.coerceAtMost(baseMonth.lengthOfMonth()))
     val firstPeriodEnd = baseMonth.atDay(firstPeriodEndDay.coerceAtMost(baseMonth.lengthOfMonth()))
     val secondPeriodStart = firstPeriodEnd.plusDays(1)
