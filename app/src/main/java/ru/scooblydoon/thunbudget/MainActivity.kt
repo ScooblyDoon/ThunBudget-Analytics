@@ -17,6 +17,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.layout.*
@@ -90,6 +92,21 @@ internal class BudgetStore(context: Context) {
         check(prefs.edit().putString("dashboard_order", array.toString()).commit())
         saveAutomaticBackup()
     }
+    fun loadNavigationOrder(): List<Int> {
+        val defaults = (0..5).toList()
+        val saved = runCatching {
+            val array = JSONArray(prefs.getString("navigation_order", "[]") ?: "[]")
+            (0 until array.length()).map { array.getInt(it) }.filter { it in defaults }.distinct()
+        }.getOrDefault(emptyList())
+        return saved + defaults.filterNot { it in saved }
+    }
+    fun saveNavigationOrder(order: List<Int>) {
+        require(order.size == 6 && order.toSet() == (0..5).toSet())
+        val array = JSONArray()
+        order.forEach { array.put(it) }
+        check(prefs.edit().putString("navigation_order", array.toString()).commit())
+        saveAutomaticBackup()
+    }
 
     fun loadIncomeEntries(): List<IncomeEntry> = runCatching { incomeLedger.load() }.getOrDefault(emptyList())
 
@@ -154,6 +171,13 @@ internal class BudgetStore(context: Context) {
     fun loadPeriodStart() = prefs.getString("period_start", null)
     fun loadPeriodEnd() = prefs.getString("period_end", null)
     fun savePeriod(start:String,end:String) { prefs.edit().putString("period_start",start).putString("period_end",end).commit(); saveAutomaticBackup() }
+    fun loadFirstPeriodStartDay(): Int = (prefs.getString("reporting_first_start_day", "9")?.toIntOrNull() ?: 9).coerceIn(1, 31)
+    fun loadFirstPeriodEndDay(): Int = (prefs.getString("reporting_first_end_day", "23")?.toIntOrNull() ?: 23).coerceIn(1, 31)
+    fun saveReportingPeriodDays(startDay: Int, endDay: Int) {
+        require(startDay in 1..31 && endDay in startDay..31)
+        check(prefs.edit().putString("reporting_first_start_day", startDay.toString()).putString("reporting_first_end_day", endDay.toString()).commit())
+        saveAutomaticBackup()
+    }
     fun loadCategories(): List<BudgetCategory> {
         val raw = prefs.getString("categories", null) ?: return listOf(
             BudgetCategory("Продукты", 25.0), BudgetCategory("Транспорт", 10.0),
@@ -563,8 +587,13 @@ private fun ThunBudgetApp() {
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
+    var navigationOrder by remember { mutableStateOf(store.loadNavigationOrder()) }
     var dashboardOrder by remember { mutableStateOf(store.loadDashboardOrder()) }
+    var showPeriodDetails by rememberUiExpanded(context, "overview_period_details", true)
     var showDashboardArrangeDialog by remember { mutableStateOf(false) }
+    var firstPeriodStartDay by remember { mutableIntStateOf(store.loadFirstPeriodStartDay()) }
+    var firstPeriodEndDay by remember { mutableIntStateOf(store.loadFirstPeriodEndDay()) }
+    var showIncomeEntries by rememberUiExpanded(context, "income_entries", true)
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
     var showPeriodCategories by rememberUiExpanded(context, "period_categories")
     var showYearCategories by rememberUiExpanded(context, "year_categories")
@@ -578,10 +607,16 @@ private fun ThunBudgetApp() {
     var showHistoryFilters by rememberUiExpanded(context, "history_filters")
     var quickActionsExpanded by rememberUiExpanded(context, "quick_actions_panel", true)
     val today = LocalDate.now()
-    val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
-    var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
-    var periodStart by remember { mutableStateOf(store.loadPeriodStart() ?: (if (today.dayOfMonth <= 8 || today.dayOfMonth >= 24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
-    var periodEnd by remember { mutableStateOf(store.loadPeriodEnd() ?: (if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
+    val baseMonth = YearMonth.from(if (today.dayOfMonth < firstPeriodStartDay) today.minusMonths(1) else today)
+    val firstPeriodStart = baseMonth.atDay(firstPeriodStartDay.coerceAtMost(baseMonth.lengthOfMonth()))
+    val firstPeriodEnd = baseMonth.atDay(firstPeriodEndDay.coerceAtMost(baseMonth.lengthOfMonth()))
+    val secondPeriodStart = firstPeriodEnd.plusDays(1)
+    val nextFirstMonth = baseMonth.plusMonths(1)
+    val secondPeriodEnd = nextFirstMonth.atDay(firstPeriodStartDay.coerceAtMost(nextFirstMonth.lengthOfMonth())).minusDays(1)
+    val isSecondPeriodToday = today.dayOfMonth < firstPeriodStartDay || today.dayOfMonth > firstPeriodEndDay
+    var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (isSecondPeriodToday) 1 else 0) }
+    var periodStart by remember { mutableStateOf(store.loadPeriodStart() ?: (if (isSecondPeriodToday) (if(today.dayOfMonth < firstPeriodStartDay) baseMonth.atDay(firstPeriodEndDay.coerceAtMost(baseMonth.lengthOfMonth())).plusDays(1) else secondPeriodStart) else firstPeriodStart).toString()) }
+    var periodEnd by remember { mutableStateOf(store.loadPeriodEnd() ?: (if (isSecondPeriodToday) secondPeriodEnd else firstPeriodEnd).toString()) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var addFromCategory by remember { mutableStateOf<String?>(null) }
@@ -781,8 +816,7 @@ private fun ThunBudgetApp() {
                             if (actual > cap) "${category.name}: превышение ${money(actual - cap)}" else null
                         }
                         voiceMessage = if (exceeded.isEmpty()) "За период $dateLabel превышений бюджета по категориям нет."
-                            else "Превышения бюджета за период $dateLabel:\n" + exceeded.joinToString("\n")
-                    }
+                            else "Превышения бюджета за период $dateLabel:\n" + exceeded.joinToString("\n")                    }
                     AssistantIntent.FORECAST -> {
                         val daily = command.amount ?: 0.0
                         val endDate = LocalDate.parse(to)
@@ -1004,6 +1038,9 @@ private fun ThunBudgetApp() {
                 actions={ Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(0.dp)) {
                     val actionTextStyle = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelLarge
                     val actionPadding = if (compactLayout) 6.dp else 10.dp
+                    TextButton(onClick={darkTheme = !darkTheme; store.saveDarkTheme(darkTheme)},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
+                        Text(if (darkTheme) "☀" else "☾", style=actionTextStyle, maxLines=1)
+                    }
                     TextButton(onClick={showAssistantDialog=true},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
                         Text("Помощник",style=actionTextStyle,maxLines=1,softWrap=false)
                     }
@@ -1090,25 +1127,6 @@ private fun ThunBudgetApp() {
                             }
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(end = 12.dp, top = 2.dp, bottom = 2.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { darkTheme = !darkTheme; store.saveDarkTheme(darkTheme) },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                if (darkTheme) "☀ Светлая тема" else "☾ Тёмная тема",
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
                     // Keep NavigationBar last so its system navigation insets are at the
                     // bottom edge. The theme switch above it must not draw under system buttons.
                     NavigationBar(
@@ -1116,69 +1134,72 @@ private fun ThunBudgetApp() {
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         tonalElevation = 8.dp
                     ) {
-                        NavigationBarItem(
-                            selected = tab == 0,
-                            onClick = { tab = 0 },
-                            icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Обзор", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
+                        val navItems = listOf(
+                            Triple(0, "⌂", "Обзор"),
+                            Triple(1, "◒", "Анализ"),
+                            Triple(2, "▥", "Графики"),
+                            Triple(3, "▤", "За год"),
+                            Triple(4, "≡", "История"),
+                            Triple(5, "▣", "Платежи")
                         )
-                        NavigationBarItem(
-                            selected = tab == 1,
-                            onClick = { tab = 1 },
-                            icon = { Text("◒", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Анализ", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 2,
-                            onClick = { tab = 2 },
-                            icon = { Text("▥", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Графики", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 3,
-                            onClick = { tab = 3 },
-                            icon = { Text("▤", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("За год", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 4,
-                            onClick = { tab = 4 },
-                            icon = { Text("≡", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("История", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
-                        NavigationBarItem(
-                            selected = tab == 5,
-                            onClick = { tab = 5 },
-                            icon = { Text("▣", style = MaterialTheme.typography.titleLarge) },
-                            label = { Text("Платежи", style = navLabelStyle, maxLines = 1, softWrap = false) },
-                            alwaysShowLabel = true
-                        )
+                        navigationOrder.forEach { destination ->
+                            val item = navItems.first { it.first == destination }
+                            NavigationBarItem(
+                                modifier = Modifier.pointerInput(destination, navigationOrder) {
+                                    var dragDistance = 0f
+                                    val threshold = size.width * 0.45f
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { dragDistance = 0f },
+                                        onDragEnd = { },
+                                        onDragCancel = { },
+                                        onDrag = { change, dragAmount ->
+                                            dragDistance += dragAmount.x
+                                            if (kotlin.math.abs(dragDistance) >= threshold) {
+                                                val currentIndex = navigationOrder.indexOf(destination)
+                                                val direction = if (dragDistance < 0f) -1 else 1
+                                                val targetIndex = (currentIndex + direction).coerceIn(0, navigationOrder.lastIndex)
+                                                if (targetIndex != currentIndex) {
+                                                    val reordered = navigationOrder.toMutableList()
+                                                    val moved = reordered.removeAt(currentIndex)
+                                                    reordered.add(targetIndex, moved)
+                                                    navigationOrder = reordered
+                                                    store.saveNavigationOrder(reordered)
+                                                }
+                                                dragDistance = 0f
+                                            }
+                                            change.consume()
+                                        }
+                                    )
+                                },
+                                selected = tab == destination,
+                                onClick = { tab = destination },
+                                icon = { Text(item.second, style = MaterialTheme.typography.titleLarge) },
+                                label = { Text(item.third, style = navLabelStyle, maxLines = 1, softWrap = false) },
+                                alwaysShowLabel = true
+                            )
+                        }
                     }
                 }
             }
         ) { padding ->
             when(tab) {
                 0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=if(compactLayout) 24.dp else 96.dp)) {
-                    item {
-                        Row(verticalAlignment=Alignment.CenterVertically) {
-                            Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                            TextButton(onClick={showDashboardArrangeDialog=true}) { Text("Настроить окна") }
-                        }
-                    }
+                    item { Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     items(dashboardOrder,key={it}) { section ->
                         when(section) {
                             "period" -> Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                                    SegmentedButton(selected=selectedPeriod==0,onClick={selectedPeriod=0;periodStart=baseMonth.withDayOfMonth(9).toString();periodEnd=baseMonth.withDayOfMonth(23).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
-                                    SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=baseMonth.withDayOfMonth(24).toString();periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                                TextButton(
+                                    onClick = { showPeriodDetails = !showPeriodDetails; persistUiExpanded(context, "overview_period_details", showPeriodDetails) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text(if (showPeriodDetails) "Отчётный период ▲" else "Отчётный период ▼") }
+                                if (showPeriodDetails) {
+                                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                        SegmentedButton(selected=selectedPeriod==0,onClick={selectedPeriod=0;periodStart=firstPeriodStart.toString();periodEnd=firstPeriodEnd.toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("$firstPeriodStartDay–$firstPeriodEndDay") }
+                                        SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=secondPeriodStart.toString();periodEnd=secondPeriodEnd.toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("${secondPeriodStart.dayOfMonth}–${secondPeriodEnd.dayOfMonth}") }
+                                    }
+                                    TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
+                                    Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
-                                Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             "budget" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                 Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.primary),shape=RoundedCornerShape(26.dp)) {
@@ -1197,17 +1218,24 @@ private fun ThunBudgetApp() {
                             }
                             "income" -> Card(shape=RoundedCornerShape(16.dp)) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                    Text("Операции дохода за период",fontWeight=FontWeight.SemiBold)
-                                    val visibleIncomeEntries=incomeEntries.filter{it.periodStart==periodStart&&it.periodEnd==periodEnd}.sortedByDescending{it.date}
-                                    if(visibleIncomeEntries.isEmpty()) Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                    else visibleIncomeEntries.forEach { entry ->
-                                        Row(verticalAlignment=Alignment.CenterVertically) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(entry.title,fontWeight=FontWeight.Medium)
-                                                Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(verticalAlignment=Alignment.CenterVertically) {
+                                        Text("Операции дохода за период",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                        TextButton(onClick={showIncomeEntries=!showIncomeEntries;persistUiExpanded(context,"income_entries",showIncomeEntries)}) {
+                                            Text(if(showIncomeEntries) "Скрыть ▲" else "Показать ▼")
+                                        }
+                                    }
+                                    if(showIncomeEntries) {
+                                        val visibleIncomeEntries=incomeEntries.filter{it.periodStart==periodStart&&it.periodEnd==periodEnd}.sortedByDescending{it.date}
+                                        if(visibleIncomeEntries.isEmpty()) Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                        else visibleIncomeEntries.forEach { entry ->
+                                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(entry.title,fontWeight=FontWeight.Medium)
+                                                    Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
+                                                TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
                                             }
-                                            Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
-                                            TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
                                         }
                                     }
                                 }
@@ -1579,8 +1607,7 @@ private fun ThunBudgetApp() {
                 if (draft.isCategoryRename) {
                     Text("Категория: «${draft.category}» → «${draft.title}»",fontWeight=FontWeight.Bold)
                 } else if (draft.isCategoryAdd || draft.isCategoryEdit) {
-                    Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)
-                } else {
+                    Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)                } else {
                     Text("Распознано: ${draft.sourcePhrase}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     if (draft.isEdit) {
                         val candidates = voiceEditCandidates
@@ -1873,7 +1900,6 @@ private fun ThunBudgetApp() {
         val cat=categories.firstOrNull { it.name==categoryName }
         var categorySort by remember(categoryName) { mutableStateOf("Дата") }
         var categoryAscending by remember(categoryName) { mutableStateOf(false) }
-        var expandedExpenseId by remember(categoryName) { mutableStateOf<Long?>(null) }
         val rawPeriod=expenses.filter { it.category==categoryName && it.date>=periodStart && it.date<=periodEnd }
         val inPeriod=when(categorySort) {
             "Название" -> if(categoryAscending) rawPeriod.sortedBy { it.title.lowercase() } else rawPeriod.sortedByDescending { it.title.lowercase() }
@@ -1896,18 +1922,16 @@ private fun ThunBudgetApp() {
                 if(inPeriod.isEmpty()) Text("За этот период операций пока нет.")
                 else LazyColumn(Modifier.heightIn(max=280.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     items(inPeriod,key={it.id}) { expense ->
-                        Card(onClick={expandedExpenseId=if(expandedExpenseId==expense.id) null else expense.id}) {
+                        Card(onClick={selectedExpense=expense;selectedCategory=null}) {
                             Column(Modifier.fillMaxWidth().padding(10.dp)) {
                                 Row(verticalAlignment=Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) { Text(expense.title,fontWeight=FontWeight.Medium); Text(expense.date,style=MaterialTheme.typography.bodySmall) }
+                                    Column(Modifier.weight(1f)) {
+                                        Text(expense.title,fontWeight=FontWeight.Medium)
+                                        Text(expense.date,style=MaterialTheme.typography.bodySmall)
+                                    }
                                     Text("−${money(expense.amount)}",fontWeight=FontWeight.SemiBold)
                                 }
-                                if(expandedExpenseId==expense.id) {
-                                    Divider(Modifier.padding(vertical=6.dp))
-                                    Text("Категория: ${expense.category}",style=MaterialTheme.typography.bodySmall)
-                                    Text("Дата: ${expense.date}",style=MaterialTheme.typography.bodySmall)
-                                    TextButton(onClick={selectedExpense=expense;selectedCategory=null}) { Text("Изменить операцию") }
-                                }
+                                Text("Нажми, чтобы изменить или удалить",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -1952,7 +1976,7 @@ private fun ThunBudgetApp() {
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
-    },onDismiss={showSettings=false},onRestoreAutomatic={
+    },onDismiss={showSettings=false},onArrangeDashboard={showSettings=false;showDashboardArrangeDialog=true},firstPeriodStartDay=firstPeriodStartDay,firstPeriodEndDay=firstPeriodEndDay,onSaveReportingDays={startDay,endDay->firstPeriodStartDay=startDay;firstPeriodEndDay=endDay;store.saveReportingPeriodDays(startDay,endDay);showSettings=false},onRestoreAutomatic={
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
@@ -1979,8 +2003,7 @@ private fun ThunBudgetApp() {
             store.saveExpenses(expenses)
         }
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; store.savePeriod(start,end)
-        store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
-    })
+        store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false    })
     if(showResetConfirmation) AlertDialog(
         onDismissRequest={showResetConfirmation=false},
         title={Text("Полностью сбросить данные?")},
@@ -1996,8 +2019,8 @@ private fun ThunBudgetApp() {
                     expenses=store.loadExpenses()
                     periodIncomes=store.loadPeriodIncomes()
                     incomeEntries=store.loadIncomeEntries()
-                    periodStart=store.loadPeriodStart() ?: (if(today.dayOfMonth<=8 || today.dayOfMonth>=24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()
-                    periodEnd=store.loadPeriodEnd() ?: (if(today.dayOfMonth<=8) today.withDayOfMonth(8) else if(today.dayOfMonth>=24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()
+                    periodStart=store.loadPeriodStart() ?: (if(today.dayOfMonth<=8 || today.dayOfMonth>=24) baseMonth.atDay(24) else baseMonth.atDay(9)).toString()
+                    periodEnd=store.loadPeriodEnd() ?: (if(today.dayOfMonth<=8) today.withDayOfMonth(8) else if(today.dayOfMonth>=24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.atDay(23)).toString()
                     selectedPeriod=if(today.dayOfMonth>=24 || today.dayOfMonth<=8) 1 else 0
                     selectedExpense=null
                     selectedCategory=null
@@ -2379,8 +2402,7 @@ private fun ChartsScreen(
                                 val strokeWidth=size.minDimension*0.22f
                                 val inset=strokeWidth/2f
                                 val arcSize=androidx.compose.ui.geometry.Size(size.width-strokeWidth,size.height-strokeWidth)
-                                values.forEachIndexed { index,pair ->
-                                    val sweep=pair.second.toFloat()/sum*360f
+                                values.forEachIndexed { index,pair ->                                    val sweep=pair.second.toFloat()/sum*360f
                                     drawArc(color=palette[index%palette.size],startAngle=angle,sweepAngle=sweep,useCenter=false,topLeft=androidx.compose.ui.geometry.Offset(inset,inset),size=arcSize,style=Stroke(width=strokeWidth))
                                     angle+=sweep
                                 }
@@ -2607,7 +2629,8 @@ private fun SettingsDialog(
     externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,
     onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,onImportExcel:()->Unit,
     onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,
-    onRestorePrevious:()->Unit,
+    onRestorePrevious:()->Unit,onArrangeDashboard:()->Unit,
+    firstPeriodStartDay:Int,firstPeriodEndDay:Int,onSaveReportingDays:(Int,Int)->Unit,
     onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit
 ) {
     var inc by remember { mutableStateOf(income.toString()) }
@@ -2620,6 +2643,8 @@ private fun SettingsDialog(
     val sections = listOf(
         "income" to "Доход",
         "period" to "Период",
+        "reporting" to "Отчётные окна",
+        "overview" to "Обзор",
         "categories" to "Категории",
         "export" to "Excel",
         "backup" to "Копирование",
@@ -2655,6 +2680,12 @@ private fun SettingsDialog(
                         OutlinedTextField(from,{from=it.filter(Char::isDigit).take(8)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
                         OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
                         if(!validDates) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
+                    }
+                    "reporting" -> ReportingPeriodSettingsSection(startDay=firstPeriodStartDay,endDay=firstPeriodEndDay,onSave=onSaveReportingDays)
+                    "overview" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Настройка главного экрана",fontWeight=FontWeight.Bold)
+                        Text("Измени порядок информационных блоков на вкладке «Обзор».",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick=onArrangeDashboard,modifier=Modifier.fillMaxWidth()) { Text("Настроить окна обзора") }
                     }
                     "categories" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=440.dp)) {
                         item { Text("Категории бюджета",fontWeight=FontWeight.Bold) }
@@ -2723,6 +2754,47 @@ private fun SettingsDialog(
 }
 
 @Composable
+private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (Int, Int) -> Unit) {
+    var startText by remember(startDay) { mutableStateOf(startDay.toString()) }
+    var endText by remember(endDay) { mutableStateOf(endDay.toString()) }
+    var showConfirmation by remember { mutableStateOf(false) }
+    val start = startText.toIntOrNull()
+    val end = endText.toIntOrNull()
+    val valid = start != null && end != null && start in 1..31 && end in start..31
+    val preview = if (valid) runCatching { ReportingPeriodCalculator.propose(YearMonth.now(), start!!, end!!) }.getOrNull() else null
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Первое отчётное окно", fontWeight = FontWeight.Bold)
+        OutlinedTextField(value=startText,onValueChange={startText=it.filter(Char::isDigit).take(2)},label={Text("Начало первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(value=endText,onValueChange={endText=it.filter(Char::isDigit).take(2)},label={Text("Окончание первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
+        if (preview != null) {
+            Text("Предлагаемое второе окно: ${preview.second.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.second.end.format(DateTimeFormatter.ofPattern("dd.MM"))}.")
+            Text("Расчёт учитывает фактическое число дней месяца, включая февраль и високосный год.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        } else Text("Укажи корректные дни: окончание не может быть раньше начала.",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+        Button(onClick={if(valid) showConfirmation=true},enabled=valid,modifier=Modifier.fillMaxWidth()) { Text("Проверить второе окно") }
+    }
+    if (showConfirmation && preview != null && start != null && end != null) {
+        AlertDialog(
+            onDismissRequest={showConfirmation=false},
+            title={Text("Подтвердить отчётные окна")},
+            text={
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Первое окно: ${preview.first.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.first.end.format(DateTimeFormatter.ofPattern("dd.MM"))}")
+                    Text("Второе окно: ${preview.second.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.second.end.format(DateTimeFormatter.ofPattern("dd.MM"))}")
+                    Text("Второе окно автоматически заполнит оставшиеся календарные дни до следующего первого окна.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton={TextButton(onClick={showConfirmation=false;onSave(start,end)}){Text("Подтвердить")}},
+            dismissButton={
+                Row {
+                    TextButton(onClick={showConfirmation=false}){Text("Изменить период")}
+                    TextButton(onClick={startText=startDay.toString();endText=endDay.toString();showConfirmation=false}){Text("Отменить действие")}
+                }
+            }
+        )
+    }
+}
+
+@Composable
 private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave:(String,String)->Unit) {
     var from by remember(start) { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     var to by remember(end) { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
@@ -2750,8 +2822,7 @@ private fun CategoryManagerDialog(categories:List<BudgetCategory>,onDismiss:()->
                 Row(verticalAlignment=Alignment.CenterVertically) {
                     Text(cat.name,modifier=Modifier.weight(1f))
                     IconButton(onClick={onEdit(cat)}) { Text("✎") }
-                    IconButton(onClick={onDelete(cat)}) { Text("×",color=Color(0xFFC74444)) }
-                }
+                    IconButton(onClick={onDelete(cat)}) { Text("×",color=Color(0xFFC74444)) }                }
             }
             Divider()
             Text("Добавить категорию",fontWeight=FontWeight.SemiBold)
