@@ -154,11 +154,11 @@ internal class BudgetStore(context: Context) {
     fun loadPeriodStart() = prefs.getString("period_start", null)
     fun loadPeriodEnd() = prefs.getString("period_end", null)
     fun savePeriod(start:String,end:String) { prefs.edit().putString("period_start",start).putString("period_end",end).commit(); saveAutomaticBackup() }
-    fun loadFirstPeriodStartDay(): Int = prefs.getInt("reporting_first_start_day", 9).coerceIn(1, 31)
-    fun loadFirstPeriodEndDay(): Int = prefs.getInt("reporting_first_end_day", 23).coerceIn(1, 31)
+    fun loadFirstPeriodStartDay(): Int = (prefs.getString("reporting_first_start_day", "9")?.toIntOrNull() ?: 9).coerceIn(1, 31)
+    fun loadFirstPeriodEndDay(): Int = (prefs.getString("reporting_first_end_day", "23")?.toIntOrNull() ?: 23).coerceIn(1, 31)
     fun saveReportingPeriodDays(startDay: Int, endDay: Int) {
         require(startDay in 1..31 && endDay in startDay..31)
-        check(prefs.edit().putInt("reporting_first_start_day", startDay).putInt("reporting_first_end_day", endDay).commit())
+        check(prefs.edit().putString("reporting_first_start_day", startDay.toString()).putString("reporting_first_end_day", endDay.toString()).commit())
         saveAutomaticBackup()
     }
     fun loadCategories(): List<BudgetCategory> {
