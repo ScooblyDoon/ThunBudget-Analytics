@@ -397,8 +397,7 @@ internal class BudgetStore(context: Context) {
         val categoryNames = mutableSetOf<String>()
         var categoryPercentTotal = 0.0
         for (i in 0 until categories.length()) {
-            val row = categories.getJSONObject(i)
-            require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
+            val row = categories.getJSONObject(i)            require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
             val percent = row.getDouble("percent")
             require(percent.isFinite() && percent >= 0.0)
             categoryPercentTotal += percent
@@ -797,8 +796,7 @@ private fun ThunBudgetApp() {
                             if (actual > cap) "${category.name}: превышение ${money(actual - cap)}" else null
                         }
                         voiceMessage = if (exceeded.isEmpty()) "За период $dateLabel превышений бюджета по категориям нет."
-                            else "Превышения бюджета за период $dateLabel:\n" + exceeded.joinToString("\n")
-                    }
+                            else "Превышения бюджета за период $dateLabel:\n" + exceeded.joinToString("\n")                    }
                     AssistantIntent.FORECAST -> {
                         val daily = command.amount ?: 0.0
                         val endDate = LocalDate.parse(to)
@@ -1197,8 +1195,7 @@ private fun ThunBudgetApp() {
                                         Text("Доступно в бюджете",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
                                         Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onPrimary)
                                         Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=MaterialTheme.colorScheme.onPrimary)
-                                        val periodEndDate=LocalDate.parse(periodEnd)
-                                        val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
+                                        val periodEndDate=LocalDate.parse(periodEnd)                                        val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
                                         val averageRemainingPerDay=if(remainingDays>0) remaining.coerceAtLeast(0.0)/remainingDays else 0.0
                                         Text("Средний остаток на день: ${money(averageRemainingPerDay)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.92f),style=MaterialTheme.typography.bodyMedium)
                                         LinearProgressIndicator(progress={if(planned>0)(totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(top=4.dp),color=MaterialTheme.colorScheme.onPrimary,trackColor=MaterialTheme.colorScheme.onPrimary.copy(alpha=.22f))
@@ -1597,8 +1594,7 @@ private fun ThunBudgetApp() {
                 if (draft.isCategoryRename) {
                     Text("Категория: «${draft.category}» → «${draft.title}»",fontWeight=FontWeight.Bold)
                 } else if (draft.isCategoryAdd || draft.isCategoryEdit) {
-                    Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)
-                } else {
+                    Text("${draft.category}: ${draft.amount.toInt()}%",fontWeight=FontWeight.Bold)                } else {
                     Text("Распознано: ${draft.sourcePhrase}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     if (draft.isEdit) {
                         val candidates = voiceEditCandidates
@@ -1997,8 +1993,7 @@ private fun ThunBudgetApp() {
             store.saveExpenses(expenses)
         }
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; store.savePeriod(start,end)
-        store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false
-    })
+        store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false    })
     if(showResetConfirmation) AlertDialog(
         onDismissRequest={showResetConfirmation=false},
         title={Text("Полностью сбросить данные?")},
@@ -2014,8 +2009,8 @@ private fun ThunBudgetApp() {
                     expenses=store.loadExpenses()
                     periodIncomes=store.loadPeriodIncomes()
                     incomeEntries=store.loadIncomeEntries()
-                    periodStart=store.loadPeriodStart() ?: (if(today.dayOfMonth<=8 || today.dayOfMonth>=24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()
-                    periodEnd=store.loadPeriodEnd() ?: (if(today.dayOfMonth<=8) today.withDayOfMonth(8) else if(today.dayOfMonth>=24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()
+                    periodStart=store.loadPeriodStart() ?: (if(today.dayOfMonth<=8 || today.dayOfMonth>=24) baseMonth.atDay(24) else baseMonth.atDay(9)).toString()
+                    periodEnd=store.loadPeriodEnd() ?: (if(today.dayOfMonth<=8) today.withDayOfMonth(8) else if(today.dayOfMonth>=24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.atDay(23)).toString()
                     selectedPeriod=if(today.dayOfMonth>=24 || today.dayOfMonth<=8) 1 else 0
                     selectedExpense=null
                     selectedCategory=null
@@ -2397,8 +2392,7 @@ private fun ChartsScreen(
                                 val strokeWidth=size.minDimension*0.22f
                                 val inset=strokeWidth/2f
                                 val arcSize=androidx.compose.ui.geometry.Size(size.width-strokeWidth,size.height-strokeWidth)
-                                values.forEachIndexed { index,pair ->
-                                    val sweep=pair.second.toFloat()/sum*360f
+                                values.forEachIndexed { index,pair ->                                    val sweep=pair.second.toFloat()/sum*360f
                                     drawArc(color=palette[index%palette.size],startAngle=angle,sweepAngle=sweep,useCenter=false,topLeft=androidx.compose.ui.geometry.Offset(inset,inset),size=arcSize,style=Stroke(width=strokeWidth))
                                     angle+=sweep
                                 }
@@ -2797,8 +2791,7 @@ private fun CategoryManagerDialog(categories:List<BudgetCategory>,onDismiss:()->
                 Row(verticalAlignment=Alignment.CenterVertically) {
                     Text(cat.name,modifier=Modifier.weight(1f))
                     IconButton(onClick={onEdit(cat)}) { Text("✎") }
-                    IconButton(onClick={onDelete(cat)}) { Text("×",color=Color(0xFFC74444)) }
-                }
+                    IconButton(onClick={onDelete(cat)}) { Text("×",color=Color(0xFFC74444)) }                }
             }
             Divider()
             Text("Добавить категорию",fontWeight=FontWeight.SemiBold)
