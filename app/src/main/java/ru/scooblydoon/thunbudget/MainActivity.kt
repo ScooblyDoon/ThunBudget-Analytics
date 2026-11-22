@@ -154,6 +154,13 @@ internal class BudgetStore(context: Context) {
     fun loadPeriodStart() = prefs.getString("period_start", null)
     fun loadPeriodEnd() = prefs.getString("period_end", null)
     fun savePeriod(start:String,end:String) { prefs.edit().putString("period_start",start).putString("period_end",end).commit(); saveAutomaticBackup() }
+    fun loadFirstPeriodStartDay(): Int = prefs.getInt("reporting_first_start_day", 9).coerceIn(1, 31)
+    fun loadFirstPeriodEndDay(): Int = prefs.getInt("reporting_first_end_day", 23).coerceIn(1, 31)
+    fun saveReportingPeriodDays(startDay: Int, endDay: Int) {
+        require(startDay in 1..31 && endDay in startDay..31)
+        check(prefs.edit().putInt("reporting_first_start_day", startDay).putInt("reporting_first_end_day", endDay).commit())
+        saveAutomaticBackup()
+    }
     fun loadCategories(): List<BudgetCategory> {
         val raw = prefs.getString("categories", null) ?: return listOf(
             BudgetCategory("Продукты", 25.0), BudgetCategory("Транспорт", 10.0),
@@ -565,6 +572,8 @@ private fun ThunBudgetApp() {
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
     var dashboardOrder by remember { mutableStateOf(store.loadDashboardOrder()) }
     var showDashboardArrangeDialog by remember { mutableStateOf(false) }
+    var firstPeriodStartDay by remember { mutableIntStateOf(store.loadFirstPeriodStartDay()) }
+    var firstPeriodEndDay by remember { mutableIntStateOf(store.loadFirstPeriodEndDay()) }
     var showIncomeEntries by rememberUiExpanded(context, "income_entries", true)
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
     var showPeriodCategories by rememberUiExpanded(context, "period_categories")
@@ -579,10 +588,16 @@ private fun ThunBudgetApp() {
     var showHistoryFilters by rememberUiExpanded(context, "history_filters")
     var quickActionsExpanded by rememberUiExpanded(context, "quick_actions_panel", true)
     val today = LocalDate.now()
-    val baseMonth = if (today.dayOfMonth <= 8) today.minusMonths(1) else today
-    var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
-    var periodStart by remember { mutableStateOf(store.loadPeriodStart() ?: (if (today.dayOfMonth <= 8 || today.dayOfMonth >= 24) baseMonth.withDayOfMonth(24) else baseMonth.withDayOfMonth(9)).toString()) }
-    var periodEnd by remember { mutableStateOf(store.loadPeriodEnd() ?: (if (today.dayOfMonth <= 8) today.withDayOfMonth(8) else if (today.dayOfMonth >= 24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.withDayOfMonth(23)).toString()) }
+    val baseMonth = if (today.dayOfMonth < firstPeriodStartDay) today.minusMonths(1) else today
+    val firstPeriodStart = baseMonth.atDay(firstPeriodStartDay.coerceAtMost(baseMonth.lengthOfMonth()))
+    val firstPeriodEnd = baseMonth.atDay(firstPeriodEndDay.coerceAtMost(baseMonth.lengthOfMonth()))
+    val secondPeriodStart = firstPeriodEnd.plusDays(1)
+    val nextFirstMonth = baseMonth.plusMonths(1)
+    val secondPeriodEnd = nextFirstMonth.atDay(firstPeriodStartDay.coerceAtMost(nextFirstMonth.lengthOfMonth())).minusDays(1)
+    val isSecondPeriodToday = today.dayOfMonth < firstPeriodStartDay || today.dayOfMonth > firstPeriodEndDay
+    var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (isSecondPeriodToday) 1 else 0) }
+    var periodStart by remember { mutableStateOf(store.loadPeriodStart() ?: (if (isSecondPeriodToday) (if(today.dayOfMonth < firstPeriodStartDay) baseMonth.atDay(firstPeriodEndDay.coerceAtMost(baseMonth.lengthOfMonth())).plusDays(1) else secondPeriodStart) else firstPeriodStart).toString()) }
+    var periodEnd by remember { mutableStateOf(store.loadPeriodEnd() ?: (if (isSecondPeriodToday) (if(today.dayOfMonth < firstPeriodStartDay) baseMonth.atDay(firstPeriodStartDay.coerceAtMost(baseMonth.lengthOfMonth())).minusDays(1) else secondPeriodEnd) else firstPeriodEnd).toString()) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var addFromCategory by remember { mutableStateOf<String?>(null) }
@@ -1170,8 +1185,8 @@ private fun ThunBudgetApp() {
                         when(section) {
                             "period" -> Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
                                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                                    SegmentedButton(selected=selectedPeriod==0,onClick={selectedPeriod=0;periodStart=baseMonth.withDayOfMonth(9).toString();periodEnd=baseMonth.withDayOfMonth(23).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("9–23 число") }
-                                    SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=baseMonth.withDayOfMonth(24).toString();periodEnd=baseMonth.plusMonths(1).withDayOfMonth(8).toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("24–8 число") }
+                                    SegmentedButton(selected=selectedPeriod==0,onClick={selectedPeriod=0;periodStart=firstPeriodStart.toString();periodEnd=firstPeriodEnd.toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("$firstPeriodStartDay–$firstPeriodEndDay") }
+                                    SegmentedButton(selected=selectedPeriod==1,onClick={selectedPeriod=1;periodStart=secondPeriodStart.toString();periodEnd=secondPeriodEnd.toString();store.savePeriod(periodStart,periodEnd)},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("${firstPeriodEndDay + 1}–${firstPeriodStartDay - 1}*") }
                                 }
                                 TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                                 Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1955,7 +1970,7 @@ private fun ThunBudgetApp() {
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
-    },onDismiss={showSettings=false},onArrangeDashboard={showSettings=false;showDashboardArrangeDialog=true},onRestoreAutomatic={
+    },onDismiss={showSettings=false},onArrangeDashboard={showSettings=false;showDashboardArrangeDialog=true},firstPeriodStartDay=firstPeriodStartDay,firstPeriodEndDay=firstPeriodEndDay,onSaveReportingDays={startDay,endDay->firstPeriodStartDay=startDay;firstPeriodEndDay=endDay;store.saveReportingPeriodDays(startDay,endDay);showSettings=false},onRestoreAutomatic={
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
@@ -2611,6 +2626,7 @@ private fun SettingsDialog(
     onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,onImportExcel:()->Unit,
     onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,
     onRestorePrevious:()->Unit,onArrangeDashboard:()->Unit,
+    firstPeriodStartDay:Int,firstPeriodEndDay:Int,onSaveReportingDays:(Int,Int)->Unit,
     onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit
 ) {
     var inc by remember { mutableStateOf(income.toString()) }
@@ -2623,6 +2639,7 @@ private fun SettingsDialog(
     val sections = listOf(
         "income" to "Доход",
         "period" to "Период",
+        "reporting" to "Отчётные окна",
         "overview" to "Обзор",
         "categories" to "Категории",
         "export" to "Excel",
@@ -2660,6 +2677,7 @@ private fun SettingsDialog(
                         OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
                         if(!validDates) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
                     }
+                    "reporting" -> ReportingPeriodSettingsSection(startDay=firstPeriodStartDay,endDay=firstPeriodEndDay,onSave=onSaveReportingDays)
                     "overview" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Настройка главного экрана",fontWeight=FontWeight.Bold)
                         Text("Измени порядок информационных блоков на вкладке «Обзор».",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2729,6 +2747,26 @@ private fun SettingsDialog(
         },
         dismissButton={TextButton(onClick=onDismiss){Text("Закрыть")}}
     )
+}
+
+@Composable
+private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (Int, Int) -> Unit) {
+    var startText by remember(startDay) { mutableStateOf(startDay.toString()) }
+    var endText by remember(endDay) { mutableStateOf(endDay.toString()) }
+    val start = startText.toIntOrNull()
+    val end = endText.toIntOrNull()
+    val valid = start != null && end != null && start in 1..31 && end in start..31
+    val preview = if (valid) runCatching { ReportingPeriodCalculator.propose(YearMonth.now(), start!!, end!!) }.getOrNull() else null
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Первое отчётное окно", fontWeight = FontWeight.Bold)
+        OutlinedTextField(value=startText,onValueChange={startText=it.filter(Char::isDigit).take(2)},label={Text("Начало первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(value=endText,onValueChange={endText=it.filter(Char::isDigit).take(2)},label={Text("Окончание первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
+        if (preview != null) {
+            Text("Предлагаемое второе окно: ${preview.second.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.second.end.format(DateTimeFormatter.ofPattern("dd.MM"))}.")
+            Text("Даты учитывают длину месяца, включая февраль и високосный год. Подтверждение сохранит оба окна.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        } else Text("Укажи корректные дни: окончание не может быть раньше начала.",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+        Button(onClick={if(valid) onSave(start!!,end!!)},enabled=valid,modifier=Modifier.fillMaxWidth()) { Text("Подтвердить настройки окон") }
+    }
 }
 
 @Composable
