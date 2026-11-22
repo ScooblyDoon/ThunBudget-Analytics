@@ -397,7 +397,8 @@ internal class BudgetStore(context: Context) {
         val categoryNames = mutableSetOf<String>()
         var categoryPercentTotal = 0.0
         for (i in 0 until categories.length()) {
-            val row = categories.getJSONObject(i)            require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
+            val row = categories.getJSONObject(i)
+            require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
             val percent = row.getDouble("percent")
             require(percent.isFinite() && percent >= 0.0)
             categoryPercentTotal += percent
@@ -1195,7 +1196,8 @@ private fun ThunBudgetApp() {
                                         Text("Доступно в бюджете",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
                                         Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onPrimary)
                                         Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=MaterialTheme.colorScheme.onPrimary)
-                                        val periodEndDate=LocalDate.parse(periodEnd)                                        val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
+                                        val periodEndDate=LocalDate.parse(periodEnd)
+                                        val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
                                         val averageRemainingPerDay=if(remainingDays>0) remaining.coerceAtLeast(0.0)/remainingDays else 0.0
                                         Text("Средний остаток на день: ${money(averageRemainingPerDay)}",color=MaterialTheme.colorScheme.onPrimary.copy(alpha=.92f),style=MaterialTheme.typography.bodyMedium)
                                         LinearProgressIndicator(progress={if(planned>0)(totalSpent/planned).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(top=4.dp),color=MaterialTheme.colorScheme.onPrimary,trackColor=MaterialTheme.colorScheme.onPrimary.copy(alpha=.22f))
