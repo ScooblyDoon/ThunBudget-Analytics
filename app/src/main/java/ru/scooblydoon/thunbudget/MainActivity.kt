@@ -565,6 +565,7 @@ private fun ThunBudgetApp() {
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
     var dashboardOrder by remember { mutableStateOf(store.loadDashboardOrder()) }
     var showDashboardArrangeDialog by remember { mutableStateOf(false) }
+    var showIncomeEntries by rememberUiExpanded(context, "income_entries", true)
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
     var showPeriodCategories by rememberUiExpanded(context, "period_categories")
     var showYearCategories by rememberUiExpanded(context, "year_categories")
@@ -1164,12 +1165,7 @@ private fun ThunBudgetApp() {
         ) { padding ->
             when(tab) {
                 0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=if(compactLayout) 24.dp else 96.dp)) {
-                    item {
-                        Row(verticalAlignment=Alignment.CenterVertically) {
-                            Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                            TextButton(onClick={showDashboardArrangeDialog=true}) { Text("Настроить окна") }
-                        }
-                    }
+                    item { Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     items(dashboardOrder,key={it}) { section ->
                         when(section) {
                             "period" -> Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -1197,17 +1193,24 @@ private fun ThunBudgetApp() {
                             }
                             "income" -> Card(shape=RoundedCornerShape(16.dp)) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                    Text("Операции дохода за период",fontWeight=FontWeight.SemiBold)
-                                    val visibleIncomeEntries=incomeEntries.filter{it.periodStart==periodStart&&it.periodEnd==periodEnd}.sortedByDescending{it.date}
-                                    if(visibleIncomeEntries.isEmpty()) Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                    else visibleIncomeEntries.forEach { entry ->
-                                        Row(verticalAlignment=Alignment.CenterVertically) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(entry.title,fontWeight=FontWeight.Medium)
-                                                Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(verticalAlignment=Alignment.CenterVertically) {
+                                        Text("Операции дохода за период",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
+                                        TextButton(onClick={showIncomeEntries=!showIncomeEntries;persistUiExpanded(context,"income_entries",showIncomeEntries)}) {
+                                            Text(if(showIncomeEntries) "Скрыть ▲" else "Показать ▼")
+                                        }
+                                    }
+                                    if(showIncomeEntries) {
+                                        val visibleIncomeEntries=incomeEntries.filter{it.periodStart==periodStart&&it.periodEnd==periodEnd}.sortedByDescending{it.date}
+                                        if(visibleIncomeEntries.isEmpty()) Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                        else visibleIncomeEntries.forEach { entry ->
+                                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(entry.title,fontWeight=FontWeight.Medium)
+                                                    Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
+                                                TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
                                             }
-                                            Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
-                                            TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
                                         }
                                     }
                                 }
@@ -1952,7 +1955,7 @@ private fun ThunBudgetApp() {
         externalBackupFolder?.let { raw -> runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(raw), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } }
         store.setExternalBackupFolder(null)
         externalBackupFolder=null
-    },onDismiss={showSettings=false},onRestoreAutomatic={
+    },onDismiss={showSettings=false},onArrangeDashboard={showSettings=false;showDashboardArrangeDialog=true},onRestoreAutomatic={
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
@@ -2607,7 +2610,7 @@ private fun SettingsDialog(
     externalBackupFolder:String?,externalBackupLastSuccess:String?,externalBackupLastError:String?,
     onChooseExternalFolder:()->Unit,onClearExternalFolder:()->Unit,onExportExcel:()->Unit,onImportExcel:()->Unit,
     onDismiss:()->Unit,onRestoreAutomatic:()->Unit,onBackup:()->Unit,onRestore:()->Unit,
-    onRestorePrevious:()->Unit,
+    onRestorePrevious:()->Unit,onArrangeDashboard:()->Unit,
     onSave:(Double,Double,List<BudgetCategory>,String,String,Map<String,String>)->Unit
 ) {
     var inc by remember { mutableStateOf(income.toString()) }
@@ -2620,6 +2623,7 @@ private fun SettingsDialog(
     val sections = listOf(
         "income" to "Доход",
         "period" to "Период",
+        "overview" to "Обзор",
         "categories" to "Категории",
         "export" to "Excel",
         "backup" to "Копирование",
@@ -2655,6 +2659,11 @@ private fun SettingsDialog(
                         OutlinedTextField(from,{from=it.filter(Char::isDigit).take(8)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
                         OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
                         if(!validDates) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
+                    }
+                    "overview" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Настройка главного экрана",fontWeight=FontWeight.Bold)
+                        Text("Измени порядок информационных блоков на вкладке «Обзор».",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick=onArrangeDashboard,modifier=Modifier.fillMaxWidth()) { Text("Настроить окна обзора") }
                     }
                     "categories" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=440.dp)) {
                         item { Text("Категории бюджета",fontWeight=FontWeight.Bold) }
