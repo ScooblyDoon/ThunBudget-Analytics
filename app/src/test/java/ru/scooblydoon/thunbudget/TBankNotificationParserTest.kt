@@ -53,11 +53,11 @@ class TBankNotificationParserTest {
         assertNull(event.category)
     }
 
-    @Test fun outgoingTransferIsPersonalExpense() {
-        val event = TBankNotificationParser.parse(input("Перевод на Иван 1 000 ₽"))!!
+    @Test fun outgoingTransferToAnotherPersonIsOtherExpense() {
+        val event = TBankNotificationParser.parse(input("Перевод на 10 ₽, счет RUB...."))!!
         assertEquals(TBankNotificationParser.OperationType.TRANSFER_OUT, event.operationType)
         assertEquals(TBankNotificationParser.Flow.EXPENSE, event.flow)
-        assertEquals("Личные расходы", event.category)
+        assertEquals("Другое", event.category)
     }
 
     @Test fun ownAccountTransferDoesNotAffectIncomeOrExpense() {
