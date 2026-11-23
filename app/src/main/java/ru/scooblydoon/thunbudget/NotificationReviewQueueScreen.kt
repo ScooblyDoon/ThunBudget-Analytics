@@ -88,7 +88,7 @@ fun NotificationReviewQueueScreen(repository: NotificationReviewQueueRepository)
                             modifier = Modifier.weight(1f),
                             fontWeight = FontWeight.SemiBold
                         )
-                        Text(item.status.toDisplayName(), color = MaterialTheme.colorScheme.primary)
+                        Text(item.status.name.toDisplayName(), color = MaterialTheme.colorScheme.primary)
                     }
                     Text(
                         item.effectiveAmountKopecks?.let { formatKopecks(it) + " ₽" } ?: "Сумма не распознана",
