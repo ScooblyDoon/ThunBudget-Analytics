@@ -72,7 +72,7 @@ object TBankNotificationParser {
         val normalized = normalize(raw)
         val amount = parseAmountKopecks(raw)
         val currency = if (Regex("""(?i)(₽|руб(?:\.|лей|ля)?|RUB)""").containsMatchIn(raw)) "RUB" else null
-        val merchant = extractMerchant(raw, normalized)
+        val merchant = extractMerchant(raw, normalized, input.title)
         val type = classify(normalized)
         val reasons = mutableListOf<ReviewReason>()
 
@@ -136,7 +136,8 @@ object TBankNotificationParser {
     }
 
     private fun classify(s: String): OperationType = when {
-        containsAny(s, "кэшбэк", "кешбэк", "cashback", "начислен бонус", "бонусы за покуп") -> OperationType.CASHBACK
+        containsAny(s, "кэшбэк", "кешбэк", "cashback", "начислен бонус", "бонусы за покуп") &&
+            !containsAny(s, "покупка", "оплата", "оплачено", "списание", "платеж", "платёж", "purchase", "payment") -> OperationType.CASHBACK
         containsAny(s, "возврат", "возвращено", "вернули", "refund") -> OperationType.REFUND
         containsAny(s, "отмен", "аннулирован", "операция отклонена", "реверс", "reversal") -> OperationType.REVERSAL
         containsAny(s, "между своими счетами", "перевод между своими", "перевод себе", "с собственного счета на свой") -> OperationType.OWN_ACCOUNT_TRANSFER
@@ -167,7 +168,7 @@ object TBankNotificationParser {
         }
     }
 
-    private fun extractMerchant(raw: String, normalized: String): String? {
+    private fun extractMerchant(raw: String, normalized: String, title: String?): String? {
         val lines = raw.lines().map { it.trim() }.filter { it.isNotBlank() }
         val candidates = lines.flatMap { line ->
             listOf(
@@ -176,7 +177,18 @@ object TBankNotificationParser {
             )
         }.filterNotNull().map { it.trim(' ', '.', ',', ':', '—', '-') }
             .filter { it.length >= 2 && !it.matches(Regex("""(?i)(\d[\d\s.,]*\s*(₽|руб.*)|карта.*)""")) }
-        return candidates.firstOrNull()?.take(80)
+        val extracted = candidates.firstOrNull()?.take(80)
+        if (extracted != null) return extracted
+
+        // Some bank notifications put the merchant in the notification title
+        // (for example, title="Магнит", text="Покупка на 220,96 ₽").
+        val titleCandidate = title?.trim()?.takeIf {
+            it.length >= 2 &&
+                !normalize(it).matches(Regex("""(т-?банк|тинькофф|альфа-банк|сбербанк|втб|банк)"""))
+        }
+        return titleCandidate?.takeIf {
+            containsAny(normalized, "покупка", "оплата", "оплачено", "списание", "purchase", "payment")
+        }?.take(80)
     }
 
     private fun parseAmountKopecks(raw: String): Long? {
