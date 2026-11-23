@@ -53,6 +53,24 @@ class TBankNotificationParserTest {
         assertNull(event.category)
     }
 
+    @Test fun cardTopUpIsIncomeCandidate() {
+        val event = TBankNotificationParser.parse(input("Пополнение на 1 ₽, счет RUB…", title = "Альфа-Банк"))!!
+        assertEquals(TBankNotificationParser.OperationType.TRANSFER_IN, event.operationType)
+        assertEquals(TBankNotificationParser.Flow.INCOME, event.flow)
+        assertEquals(100L, event.amountKopecks)
+        assertNull(event.category)
+    }
+
+    @Test fun purchaseAmountIgnoresCardBalanceAndCashbackDetails() {
+        val event = TBankNotificationParser.parse(
+            input("Покупка на 220,96 ₽, кэшбэк 11 ₽, остаток 5 000 ₽", title = "Магнит")
+        )!!
+        assertEquals(TBankNotificationParser.OperationType.PURCHASE, event.operationType)
+        assertEquals(TBankNotificationParser.Flow.EXPENSE, event.flow)
+        assertEquals(22096L, event.amountKopecks)
+        assertEquals("Продукты", event.category)
+    }
+
     @Test fun outgoingTransferToAnotherPersonIsOtherExpense() {
         val event = TBankNotificationParser.parse(input("Перевод на 10 ₽, счет RUB...."))!!
         assertEquals(TBankNotificationParser.OperationType.TRANSFER_OUT, event.operationType)
