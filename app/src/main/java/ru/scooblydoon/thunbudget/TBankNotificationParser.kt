@@ -145,7 +145,7 @@ object TBankNotificationParser {
         containsAny(s, "подписка", "subscription", "ежемесячное списание") -> OperationType.SUBSCRIPTION
         containsAny(s, "баланс", "остаток", "доступно на счете", "доступно на карте") &&
             !containsAny(s, "покупка", "оплата", "списание", "перевод") -> OperationType.BALANCE_NOTICE
-        containsAny(s, "поступление", "зачисление", "вам перевели", "перевод от", "входящий перевод", "получен перевод") -> OperationType.TRANSFER_IN
+        containsAny(s, "поступление", "зачисление", "пополнение на", "пополнение счета", "пополнение счёта", "вам перевели", "перевод от", "входящий перевод", "получен перевод") -> OperationType.TRANSFER_IN
         containsAny(s, "перевод", "перевели", "перечисление") &&
             containsAny(s, "кому:", "получатель", "перевод на", "отправлен", "списано") -> OperationType.TRANSFER_OUT
         containsAny(s, "покупка", "оплата", "оплачено", "списание", "платеж", "платёж", "purchase", "payment") -> OperationType.PURCHASE
@@ -180,10 +180,14 @@ object TBankNotificationParser {
     }
 
     private fun parseAmountKopecks(raw: String): Long? {
+        // Card balance and cashback are informational values, not the transaction amount.
+        val transactionText = raw
+            .replace(Regex("""(?i)(кэшбэк|кешбэк|cashback).*"""), "")
+            .replace(Regex("""(?i)(баланс|остаток|доступно на счете|доступно на карте).*"""), "")
         val matches = Regex(
             """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)""",
             RegexOption.IGNORE_CASE
-        ).findAll(raw).toList()
+        ).findAll(transactionText).toList()
         if (matches.size != 1) return null
         val match = matches.single()
         val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
