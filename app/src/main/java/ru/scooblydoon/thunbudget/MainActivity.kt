@@ -528,6 +528,7 @@ private fun ThunBudgetApp() {
     val compactLayout = configuration.screenWidthDp < 400 ||
         configuration.screenHeightDp < 700 || density.fontScale >= 1.12f
     val store= remember { BudgetStore(context) }
+    val notificationQueue = remember { NotificationReviewQueueRepository(SharedPreferencesNotificationQueueStore(context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE))) }
     var income by remember { mutableDoubleStateOf(store.loadIncome()) }
     var savingsGoal by remember { mutableDoubleStateOf(store.loadSavingsGoal()) }
     var categories by remember { mutableStateOf(store.loadCategories()) }
@@ -1044,13 +1045,16 @@ private fun ThunBudgetApp() {
                     TextButton(onClick={showAssistantDialog=true},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
                         Text("Помощник",style=actionTextStyle,maxLines=1,softWrap=false)
                     }
+                    TextButton(onClick={tab=6},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
+                        Text("Импорт",style=actionTextStyle,maxLines=1,softWrap=false)
+                    }
                     TextButton(onClick={showSettings=true},contentPadding=PaddingValues(horizontal=actionPadding,vertical=0.dp)) {
                         Text("Настройки",style=actionTextStyle,maxLines=1,softWrap=false)
                     }
                 } }
             ) },
             floatingActionButton = {
-                if (!compactLayout && tab != 2 && tab != 5) {
+                if (!compactLayout && tab != 2 && tab != 5 && tab != 6) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (quickActionsExpanded) {
                             SmallFloatingActionButton(
@@ -1081,7 +1085,7 @@ private fun ThunBudgetApp() {
             bottomBar = {
                 Column {
                     // Dock actions only on compact layouts; regular-width phones retain the floating controls.
-                    if (compactLayout && tab != 2 && tab != 5) {
+                    if (compactLayout && tab != 2 && tab != 5 && tab != 6) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.End,
@@ -1490,6 +1494,9 @@ private fun ThunBudgetApp() {
                         store.saveRecurringPayments(recurringPayments)
                     }
                     )
+                }
+                6 -> Box(Modifier.padding(padding).fillMaxSize()) {
+                    NotificationReviewQueueScreen(repository = notificationQueue)
                 }
                 else -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
