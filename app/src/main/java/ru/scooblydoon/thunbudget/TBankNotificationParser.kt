@@ -101,9 +101,10 @@ object TBankNotificationParser {
             reasons += ReviewReason.AMBIGUOUS_DIRECTION
         }
 
-        val category = when (flow) {
-            Flow.EXPENSE -> resolveExpenseCategory(merchant, normalized)
-            else -> null
+        val category = when {
+            flow != Flow.EXPENSE -> null
+            type == OperationType.TRANSFER_OUT -> "Другое"
+            else -> resolveExpenseCategory(merchant, normalized)
         }
         val stableId = input.bankReferenceId?.takeIf { it.isNotBlank() }
             ?: input.notificationKey?.takeIf { it.isNotBlank() }
