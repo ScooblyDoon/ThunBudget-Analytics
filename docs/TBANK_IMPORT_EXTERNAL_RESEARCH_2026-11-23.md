@@ -160,3 +160,13 @@
 3. Реализовать только независимый pure Kotlin parser/contract tests в лабораторной ветке, без подключения Listener и без записи в основной ledger.
 4. Запустить unit tests и негативные тесты; отдельно проверить денежную арифметику и идемпотентность.
 5. После успешных виртуальных проверок согласовать этап физического тестирования на Pixel 8.
+
+
+## Дополнительная проверка официальных источников Т-Банка
+
+- Официальная документация по «Операциям по счету» описывает получение выписки и вебхука для счетов компании. Для подключения вебхука требуется письмо с ИНН компании и HTTPS URL; документация говорит об информации о счетах компании. Это не готовый API для личного потребительского бюджета на телефоне. Источник: https://developer.tbank.ru/docs/products/account-info
+- Документация по интернет-эквайрингу описывает HTTP(S)-уведомления продавцу о статусах платежей (например, AUTHORIZED/CONFIRMED), а не push-уведомления владельцу личной карты. Источник: https://developer.tbank.ru/funding/intro/developer/notification
+- В публичном обсуждении импорта SMS 2017 года приведены исторические примеры Тинькофф («Покупка. Карта *XXXX…», «Перевод…»). Это SMS-форматы старого поколения, не подтверждённые как актуальные Android push-форматы. Их можно использовать только как дополнительные негативные/регрессионные примеры, но не как основной parser contract. Источник: https://community.personalfinances.ru/d/349-import-tranzakciy-iz-sms-soobscheniy/73
+- Android API предоставляет `NotificationManager.isNotificationListenerAccessGranted(ComponentName)` для точной проверки выданного пользователем доступа. Сам Listener должен ожидать `onListenerConnected()`; после отключения есть отдельный callback `onListenerDisconnected()`. Источники: https://developer.android.com/reference/android/app/NotificationManager и https://developer.android.com/reference/android/service/notification/NotificationListenerService
+
+Практический вывод: пока не найден публичный официальный API, который подходит для чтения личных карточных операций в персональном приложении ThunBudget без бизнес-счёта. Основной проверяемый путь для этой задачи остаётся Android NotificationListenerService с явным разрешением пользователя, плюс ручной/файловый импорт выписки как отдельный возможный резервный канал.
