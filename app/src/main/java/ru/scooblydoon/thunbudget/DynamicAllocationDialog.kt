@@ -10,7 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
-import java.time.YearMonth
 import java.util.Locale
 
 @Composable
@@ -64,7 +63,6 @@ internal fun DynamicAllocationDialog(
         else values[category.name]?.replace(',', '.')?.toDoubleOrNull()?.let { it.isFinite() && it in 0.0..100.0 } == true
     }
     val valid = inputsValid && resultingShares.values.all { it.isFinite() && it in 0.0..100.0 } && sum <= 100.0001
-    val totalAverage = averageFacts.values.sum()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Динамический прогноз долей") },
@@ -78,7 +76,7 @@ internal fun DynamicAllocationDialog(
                 }
                 Text(
                     if (availableMonths == 0) "За выбранную историю расходов нет."
-                    else "Учтено месяцев с расходами: $availableMonths из $monthsToAnalyze · Средний расход: ${String.format(Locale("ru", "RU"), "%,.0f ₽", forecast.totalMonthlyForecast)} на следующий месяц",
+                    else "Учтено завершённых отчётных месяцев: $availableMonths из $monthsToAnalyze · Средний расход: ${String.format(Locale("ru", "RU"), "%,.0f ₽", forecast.totalMonthlyForecast)} на следующий месяц",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text("Для каждой категории можно отдельно принять рекомендацию, оставить прежнюю долю или изменить предложенный процент.", style = MaterialTheme.typography.bodySmall)
