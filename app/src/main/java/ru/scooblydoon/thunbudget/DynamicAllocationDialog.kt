@@ -11,7 +11,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 @Composable
@@ -36,7 +35,7 @@ internal fun DynamicAllocationDialog(
             val month = latestCompletedMonth.minusMonths(offset.toLong())
             val end = month.atDay(firstPeriodEndDay.coerceAtMost(month.lengthOfMonth()))
             val previous = month.minusMonths(1)
-            val start = previous.atDay((firstPeriodEndDay + 1).coerceAtMost(previous.lengthOfMonth()))
+            val start = previous.atDay(firstPeriodEndDay.coerceAtMost(previous.lengthOfMonth())).plusDays(1)
             val rows = expenses.filter { runCatching {
                 val date = LocalDate.parse(it.date)
                 !date.isBefore(start) && !date.isAfter(end)
@@ -45,7 +44,7 @@ internal fun DynamicAllocationDialog(
         }.filter { (_, rows) -> rows.isNotEmpty() }
     }
     val availableMonths = monthBuckets.size
-    val averageFacts = remember(monthBuckets) {
+    val averageFacts = remember(monthBuckets, regular) {
         val monthsWithData = availableMonths.coerceAtLeast(1)
         regular.associate { category ->
             category.name to monthBuckets.sumOf { (_, rows) ->
