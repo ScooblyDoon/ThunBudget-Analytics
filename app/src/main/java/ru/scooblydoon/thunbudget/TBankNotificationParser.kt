@@ -162,48 +162,45 @@ object TBankNotificationParser {
     }
 
     /**
-     * Extract the transaction amount while treating informational amounts
-     * conservatively. Cashback-only notifications keep their own amount.
+     * Select only amounts whose immediately preceding clause describes the
+     * transaction. Informational labels are evaluated per amount, not by
+     * deleting broad regex spans from the whole notification.
      */
     private fun parseAmountKopecks(raw: String, type: OperationType): Long? {
         val amountPattern =
-            """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)"""
-        val amountRegex = Regex(amountPattern, RegexOption.IGNORE_CASE)
-        var candidateText = raw
+            """(?<![\\p{L}\\d])(?:−|-)?\\s*(\\d{1,3}(?:[\\s\\u00A0]\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?\\s*(?:₽|руб(?:\\.|лей|ля)?|RUB)"""
+        val matches = Regex(amountPattern, RegexOption.IGNORE_CASE).findAll(raw).toList()
+        if (matches.isEmpty()) return null
 
-        if (type == OperationType.PURCHASE) {
-            // Cashback is informational only in a purchase notification. In a
-            // cashback-only notification its amount is the actual operation.
-            val cashbackAmount = Regex(
-                """(?i)(?:кэшбэк|кешбэк|cashback)[^₽\n]*?\s*$amountPattern"""
-            )
-            candidateText = cashbackAmount.replace(candidateText, " ")
+        val transactionLabels = listOf(
+            "покупка", "оплата", "оплачено", "списание", "purchase", "payment",
+            "перевод", "поступление", "зачисление", "снятие наличных", "внесение наличных"
+        )
+        val informationalLabels = listOf(
+            "кэшбэк", "кешбэк", "cashback", "баланс", "остаток",
+            "доступно на счете", "доступно на карте"
+        )
 
-            // "Остаток" is an informational balance label wherever it appears.
-            val remainingAmount = Regex(
-                """(?i)остаток[^₽\n]*?\s*$amountPattern"""
-            )
-            candidateText = remainingAmount.replace(candidateText, " ")
-
-            // A card-balance figure is discarded when it precedes the purchase.
-            // If it follows the purchase, keep both amounts and require review
-            // rather than silently assuming which one is the transaction.
-            val balanceIndex = Regex("""(?i)баланс|доступно на счете|доступно на карте""")
-                .find(candidateText)?.range?.first
-            val purchaseIndex = Regex("""(?i)покупка|оплата|оплачено|списание|purchase|payment""")
-                .find(candidateText)?.range?.first
-            if (balanceIndex != null && purchaseIndex != null && balanceIndex < purchaseIndex) {
-                val balanceAmount = Regex(
-                    """(?i)(?:баланс|доступно на счете|доступно на карте)[^₽\n]*?\s*$amountPattern"""
-                )
-                candidateText = balanceAmount.replace(candidateText, " ")
+        val transactionCandidates = matches.filterIndexed { index, match ->
+            if (type != OperationType.PURCHASE) {
+                // A standalone cashback notification must retain its amount.
+                // For other event types, retain the original conservative rule.
+                return@filterIndexed !(type == OperationType.CASHBACK &&
+                    informationalLabels.any { label ->
+                        raw.substring(0, match.range.first).lowercase(Locale.ROOT).contains(label)
+                    } && matches.size > 1)
             }
+
+            val clauseStart = if (index == 0) 0 else matches[index - 1].range.last + 1
+            val prefix = raw.substring(clauseStart, match.range.first).lowercase(Locale.ROOT)
+            val lastTransaction = transactionLabels.maxOfOrNull { prefix.lastIndexOf(it) } ?: -1
+            val lastInformational = informationalLabels.maxOfOrNull { prefix.lastIndexOf(it) } ?: -1
+            lastInformational < 0 || lastTransaction > lastInformational
         }
 
-        val candidates = amountRegex.findAll(candidateText).toList()
-        if (candidates.size != 1) return null
-        val match = candidates.single()
-        val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
+        if (transactionCandidates.size != 1) return null
+        val match = transactionCandidates.single()
+        val whole = match.groupValues[1].replace(Regex("""[\\s\\u00A0]"""), "")
         val fraction = match.groupValues[2].ifBlank { "0" }.padEnd(2, '0')
         return runCatching {
             BigDecimal(whole).add(BigDecimal("0.$fraction"))
