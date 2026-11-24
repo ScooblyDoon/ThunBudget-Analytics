@@ -83,9 +83,10 @@ object BudgetForecastCalculator {
                 val nextCycle = ReportingPeriodCalculator.propose(
                     latestCompleted!!.plusMonths(1), firstStartDay, firstEndDay
                 )
-                val targetDays = java.time.temporal.ChronoUnit.DAYS.between(
+                val fullTargetDays = java.time.temporal.ChronoUnit.DAYS.between(
                     nextCycle.first.start, nextCycle.second.end
                 ) + 1
+                val targetDays = nextPeriodDays.coerceAtLeast(0).coerceAtMost(fullTargetDays)
                 val historyDays = history.sumOf { month ->
                     val cycle = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
                     java.time.temporal.ChronoUnit.DAYS.between(cycle.first.start, cycle.second.end) + 1
