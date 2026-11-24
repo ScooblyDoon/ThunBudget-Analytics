@@ -582,7 +582,6 @@ private fun ThunBudgetApp() {
     var showCategoryManager by remember { mutableStateOf(false) }
     var showAllocationDialog by remember { mutableStateOf(false) }
     var showDynamicAllocationDialog by remember { mutableStateOf(false) }
-    var enableAutoAfterForecast by remember { mutableStateOf(false) }
     var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
@@ -652,6 +651,11 @@ private fun ThunBudgetApp() {
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
 
+    LaunchedEffect(autoAllocationEnabled, expenses, periodStart, periodEnd) {
+        if (autoAllocationEnabled && !showDynamicAllocationDialog) {
+            showDynamicAllocationDialog = true
+        }
+    }
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
         if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
@@ -1257,7 +1261,7 @@ private fun ThunBudgetApp() {
                 }
                 1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
-                    item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick={showAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Рассчитать доли по истории расходов") }; Button(onClick={enableAutoAfterForecast=false;showDynamicAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Динамический прогноз по факту из «Обзора»") } } }
+                    item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick={showAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Рассчитать доли по истории расходов") }; Button(onClick={showDynamicAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Динамический прогноз по факту из «Обзора»") } } }
                     item { Text("Текущий отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
                         val currentStart = LocalDate.parse(periodStart)
@@ -1275,10 +1279,13 @@ private fun ThunBudgetApp() {
                                     }
                                     Switch(checked=autoAllocationEnabled, onCheckedChange={ enabled ->
                                         if (enabled) {
-                                            enableAutoAfterForecast = true
+                                            val snapshot = categories.map { it.copy() }
+                                            manualAllocationSnapshot = snapshot
+                                            store.saveManualAllocationSnapshot(snapshot)
+                                            autoAllocationEnabled = true
+                                            store.saveAutoAllocationEnabled(true)
                                             showDynamicAllocationDialog = true
                                         } else {
-                                            enableAutoAfterForecast = false
                                             val restored = manualAllocationSnapshot.map { it.copy() }
                                             store.restoreCategoriesExactly(restored)
                                             categories = restored
@@ -1791,10 +1798,7 @@ private fun ThunBudgetApp() {
             periodStart = periodStart,
             periodEnd = periodEnd,
             firstPeriodEndDay = firstPeriodEndDay,
-            onDismiss = {
-                showDynamicAllocationDialog = false
-                enableAutoAfterForecast = false
-            },
+            onDismiss = { showDynamicAllocationDialog = false },
             onSave = { updated ->
                 store.prepareUndoSnapshot()
                 canUndo = true
@@ -1802,11 +1806,6 @@ private fun ThunBudgetApp() {
                 store.saveManualAllocationSnapshot(categories)
                 categories = updated
                 store.saveCategories(categories)
-                if (enableAutoAfterForecast) {
-                    autoAllocationEnabled = true
-                    store.saveAutoAllocationEnabled(true)
-                }
-                enableAutoAfterForecast = false
                 showDynamicAllocationDialog = false
             }
         )
