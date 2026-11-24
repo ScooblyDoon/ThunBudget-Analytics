@@ -28,13 +28,13 @@ data class NotificationQueueItem(
     val reviewReasons: List<String>,
     val sourcePayload: String,
     val status: NotificationQueueStatus = NotificationQueueStatus.PENDING,
-    val editedAmountKopecks: Long? = null,
+    val editedAmountKopecks: Long? = null,\n    val amountWasCleared: Boolean = false,
     val editedFlow: String? = null,
     val editedMerchant: String? = null,
     val editedCategory: String? = null,
     val decisionAtMillis: Long? = null
 ) {
-    val effectiveAmountKopecks: Long? get() = editedAmountKopecks ?: amountKopecks
+    val effectiveAmountKopecks: Long? get() = if (amountWasCleared) null else editedAmountKopecks ?: amountKopecks
     val effectiveFlow: String get() = editedFlow ?: flow
     val effectiveMerchant: String? get() = editedMerchant ?: merchant
     val effectiveCategory: String? get() = editedCategory ?: category
@@ -167,7 +167,7 @@ class NotificationReviewQueueRepository(
         return lines.drop(1).mapNotNull { line ->
             runCatching {
                 val parts = line.split('\t')
-                require(parts.size == FIELD_COUNT)
+                require(parts.size == expectedFields)
                 val values = parts.map(::decodeField)
                 val item = NotificationQueueItem(
                     id = values[0] ?: error("missing id"),
