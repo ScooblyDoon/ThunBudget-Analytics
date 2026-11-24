@@ -5,9 +5,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 @Composable
@@ -16,47 +20,93 @@ internal fun DynamicAllocationDialog(
     expenses: List<Expense>,
     periodStart: String,
     periodEnd: String,
+    firstPeriodEndDay: Int = 23,
     onDismiss: () -> Unit,
     onSave: (List<BudgetCategory>) -> Unit
 ) {
     val regular = categories.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
-    val facts = remember(expenses, periodStart, periodEnd) {
-        expenses.filter { it.date >= periodStart && it.date <= periodEnd }
-            .groupBy { it.category }.mapValues { (_, rows) -> rows.sumOf { it.amount } }
+    var monthsToAnalyze by remember { mutableIntStateOf(3) }
+    val monthBuckets = remember(expenses, firstPeriodEndDay, monthsToAnalyze) {
+        val today = LocalDate.now()
+        val latestCompletedMonth = YearMonth.from(today).let { current ->
+            val endDay = firstPeriodEndDay.coerceAtMost(current.lengthOfMonth())
+            if (today.dayOfMonth > endDay) current else current.minusMonths(1)
+        }
+        (0 until monthsToAnalyze).map { offset ->
+            val month = latestCompletedMonth.minusMonths(offset.toLong())
+            val end = month.atDay(firstPeriodEndDay.coerceAtMost(month.lengthOfMonth()))
+            val previous = month.minusMonths(1)
+            val start = previous.atDay((firstPeriodEndDay + 1).coerceAtMost(previous.lengthOfMonth()))
+            val rows = expenses.filter { runCatching {
+                val date = LocalDate.parse(it.date)
+                !date.isBefore(start) && !date.isAfter(end)
+            }.getOrDefault(false) }
+            month to rows
+        }.filter { (_, rows) -> rows.isNotEmpty() }
     }
-    val proposal = remember(categories, facts) {
-        AnalyticsBudgetCalculator.dynamicProposal(regular.map { it.name to it.percent }, facts)
+    val availableMonths = monthBuckets.size
+    val averageFacts = remember(monthBuckets) {
+        val monthsWithData = availableMonths.coerceAtLeast(1)
+        regular.associate { category ->
+            category.name to monthBuckets.sumOf { (_, rows) ->
+                rows.filter { it.category == category.name }.sumOf { it.amount.coerceAtLeast(0.0) }
+            } / monthsWithData
+        }
     }
-    val values = remember(proposal) {
+    val proposal = remember(categories, averageFacts, availableMonths) {
+        AnalyticsBudgetCalculator.dynamicProposal(regular.map { it.name to it.percent }, averageFacts)
+    }
+    val values = remember(proposal, categories) {
         mutableStateMapOf<String, String>().apply {
             proposal.percentages.forEach { (name, percent) -> put(name, String.format(Locale.US, "%.1f", percent)) }
         }
     }
-    val sum = values.values.sumOf { it.replace(',', '.').toDoubleOrNull() ?: 0.0 }
-    val valid = values.values.all { raw -> raw.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it in 0.0..100.0 } == true }
+    val accepted = remember(categories) {
+        mutableStateMapOf<String, Boolean>().apply { regular.forEach { put(it.name, true) } }
+    }
+    val resultingShares = regular.associate { category ->
+        category.name to if (accepted[category.name] == true)
+            (values[category.name]?.replace(',', '.')?.toDoubleOrNull() ?: category.percent)
+        else category.percent
+    }
+    val sum = resultingShares.values.sum()
+    val valid = resultingShares.values.all { it.isFinite() && it in 0.0..100.0 } && sum <= 100.0001
+    val totalAverage = averageFacts.values.sum()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Динамический прогноз долей") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 520.dp)) {
-                Text("Фактические расходы из раздела «Обзор»: $periodStart — $periodEnd")
-                Text("Предложение подстраивает доли под реальные траты. Категории без расходов сохраняют относительную часть прежнего бюджета.", style = MaterialTheme.typography.bodySmall)
-                Text("Фактически потрачено: ${String.format(Locale("ru", "RU"), "%,.0f ₽", proposal.totalActualSpend)}", fontWeight = FontWeight.SemiBold)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 560.dp)) {
+                Text("Средние расходы по двум отчётным периодам за месяц", fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (1..6).forEach { count ->
+                        FilterChip(selected = monthsToAnalyze == count, onClick = { monthsToAnalyze = count }, label = { Text("$count") })
+                    }
+                }
+                Text(
+                    if (availableMonths == 0) "За выбранную историю расходов нет."
+                    else "Учтено месяцев с расходами: $availableMonths из $monthsToAnalyze · Средний расход: ${String.format(Locale("ru", "RU"), "%,.0f ₽", totalAverage)} в месяц",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text("Для каждой категории можно отдельно принять рекомендацию, оставить прежнюю долю или изменить предложенный процент.", style = MaterialTheme.typography.bodySmall)
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(regular, key = { it.name }) { category ->
-                        val spent = facts[category.name] ?: 0.0
+                        val spent = averageFacts[category.name] ?: 0.0
                         val proposed = values[category.name].orEmpty()
+                        val isAccepted = accepted[category.name] == true
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f))) {
                             Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = isAccepted, onCheckedChange = { accepted[category.name] = it })
                                     Column(Modifier.weight(1f)) {
                                         Text(category.name, fontWeight = FontWeight.SemiBold)
-                                        Text("Факт: ${String.format(Locale("ru", "RU"), "%,.0f ₽", spent)} · Было: ${String.format(Locale("ru", "RU"), "%.1f", category.percent)}%", style = MaterialTheme.typography.labelSmall)
+                                        Text("Среднее за месяц: ${String.format(Locale("ru", "RU"), "%,.0f ₽", spent)} · Было: ${String.format(Locale("ru", "RU"), "%.1f", category.percent)}%", style = MaterialTheme.typography.labelSmall)
                                     }
                                     OutlinedTextField(
                                         value = proposed,
                                         onValueChange = { values[category.name] = it.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' }.take(6) },
                                         modifier = Modifier.width(92.dp),
+                                        enabled = isAccepted,
                                         singleLine = true,
                                         label = { Text("Новая %") }
                                     )
@@ -65,18 +115,24 @@ internal fun DynamicAllocationDialog(
                         }
                     }
                 }
-                Text("Сумма новых долей: ${String.format(Locale("ru", "RU"), "%.1f", sum)}%", color = if (!valid || sum > 100.0001) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                Text("Итоговая сумма долей: ${String.format(Locale("ru", "RU"), "%.1f", sum)}%", color = if (!valid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                 Text("Резерв: ${String.format(Locale("ru", "RU"), "%.1f", (100.0 - sum).coerceAtLeast(0.0))}%", style = MaterialTheme.typography.labelMedium)
             }
         },
         confirmButton = {
-            TextButton(enabled = valid && sum <= 100.0001 && regular.isNotEmpty(), onClick = {
-                val updated = regular.map { it.copy(percent = values[it.name]!!.replace(',', '.').toDouble()) }
+            TextButton(enabled = valid && regular.isNotEmpty() && availableMonths > 0, onClick = {
+                val updated = regular.map { category ->
+                    category.copy(percent = resultingShares[category.name] ?: category.percent)
+                }
                 val withReserve = BudgetAllocationCalculator.withReserve(updated.map { it.name to it.percent })
                 val reserve = withReserve.firstOrNull { it.first == BudgetAllocationCalculator.RESERVE_CATEGORY }?.let { BudgetCategory(it.first, it.second) }
                 onSave(updated + listOfNotNull(reserve))
-            }) { Text("Применить план") }
+            }) { Text("Применить выбранные") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDismiss) { Text("Отклонить всё") }
+            }
+        }
     )
 }
