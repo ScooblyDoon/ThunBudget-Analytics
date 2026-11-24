@@ -168,14 +168,14 @@ object TBankNotificationParser {
      */
     private fun parseAmountKopecks(raw: String): Long? {
         val amountPattern =
-            """(?<![\\p{L}\\d])(?:−|-)?\\s*(\\d{1,3}(?:[\\s\\u00A0]\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?\\s*(?:₽|руб(?:\\.|лей|ля)?|RUB)"""
+            """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)"""
         val amountRegex = Regex(amountPattern, RegexOption.IGNORE_CASE)
 
         // Remove amounts explicitly labelled as informational (cashback or balance)
         // before looking for the transaction amount. This avoids relying on sentence
         // punctuation, which varies across notification formats.
         val informationalAmountRegex = Regex(
-            """(?i)(?:кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)[^₽\\n]*?\\s*$amountPattern""",
+            """(?i)(?:кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)[^₽\n]*?\s*$amountPattern""",
             RegexOption.IGNORE_CASE
         )
         val transactionText = informationalAmountRegex.replace(raw, " ")
@@ -184,7 +184,7 @@ object TBankNotificationParser {
         // Multiple remaining amounts are deliberately not guessed.
         if (candidates.size != 1) return null
         val match = candidates.single()
-        val whole = match.groupValues[1].replace(Regex("""[\\s\\u00A0]"""), "")
+        val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
         val fraction = match.groupValues[2].ifBlank { "0" }.padEnd(2, '0')
         return runCatching {
             BigDecimal(whole).add(BigDecimal("0.$fraction"))
