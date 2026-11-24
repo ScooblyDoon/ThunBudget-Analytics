@@ -121,4 +121,54 @@ class NotificationReviewQueueRepositoryTest {
         } catch (_: IllegalStateException) { }
         assertTrue(queue.loadAll().isEmpty())
     }
+
+    @Test fun explicitlyClearingAmountRemainsClearedAfterReload() {
+        val store = MemoryStore()
+        val first = NotificationReviewQueueRepository(store) { "clear-amount" }
+        first.enqueue(event("Покупка Магнит 100 ₽"), packageName, "payload")
+        val id = first.loadPending().single().id
+
+        assertTrue(first.editPending(id, clearAmount = true))
+        assertNull(first.loadPending().single().effectiveAmountKopecks)
+
+        val reopened = NotificationReviewQueueRepository(store)
+        assertNull(reopened.loadPending().single().effectiveAmountKopecks)
+    }
+
+    @Test fun rejectsUnsupportedFlowValues() {
+        val queue = NotificationReviewQueueRepository(MemoryStore())
+        queue.enqueue(event("Покупка Магнит 100 ₽"), packageName, "payload")
+        val id = queue.loadPending().single().id
+
+        try {
+            queue.editPending(id, flow = "SIDEWAYS")
+            fail("Expected unsupported flow to be rejected")
+        } catch (_: IllegalArgumentException) { }
+
+        assertEquals("EXPENSE", queue.loadPending().single().effectiveFlow)
+    }
+
+    @Test fun readsLegacyV1QueueRowsWithoutLosingExistingData() {
+        val store = MemoryStore()
+        fun encode(value: String?): String =
+            value?.let {
+                java.util.Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(it.toByteArray(Charsets.UTF_8))
+            } ?: "~"
+        val legacyFields = listOf(
+            "legacy-id", packageName, "legacy-notification", null,
+            "PURCHASE", "EXPENSE", "12500", "RUB", "Магнит", "Продукты",
+            "1795000000000", "0.92", "", "Старая операция",
+            "PENDING", null, null, null, null, null,
+            "tbank:$packageName:legacy-notification"
+        )
+        store.value = "THUNBUDGET_NOTIFICATION_QUEUE_V1\n" +
+            legacyFields.joinToString("\t", transform = ::encode) + "\n"
+
+        val item = NotificationReviewQueueRepository(store).loadPending().single()
+        assertEquals("legacy-id", item.id)
+        assertEquals(12500L, item.effectiveAmountKopecks)
+        assertEquals("Магнит", item.effectiveMerchant)
+        assertFalse(item.amountWasCleared)
+    }
 }
