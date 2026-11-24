@@ -171,16 +171,18 @@ object TBankNotificationParser {
             """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)""",
             RegexOption.IGNORE_CASE
         )
-        val informational = Regex("""(?i)(кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)""")
-        val candidates = amountRegex.findAll(raw).filter { match ->
-            val clauseStart = maxOf(
-                raw.lastIndexOf(',', startIndex = match.range.first - 1),
-                raw.lastIndexOf(';', startIndex = match.range.first - 1),
-                raw.lastIndexOf('.', startIndex = match.range.first - 1),
-                raw.lastIndexOf('\n', startIndex = match.range.first - 1)
-            ) + 1
-            !informational.containsMatchIn(raw.substring(clauseStart, match.range.first))
-        }.toList()
+        val informational = Regex(
+            """(?i)(кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)"""
+        )
+
+        // Split on clause boundaries only. Decimal separators have no following
+        // whitespace, so 220,96 ₽ and 220.96 ₽ stay intact.
+        val clauses = raw.split(Regex("""[,;]\s+|[.!?]\s+|\n+"""))
+        val candidates = clauses
+            .filterNot { informational.containsMatchIn(it) }
+            .flatMap { clause -> amountRegex.findAll(clause).toList() }
+
+        // Multiple possible transaction amounts are deliberately not guessed.
         if (candidates.size != 1) return null
         val match = candidates.single()
         val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
