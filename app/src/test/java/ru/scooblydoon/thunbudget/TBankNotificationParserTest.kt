@@ -124,7 +124,7 @@ class TBankNotificationParserTest {
     }
 
     @Test fun multipleAmountsAreNotGuessed() {
-        val event = TBankNotificationParser.parse(input("Покупка 100 ₽. Баланс 2 000 ₽"))!!
+        val event = TBankNotificationParser.parse(input("Покупка 100 ₽. Оплата 2 000 ₽"))!!
         assertNull(event.amountKopecks)
         assertTrue(event.requiresReview)
     }
