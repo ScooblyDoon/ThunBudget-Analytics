@@ -72,6 +72,53 @@ class BudgetAllocationTest {
         assertTrue(result.updatedPercents["Превышение"]!! > 20.0)
     }
 
+    @Test fun redistributionDoesNotUseSavingsReserveOrDonorsBelowTenPercentFree() {
+        val categories = listOf(
+            "Цель" to 20.0,
+            "Накопления" to 20.0,
+            BudgetAllocationCalculator.RESERVE_CATEGORY to 10.0,
+            "Запас9" to 20.0,
+            "Запас10" to 20.0,
+            "Перерасход" to 10.0
+        )
+        val result = BudgetAllocationCalculator.redistribute(
+            categories,
+            mapOf(
+                "Цель" to 300.0,
+                "Накопления" to 100.0,
+                BudgetAllocationCalculator.RESERVE_CATEGORY to 0.0,
+                "Запас9" to 182.0,
+                "Запас10" to 180.0,
+                "Перерасход" to 150.0
+            ),
+            10.0
+        )
+        assertTrue(result.transfers.isNotEmpty())
+        assertTrue(result.transfers.all { it.fromCategory == "Запас10" })
+        assertTrue(result.transfers.none { it.fromCategory == "Накопления" || it.fromCategory == BudgetAllocationCalculator.RESERVE_CATEGORY || it.fromCategory == "Запас9" })
+    }
+
+    @Test fun redistributionPrioritizesTwentyPercentDonorBeforeFifteenAndTen() {
+        val categories = listOf(
+            "Перерасход" to 10.0,
+            "Запас15" to 20.0,
+            "Запас20" to 20.0,
+            "Запас10" to 20.0
+        )
+        val result = BudgetAllocationCalculator.redistribute(
+            categories,
+            mapOf(
+                "Перерасход" to 150.0,
+                "Запас15" to 170.0,
+                "Запас20" to 160.0,
+                "Запас10" to 180.0
+            ),
+            10.0
+        )
+        assertEquals("Запас20", result.transfers.first().fromCategory)
+        assertEquals(20.0, result.transfers.first().donorFreePercent, 0.001)
+    }
+
     @Test fun freeBalanceIsShownAsPercentageOfCategoryPlan() {
         assertEquals(20.0, BudgetAllocationCalculator.freePercent(1000.0, 800.0)!!, 0.001)
         assertEquals(-10.0, BudgetAllocationCalculator.freePercent(1000.0, 1100.0)!!, 0.001)
