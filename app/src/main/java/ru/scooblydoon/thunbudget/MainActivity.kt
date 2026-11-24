@@ -1262,6 +1262,81 @@ private fun ThunBudgetApp() {
                 1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick={showAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Рассчитать доли по истории расходов") }; Button(onClick={showDynamicAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Динамический прогноз по факту из «Обзора»") } } }
+                    item {
+                        var forecastMonths by rememberSaveable { mutableIntStateOf(6) }
+                        val forecastPeriodProposal = ReportingPeriodCalculator.propose(
+                            YearMonth.from(today), firstPeriodStartDay, firstPeriodEndDay
+                        )
+                        val nextForecastRange = listOf(
+                            forecastPeriodProposal.first,
+                            forecastPeriodProposal.second
+                        ).firstOrNull { !it.end.isBefore(today) }
+                            ?: ReportingPeriodCalculator.propose(
+                                YearMonth.from(today).plusMonths(1), firstPeriodStartDay, firstPeriodEndDay
+                            ).first
+                        val forecastFrom = maxOf(today, nextForecastRange.start)
+                        val forecastDays = if (nextForecastRange.end.isBefore(forecastFrom)) 0 else
+                            (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, nextForecastRange.end) + 1L).toInt()
+                        val forecast = BudgetForecastCalculator.calculate(
+                            categories = categories.map { it.name },
+                            expenses = expenses.mapNotNull { row ->
+                                runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+                            },
+                            asOf = today,
+                            firstStartDay = firstPeriodStartDay,
+                            firstEndDay = firstPeriodEndDay,
+                            monthsToAnalyze = forecastMonths,
+                            nextPeriodDays = forecastDays
+                        )
+                        Card(shape = RoundedCornerShape(20.dp)) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Прогноз расходов", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                Text("Средние расходы по завершённым отчётным месяцам. Текущий незавершённый месяц не учитывается.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("История:", style = MaterialTheme.typography.bodyMedium)
+                                    Spacer(Modifier.width(8.dp))
+                                    SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
+                                        (1..6).forEach { months ->
+                                            SegmentedButton(
+                                                selected = forecastMonths == months,
+                                                onClick = { forecastMonths = months },
+                                                shape = SegmentedButtonDefaults.itemShape(months - 1, 6)
+                                            ) { Text(months.toString()) }
+                                        }
+                                    }
+                                }
+                                Text("В расчёте: ${forecast.historyMonths} заверш. мес.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
+                                        Text(money(forecast.totalMonthlyForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                    }
+                                    Column(Modifier.weight(1f)) {
+                                        Text("До ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
+                                        Text(money(forecast.totalPeriodForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                    }
+                                }
+                                Divider()
+                                forecast.categories.forEach { categoryForecast ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(categoryForecast.category, fontWeight = FontWeight.Medium)
+                                            if (!categoryForecast.hasHistory) {
+                                                Text("Нет расходов в выбранной истории", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(money(categoryForecast.forecastForNextMonth), fontWeight = FontWeight.SemiBold)
+                                            Text("Период: ${money(categoryForecast.forecastForPeriod)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                                if (forecast.historyMonths == 0) {
+                                    Text("Пока недостаточно завершённых отчётных месяцев для прогноза. Данные появятся после закрытия первого периода.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
                     item { Text("Текущий отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
                         val currentStart = LocalDate.parse(periodStart)
