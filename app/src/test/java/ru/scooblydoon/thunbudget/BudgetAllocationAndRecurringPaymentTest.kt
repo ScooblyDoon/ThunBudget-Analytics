@@ -161,4 +161,22 @@ class RecurringPaymentTest {
         assertTrue(payment.canConfirm(february, LocalDate.of(2026, 3, 1)))
         assertFalse(payment.copy(completedMonths=setOf("2026-02")).canConfirm(february, LocalDate.of(2026, 3, 1)))
     }
+    @Test fun reminderIsScheduledOneDayBeforeDueDateAndOnDueDateOnly() {
+        val today = LocalDate.of(2026, 11, 23)
+        assertEquals(1L, recurringPaymentReminderDaysUntilDue(today, LocalDate.of(2026, 11, 24)))
+        assertEquals(0L, recurringPaymentReminderDaysUntilDue(today, today))
+        assertNull(recurringPaymentReminderDaysUntilDue(today, LocalDate.of(2026, 11, 25)))
+        assertNull(recurringPaymentReminderDaysUntilDue(today, LocalDate.of(2026, 11, 22)))
+    }
+
+    @Test fun reminderHandlesMonthBoundary() {
+        assertEquals(
+            1L,
+            recurringPaymentReminderDaysUntilDue(
+                LocalDate.of(2026, 11, 30),
+                LocalDate.of(2026, 12, 1)
+            )
+        )
+    }
+
 }
