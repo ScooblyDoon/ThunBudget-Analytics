@@ -14,6 +14,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -30,14 +32,13 @@ import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 @Composable
 fun NotificationReviewQueueScreen(repository: NotificationReviewQueueRepository) {
     var rows by remember { mutableStateOf(repository.loadAll()) }
     var selected by remember { mutableStateOf<NotificationQueueItem?>(null) }
     var showResolved by remember { mutableStateOf(false) }
-
+    var expandedPayloadIds by remember { mutableStateOf(emptySet<String>()) }
     fun refresh() { rows = repository.loadAll() }
 
     LazyColumn(
@@ -83,36 +84,29 @@ fun NotificationReviewQueueScreen(repository: NotificationReviewQueueRepository)
                     verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     Row {
-                        Text(
-                            item.effectiveMerchant ?: item.operationType.toDisplayName(),
-                            modifier = Modifier.weight(1f),
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text(item.effectiveMerchant ?: item.operationType.toDisplayName(),
+                            modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                         Text(item.status.name.toDisplayName(), color = MaterialTheme.colorScheme.primary)
                     }
-                    Text(
-                        item.effectiveAmountKopecks?.let { formatKopecks(it) + " ₽" } ?: "Сумма не распознана",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "${item.effectiveFlow.toDisplayName()} · ${item.effectiveCategory ?: "Без категории"}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        "Получено: ${formatObservedTime(item.observedAtMillis)} · ${item.sourcePackage}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(item.effectiveAmountKopecks?.let { formatKopecks(it) + " ₽" } ?: "Сумма не распознана",
+                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("${item.effectiveFlow.toDisplayName()} · ${item.effectiveCategory ?: "Без категории"}",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text("Получено: ${formatObservedTime(item.observedAtMillis)} · ${item.sourcePackage}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (item.reviewReasons.isNotEmpty()) {
-                        Text(
-                            "Требует проверки: ${item.reviewReasons.joinToString()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                        Text("Требует проверки: ${item.reviewReasons.joinToString()}",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                     if (item.sourcePayload.isNotBlank()) {
-                        Text(item.sourcePayload, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = {
+                            expandedPayloadIds = if (item.id in expandedPayloadIds)
+                                expandedPayloadIds - item.id else expandedPayloadIds + item.id
+                        }) { Text(if (item.id in expandedPayloadIds) "Скрыть исходный текст" else "Показать исходный текст") }
+                        if (item.id in expandedPayloadIds) {
+                            Text(item.sourcePayload, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     if (item.status == NotificationQueueStatus.PENDING) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -139,40 +133,49 @@ fun NotificationReviewQueueScreen(repository: NotificationReviewQueueRepository)
         }
         var merchant by remember(item.id) { mutableStateOf(item.effectiveMerchant.orEmpty()) }
         var category by remember(item.id) { mutableStateOf(item.effectiveCategory.orEmpty()) }
-        var flow by remember(item.id) { mutableStateOf(item.effectiveFlow) }
+        var flow by remember(item.id) {
+            mutableStateOf(runCatching { TBankNotificationParser.Flow.valueOf(item.effectiveFlow) }
+                .getOrDefault(TBankNotificationParser.Flow.REVIEW))
+        }
+        var flowMenuExpanded by remember(item.id) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { selected = null },
             title = { Text("Проверка операции") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = amount, onValueChange = { amount = it },
-                        label = { Text("Сумма, ₽") }, modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = merchant, onValueChange = { merchant = it },
-                        label = { Text("Магазин / получатель") }, modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = category, onValueChange = { category = it },
-                        label = { Text("Категория") }, modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = flow, onValueChange = { flow = it.uppercase(Locale.ROOT) },
-                        label = { Text("Направление: EXPENSE / INCOME / INTERNAL / REVIEW") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = amount, onValueChange = { amount = it },
+                        label = { Text("Сумма, ₽ (оставьте пустой, чтобы очистить)") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = merchant, onValueChange = { merchant = it },
+                        label = { Text("Магазин / получатель") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = category, onValueChange = { category = it },
+                        label = { Text("Категория") }, modifier = Modifier.fillMaxWidth())
+                    Column {
+                        Text("Направление операции", style = MaterialTheme.typography.labelMedium)
+                        OutlinedButton(onClick = { flowMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(flow.toDisplayName())
+                        }
+                        DropdownMenu(expanded = flowMenuExpanded, onDismissRequest = { flowMenuExpanded = false }) {
+                            TBankNotificationParser.Flow.values().forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.toDisplayName()) },
+                                    onClick = { flow = option; flowMenuExpanded = false }
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val parsedAmount = amount.trim().replace(" ", "").replace(',', '.')
-                        .toBigDecimalOrNull()?.movePointRight(2)?.longValueExactOrNull()
+                    val parsedAmount = amount.trim().takeIf { it.isNotEmpty() }
+                        ?.replace(" ", "")?.replace(',', '.')?.toBigDecimalOrNull()
+                        ?.let { runCatching { it.movePointRight(2).longValueExact() }.getOrNull() }
                     if (amount.isBlank() || parsedAmount != null && parsedAmount > 0L) {
                         repository.editPending(
                             id = item.id,
                             amountKopecks = parsedAmount,
-                            flow = flow,
+                            clearAmount = amount.isBlank(),
+                            flow = flow.name,
                             merchant = merchant,
                             category = category
                         )
@@ -196,15 +199,20 @@ private fun String.toDisplayName(): String = when (this) {
     "REVERSAL" -> "Отмена операции"
     "CASHBACK" -> "Кэшбэк"
     "SUBSCRIPTION" -> "Подписка"
+    "BALANCE_NOTICE" -> "Информация об остатке"
+    "UNKNOWN" -> "Неизвестная операция"
     "PENDING" -> "Ожидает проверки"
     "CONFIRMED" -> "Подтверждено"
     "REJECTED" -> "Отклонено"
     "EXPENSE" -> "Расход"
     "INCOME" -> "Доход"
     "INTERNAL" -> "Между своими счетами"
+    "NONE" -> "Не учитывать"
     "REVIEW" -> "Нужна проверка"
     else -> this
 }
+
+private fun TBankNotificationParser.Flow.toDisplayName(): String = name.toDisplayName()
 
 private fun formatKopecks(value: Long): String =
     java.math.BigDecimal.valueOf(value, 2).stripTrailingZeros().toPlainString()
@@ -213,6 +221,3 @@ private fun formatObservedTime(value: Long): String = runCatching {
     DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
         .withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(value))
 }.getOrDefault("—")
-
-private fun java.math.BigDecimal.longValueExactOrNull(): Long? =
-    runCatching { longValueExact() }.getOrNull()
