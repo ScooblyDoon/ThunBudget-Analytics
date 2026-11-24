@@ -62,7 +62,7 @@ object TBankNotificationParser {
 
         val normalized = normalize(raw)
         val amount = parseAmountKopecks(raw)
-        val currency = if (Regex("""(?i)(₽|руб(?:\\.|лей|ля)?|RUB)""").containsMatchIn(raw)) "RUB" else null
+        val currency = if (Regex("""(?i)(₽|руб(?:\.|лей|ля)?|RUB)""").containsMatchIn(raw)) "RUB" else null
         val merchant = extractMerchant(raw, normalized, input.title)
         val type = classify(normalized)
         val reasons = mutableListOf<ReviewReason>()
@@ -146,11 +146,11 @@ object TBankNotificationParser {
         val lines = raw.lines().map { it.trim() }.filter { it.isNotBlank() }
         val candidates = lines.flatMap { line ->
             listOf(
-                Regex("""(?i)(?:покупка|оплата|оплачено|перевод на|перевод от|списание)\\s*[:—-]?\\s*(.+?)(?=\\s+(?:\\d[\\d\\s.,]*\\s*(?:₽|руб)|карта\\s*\\*|\\*\\d{4})|$)""").find(line)?.groupValues?.get(1),
-                Regex("""(?i)(?:в|у)\\s+([A-Za-zА-Яа-яЁё0-9 .&'-]{3,40})\\s*$""").find(line)?.groupValues?.get(1)
+                Regex("""(?i)(?:покупка|оплата|оплачено|перевод на|перевод от|списание)\s*[:—-]?\s*(.+?)(?=\s+(?:\d[\d\s.,]*\s*(?:₽|руб)|карта\s*\*|\*\d{4})|$)""").find(line)?.groupValues?.get(1),
+                Regex("""(?i)(?:в|у)\s+([A-Za-zА-Яа-яЁё0-9 .&'-]{3,40})\s*$""").find(line)?.groupValues?.get(1)
             )
         }.filterNotNull().map { it.trim(' ', '.', ',', ':', '—', '-') }
-            .filter { it.length >= 2 && !it.matches(Regex("""(?i)(\\d[\\d\\s.,]*\\s*(₽|руб.*)|карта.*)""")) }
+            .filter { it.length >= 2 && !it.matches(Regex("""(?i)(\d[\d\s.,]*\s*(₽|руб.*)|карта.*)""")) }
         val extracted = candidates.firstOrNull()?.take(80)
         if (extracted != null) return extracted
         val titleCandidate = title?.trim()?.takeIf {
@@ -168,7 +168,7 @@ object TBankNotificationParser {
      */
     private fun parseAmountKopecks(raw: String): Long? {
         val amountRegex = Regex(
-            """(?<![\\p{L}\\d])(?:−|-)?\\s*(\\d{1,3}(?:[\\s\\u00A0]\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?\\s*(?:₽|руб(?:\\.|лей|ля)?|RUB)""",
+            """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)""",
             RegexOption.IGNORE_CASE
         )
         val informational = Regex("""(?i)(кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)""")
@@ -183,7 +183,7 @@ object TBankNotificationParser {
         }.toList()
         if (candidates.size != 1) return null
         val match = candidates.single()
-        val whole = match.groupValues[1].replace(Regex("""[\\s\\u00A0]"""), "")
+        val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
         val fraction = match.groupValues[2].ifBlank { "0" }.padEnd(2, '0')
         return runCatching {
             BigDecimal(whole).add(BigDecimal("0.$fraction"))
@@ -196,7 +196,7 @@ object TBankNotificationParser {
 
     private fun normalize(value: String): String =
         Normalizer.normalize(value.lowercase(Locale("ru", "RU")).replace('ё', 'е'), Normalizer.Form.NFKC)
-            .replace(Regex("""\\s+"""), " ").trim()
+            .replace(Regex("""\s+"""), " ").trim()
 
     private fun containsAny(value: String, vararg needles: String): Boolean =
         needles.any { normalize(value).contains(normalize(it)) }
