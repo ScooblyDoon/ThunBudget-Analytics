@@ -52,7 +52,7 @@ object BudgetForecastCalculator {
         val completed = completedReportingMonths(asOf, firstStartDay, firstEndDay)
         val latestCompleted = completed.lastOrNull()
         val datedExpenses = expenses.filter { it.amount.isFinite() && it.amount > 0.0 }
-        val observedMonths = datedExpenses.map { YearMonth.from(it.date) }.distinct().sorted()
+        val observedMonths = datedExpenses.mapNotNull { reportingMonthFor(it.date, firstStartDay, firstEndDay) }.distinct().sorted()
         val earliestObserved = observedMonths.firstOrNull()
         val historyEnd = latestCompleted?.takeIf { earliestObserved != null && !it.isBefore(earliestObserved) }
         val historyStart = historyEnd?.let { end ->
@@ -67,8 +67,8 @@ object BudgetForecastCalculator {
         } else emptyList()
 
         val inHistory = datedExpenses.filter { row ->
-            val month = YearMonth.from(row.date)
-            historyStart != null && historyEnd != null &&
+            val month = reportingMonthFor(row.date, firstStartDay, firstEndDay)
+            historyStart != null && historyEnd != null && month != null &&
                 !month.isBefore(historyStart) && !month.isAfter(historyEnd)
         }
         val monthCount = history.size
@@ -90,6 +90,15 @@ object BudgetForecastCalculator {
             totalMonthlyForecast = categoryForecasts.sumOf { it.forecastForNextMonth },
             totalPeriodForecast = categoryForecasts.sumOf { it.forecastForPeriod }
         )
+    }
+
+
+    private fun reportingMonthFor(date: LocalDate, firstStartDay: Int, firstEndDay: Int): YearMonth? {
+        val candidates = listOf(YearMonth.from(date), YearMonth.from(date).minusMonths(1))
+        return candidates.firstOrNull { month ->
+            val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
+            !date.isBefore(proposal.first.start) && !date.isAfter(proposal.second.end)
+        }
     }
 
     private fun completedReportingMonths(
