@@ -68,7 +68,12 @@ class AnalyticsBudgetTest {
             PeriodIncome("2026-11-09", "2026-11-23", 50000.0),
             PeriodIncome("2026-11-24", "2026-12-08", 90000.0)
         )
-        val expenses = listOf(Expense(1L, "Покупки", "Продукты", 15000.0, "2026-11-01"))
+        val expenses = listOf(
+            Expense(1L, "Покупки", "Продукты", 15000.0, "2026-11-01"),
+            Expense(2L, "Покупки", "Продукты", 60000.0, "2026-11-15")
+        )
+        // Both completed periods are fully spent; the 90,000 ₽ from the
+        // current period must not be treated as historical carryover.
         assertEquals(0.0, AnalyticsBudgetCalculator.carryoverBefore("2026-11-24", incomes, expenses), 0.001)
     }
 
