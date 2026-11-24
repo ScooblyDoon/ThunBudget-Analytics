@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       THUNBUDGET_SIGNING_KEY: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
+    ANDROID_I_WANT_MY_TCG: "yes"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,6 +34,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          emulator-boot-timeout: 900
           target: google_apis
           arch: x86_64
           profile: pixel_2
