@@ -638,12 +638,15 @@ private fun ThunBudgetApp() {
     var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val periodIncome = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
+    val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses)
+    val effectivePeriodIncome = periodIncome + carryoverIncome
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.amount }
     val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
     val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, analyticsIncomeMode == 1)
+    val analyticsMonthPeriodTotal = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==analyticsMonth }.getOrDefault(false) }.sumOf { it.amount }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
-    val planned=if(periodIncome>0.0) periodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
+    val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
     val dailyLimit = calculateDailyLimit(remaining, LocalDate.parse(periodStart), LocalDate.parse(periodEnd), today)
     val dailyDaysRemaining = dailyLimit.daysRemaining
@@ -683,8 +686,8 @@ private fun ThunBudgetApp() {
                 val to = command.periodEnd ?: periodEnd
                 val rangeExpenses = expenses.filter { it.date >= from && it.date <= to }
                 val spentInRange = rangeExpenses.sumOf { it.amount }
-                val rangeIncome = if (from == periodStart && to == periodEnd && periodIncome > 0.0) {
-                    periodIncome
+                val rangeIncome = if (from == periodStart && to == periodEnd && effectivePeriodIncome > 0.0) {
+                    effectivePeriodIncome
                 } else {
                     val targetMonth = runCatching { YearMonth.from(LocalDate.parse(to)) }.getOrNull()
                     targetMonth?.let { month ->
@@ -730,8 +733,8 @@ private fun ThunBudgetApp() {
                     }
                     AssistantIntent.QUERY_SAVING_RECOMMENDATIONS -> {
                         val categoryBudgets = categories.associate { category ->
-                            val cap = if (from == periodStart && to == periodEnd && periodIncome > 0.0)
-                                periodIncome * category.percent / 100.0
+                            val cap = if (from == periodStart && to == periodEnd && effectivePeriodIncome > 0.0)
+                                effectivePeriodIncome * category.percent / 100.0
                             else plannedForPeriod(rangeIncome, category.percent, from, to)
                             category.name to cap
                         }
@@ -801,7 +804,7 @@ private fun ThunBudgetApp() {
                     AssistantIntent.QUERY_OVERSPENDING -> {
                         val exceeded = categories.mapNotNull { category ->
                             val cap = if (from == periodStart && to == periodEnd) {
-                                if (periodIncome > 0.0) periodIncome * category.percent / 100.0
+                                if (effectivePeriodIncome > 0.0) effectivePeriodIncome * category.percent / 100.0
                                 else plannedForPeriod(income, category.percent, from, to)
                             } else plannedForPeriod(rangeIncome, category.percent, from, to)
                             val actual = rangeExpenses.filter { it.category == category.name }.sumOf { it.amount }
@@ -1239,7 +1242,7 @@ private fun ThunBudgetApp() {
                                 }
                                 categories.forEach { cat ->
                                     val spent=expenses.filter{it.category==cat.name&&it.date>=periodStart&&it.date<=periodEnd}.sumOf{it.amount}
-                                    val cap=if(periodIncome>0.0) periodIncome*cat.percent/100.0 else plannedForPeriod(income,cat.percent,periodStart,periodEnd)
+                                    val cap=if(effectivePeriodIncome>0.0) effectivePeriodIncome*cat.percent/100.0 else plannedForPeriod(income,cat.percent,periodStart,periodEnd)
                                     Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) {
                                         Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                             Row(verticalAlignment=Alignment.CenterVertically) {
@@ -1366,7 +1369,7 @@ private fun ThunBudgetApp() {
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
                     }
-                    item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(analyticsMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(analyticsMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(analyticsMonthIncome)}" else "Поступления за периоды: ${money(analyticsMonthPeriodTotal)} · оценка за полный месяц: ${money(analyticsMonthIncome)} (среднее за день × ${analyticsMonth.lengthOfMonth()} дней)",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -1478,7 +1481,7 @@ private fun ThunBudgetApp() {
                         val periodFacts = categories.associate { cat ->
                             cat.name to expenses.filter { it.category == cat.name && it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         }
-                        val budgetPerPercent = if (periodIncome > 0.0) periodIncome / 100.0
+                        val budgetPerPercent = if (effectivePeriodIncome > 0.0) effectivePeriodIncome / 100.0
                             else plannedForPeriod(income, 1.0, periodStart, periodEnd)
                         val redistribution = BudgetAllocationCalculator.redistribute(
                             categories.map { it.name to it.percent },
@@ -1931,9 +1934,9 @@ private fun ThunBudgetApp() {
             dismissButton = { TextButton(onClick = { showAssistantDialog = false }) { Text("Закрыть") } }
         )
     }
-    if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,periodIncome,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
+    if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
         store.prepareUndoSnapshot(); canUndo=true
-        store.setPeriodIncomeTotal(periodStart, periodEnd, amount)
+        store.addIncomeEntry("Доход за период", amount, periodEnd, periodStart, periodEnd)
         periodIncomes = store.loadPeriodIncomes()
         incomeEntries = store.loadIncomeEntries()
         showPeriodIncomeEditor=false
@@ -2358,17 +2361,17 @@ private fun IncomeEntryEditDialog(entry: IncomeEntry, onDismiss:()->Unit, onSave
 }
 
 @Composable
-private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:()->Unit,onSave:(Double)->Unit) {
-    var amount by remember(start,end) { mutableStateOf(if(current>0) current.toString() else "") }
+private fun PeriodIncomeDialog(start:String,end:String,onDismiss:()->Unit,onSave:(Double)->Unit) {
+    var amount by remember(start,end) { mutableStateOf("") }
     val parsed=amount.replace(',','.').toDoubleOrNull()
-    AlertDialog(onDismissRequest=onDismiss,title={Text("Доход за отчётный период")},text={
+    AlertDialog(onDismissRequest=onDismiss,title={Text("Добавить доход за отчётный период")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("${LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",style=MaterialTheme.typography.bodySmall)
-            OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Доход за период, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
-            Text("Доходы за два отчётных периода автоматически суммируются в месячный доход.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Сумма нового поступления, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+            Text("Сумма будет добавлена к уже внесённым поступлениям. Старые записи сохранятся.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    },confirmButton={TextButton(onClick={if(parsed!=null&&parsed>=0) onSave(parsed)},enabled=parsed!=null&&parsed>=0){Text("Сохранить")}},dismissButton={
-        Row { if(current>0) TextButton(onClick={onSave(0.0)}) { Text("Очистить") }; TextButton(onClick=onDismiss){Text("Отмена")} }
+    },confirmButton={TextButton(onClick={if(parsed!=null&&parsed>0) onSave(parsed)},enabled=parsed!=null&&parsed>0){Text("Добавить")}},dismissButton={
+        TextButton(onClick=onDismiss){Text("Отмена")}
     })
 }
 
