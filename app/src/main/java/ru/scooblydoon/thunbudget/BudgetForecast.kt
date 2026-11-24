@@ -4,8 +4,8 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 /**
- * Forecast calculations based on complete two-period reporting months.
- * A reporting month is complete only after the second reporting period ends.
+ * Forecasts based on every available completed reporting period.
+ * The current unfinished reporting month is excluded; older partial history is retained.
  */
 data class ForecastExpense(
     val category: String,
@@ -46,7 +46,6 @@ object BudgetForecastCalculator {
         monthsToAnalyze: Int,
         nextPeriodDays: Int? = null
     ): BudgetForecast {
-        require(monthsToAnalyze in 1..6)
         require(firstStartDay in 1..31 && firstEndDay in firstStartDay..31)
 
         val completed = completedReportingMonths(asOf, firstStartDay, firstEndDay)
@@ -57,8 +56,7 @@ object BudgetForecastCalculator {
         val historyEnd = latestCompleted?.takeIf { earliestObserved != null && !it.isBefore(earliestObserved) }
         val historyStart = historyEnd?.let { end ->
             val availableStart = earliestObserved!!
-            val requestedStart = end.minusMonths((monthsToAnalyze - 1).toLong())
-            if (availableStart.isAfter(requestedStart)) availableStart else requestedStart
+            availableStart
         }
         val history = if (historyStart != null && historyEnd != null) {
             generateSequence(historyEnd) { current ->
