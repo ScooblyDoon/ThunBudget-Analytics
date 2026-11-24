@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       THUNBUDGET_SIGNING_KEY: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
-    ANDROID_I_WANT_MY_TCG: "yes"
+      ANDROID_I_WANT_MY_TCG: "yes"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
