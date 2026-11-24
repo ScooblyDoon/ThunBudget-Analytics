@@ -48,15 +48,14 @@ object BudgetForecastCalculator {
     ): BudgetForecast {
         require(firstStartDay in 1..31 && firstEndDay in firstStartDay..31)
 
-        val completed = completedReportingMonths(asOf, firstStartDay, firstEndDay)
-        val latestCompleted = completed.lastOrNull()
         val datedExpenses = expenses.filter { it.amount.isFinite() && it.amount > 0.0 }
         val observedMonths = datedExpenses.mapNotNull { reportingMonthFor(it.date, firstStartDay, firstEndDay) }.distinct().sorted()
         val earliestObserved = observedMonths.firstOrNull()
+        val completed = completedReportingMonths(asOf, firstStartDay, firstEndDay, earliestObserved)
+        val latestCompleted = completed.lastOrNull()
         val historyEnd = latestCompleted?.takeIf { earliestObserved != null && !it.isBefore(earliestObserved) }
         val historyStart = historyEnd?.let { end ->
-            val availableStart = earliestObserved!!
-            availableStart
+            earliestObserved!!
         }
         val history = if (historyStart != null && historyEnd != null) {
             generateSequence(historyEnd) { current ->
@@ -116,14 +115,17 @@ object BudgetForecastCalculator {
     private fun completedReportingMonths(
         asOf: LocalDate,
         firstStartDay: Int,
-        firstEndDay: Int
+        firstEndDay: Int,
+        earliestObserved: YearMonth?
     ): List<YearMonth> {
         val current = YearMonth.from(asOf)
-        // Search far enough back to cover six completed months and boundary clamping.
-        return (0L..12L).map { current.minusMonths(it) }
-            .filter { month ->
-                val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
-                !asOf.isBefore(proposal.second.end)
-            }.sorted()
+        val start = earliestObserved ?: return emptyList()
+        if (start.isAfter(current)) return emptyList()
+        return generateSequence(start) { month ->
+            if (month.isBefore(current)) month.plusMonths(1) else null
+        }.filter { month ->
+            val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
+            !asOf.isBefore(proposal.second.end)
+        }.toList()
     }
 }
