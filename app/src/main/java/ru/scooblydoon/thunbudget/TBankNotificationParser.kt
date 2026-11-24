@@ -168,7 +168,7 @@ object TBankNotificationParser {
      */
     private fun parseAmountKopecks(raw: String, type: OperationType): Long? {
         val amountPattern =
-            """(?<![\\p{L}\\d])(?:−|-)?\\s*(\\d{1,3}(?:[\\s\\u00A0]\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?\\s*(?:₽|руб(?:\\.|лей|ля)?|RUB)"""
+            """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)"""
         val matches = Regex(amountPattern, RegexOption.IGNORE_CASE).findAll(raw).toList()
         if (matches.isEmpty()) return null
 
@@ -181,26 +181,21 @@ object TBankNotificationParser {
             "доступно на счете", "доступно на карте"
         )
 
-        val transactionCandidates = matches.filterIndexed { index, match ->
-            if (type != OperationType.PURCHASE) {
-                // A standalone cashback notification must retain its amount.
-                // For other event types, retain the original conservative rule.
-                return@filterIndexed !(type == OperationType.CASHBACK &&
-                    informationalLabels.any { label ->
-                        raw.substring(0, match.range.first).lowercase(Locale.ROOT).contains(label)
-                    } && matches.size > 1)
+        val candidates = if (type != OperationType.PURCHASE) {
+            matches
+        } else {
+            matches.filterIndexed { index, match ->
+                val clauseStart = if (index == 0) 0 else matches[index - 1].range.last + 1
+                val prefix = raw.substring(clauseStart, match.range.first).lowercase(Locale.ROOT)
+                val transactionPosition = transactionLabels.maxOfOrNull { prefix.lastIndexOf(it) } ?: -1
+                val informationalPosition = informationalLabels.maxOfOrNull { prefix.lastIndexOf(it) } ?: -1
+                informationalPosition < 0 || transactionPosition > informationalPosition
             }
-
-            val clauseStart = if (index == 0) 0 else matches[index - 1].range.last + 1
-            val prefix = raw.substring(clauseStart, match.range.first).lowercase(Locale.ROOT)
-            val lastTransaction = transactionLabels.maxOfOrNull { prefix.lastIndexOf(it) } ?: -1
-            val lastInformational = informationalLabels.maxOfOrNull { prefix.lastIndexOf(it) } ?: -1
-            lastInformational < 0 || lastTransaction > lastInformational
         }
 
-        if (transactionCandidates.size != 1) return null
-        val match = transactionCandidates.single()
-        val whole = match.groupValues[1].replace(Regex("""[\\s\\u00A0]"""), "")
+        if (candidates.size != 1) return null
+        val match = candidates.single()
+        val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
         val fraction = match.groupValues[2].ifBlank { "0" }.padEnd(2, '0')
         return runCatching {
             BigDecimal(whole).add(BigDecimal("0.$fraction"))
