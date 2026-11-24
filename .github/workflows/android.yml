@@ -33,11 +33,13 @@ jobs:
       - name: Run unit tests, launch Android emulator, instrumentation tests and build debug APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          emulator-boot-timeout: 900
-          target: google_apis
+          api-level: 30
+          emulator-boot-timeout: 1200
+          target: default
           arch: x86_64
           profile: pixel_2
+          force-avd-creation: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
           disable-animations: true
           script: bash -c 'set +e; gradle :app:testDebugUnitTest --stacktrace; UNIT_STATUS=$?; if [ "$UNIT_STATUS" -ne 0 ]; then adb logcat -d -v threadtime > "$GITHUB_WORKSPACE/unit-test-logcat.txt" 2>&1; exit "$UNIT_STATUS"; fi; adb logcat -c; gradle :app:connectedDebugAndroidTest --stacktrace --info; TEST_STATUS=$?; if [ "$TEST_STATUS" -ne 0 ]; then adb logcat -d -v threadtime > "$GITHUB_WORKSPACE/instrumentation-logcat.txt" 2>&1; adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/activity-state.txt" 2>&1; adb shell dumpsys meminfo > "$GITHUB_WORKSPACE/emulator-memory.txt" 2>&1; adb shell dumpsys package ru.scooblydoon.thunbudget.analytics > "$GITHUB_WORKSPACE/app-package-state.txt" 2>&1; exit "$TEST_STATUS"; fi; gradle :app:assembleDebug --stacktrace'
       - name: Upload emulator diagnostics
