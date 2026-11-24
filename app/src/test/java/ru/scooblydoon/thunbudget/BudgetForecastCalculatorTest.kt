@@ -37,7 +37,7 @@ class BudgetForecastCalculatorTest {
             firstEndDay = 23,
             monthsToAnalyze = 6
         )
-        assertFalse(result.categories.single().averageMonthlySpend >= 9000.0)
+        assertEquals(500.0, result.categories.single().averageMonthlySpend, 0.001)
     }
 
     @Test fun shortHistoryUsesOnlyAvailableMonths() {
