@@ -1797,6 +1797,7 @@ private fun ThunBudgetApp() {
             expenses = expenses,
             periodStart = periodStart,
             periodEnd = periodEnd,
+            firstPeriodStartDay = firstPeriodStartDay,
             firstPeriodEndDay = firstPeriodEndDay,
             onDismiss = { showDynamicAllocationDialog = false },
             onSave = { updated ->
