@@ -583,6 +583,7 @@ private fun ThunBudgetApp() {
     var showAllocationDialog by remember { mutableStateOf(false) }
     var showDynamicAllocationDialog by remember { mutableStateOf(false) }
     var showExpenseForecast by rememberSaveable { mutableStateOf(false) }
+    var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
@@ -1314,6 +1315,7 @@ private fun ThunBudgetApp() {
                             asOf = today,
                             firstStartDay = firstPeriodStartDay,
                             firstEndDay = firstPeriodEndDay,
+                            monthsToAnalyze = 6,
                             nextPeriodDays = forecastDays
                         )
                         Card(shape = RoundedCornerShape(20.dp)) {
