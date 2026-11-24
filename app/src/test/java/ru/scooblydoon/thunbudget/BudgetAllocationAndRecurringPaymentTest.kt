@@ -161,26 +161,8 @@ class RecurringPaymentTest {
         assertTrue(payment.canConfirm(february, LocalDate.of(2026, 3, 1)))
         assertFalse(payment.copy(completedMonths=setOf("2026-02")).canConfirm(february, LocalDate.of(2026, 3, 1)))
     }
-    @Test fun reminderIsScheduledOneDayBeforeDueDateAndOnDueDateOnly() {
-        val today = LocalDate.of(2026, 11, 23)
-        assertEquals(1L, recurringPaymentReminderDaysUntilDue(today, LocalDate.of(2026, 11, 24)))
-        assertEquals(0L, recurringPaymentReminderDaysUntilDue(today, today))
-        assertNull(recurringPaymentReminderDaysUntilDue(today, LocalDate.of(2026, 11, 25)))
-        assertNull(recurringPaymentReminderDaysUntilDue(today, LocalDate.of(2026, 11, 22)))
-    }
-
-    @Test fun reminderHandlesMonthBoundary() {
-        assertEquals(
-            1L,
-            recurringPaymentReminderDaysUntilDue(
-                LocalDate.of(2026, 11, 30),
-                LocalDate.of(2026, 12, 1)
-            )
-        )
-    }
-
 }
-}
+
 
 class RecurringPaymentReminderTest {
     @Test fun remindersAreScheduledOnlyOneDayBeforeAndOnDueDate() {
@@ -188,7 +170,9 @@ class RecurringPaymentReminderTest {
         val tomorrowPayment = RecurringPayment(title="Интернет", amount=500.0, category="Связь", dayOfMonth=25)
         val todayPayment = RecurringPayment(title="Аренда", amount=1000.0, category="Жильё", dayOfMonth=24)
         val laterPayment = RecurringPayment(title="Страховка", amount=2000.0, category="Прочее", dayOfMonth=27)
+
         val reminders = recurringPaymentRemindersFor(listOf(tomorrowPayment, todayPayment, laterPayment), today)
+
         assertEquals(2, reminders.size)
         assertTrue(reminders.any { it.payment.id == tomorrowPayment.id && it.isDayBefore })
         assertTrue(reminders.any { it.payment.id == todayPayment.id && !it.isDayBefore })
@@ -199,7 +183,11 @@ class RecurringPaymentReminderTest {
         val today = LocalDate.of(2026, 11, 24)
         val overdue = RecurringPayment(title="Старый платёж", amount=100.0, category="Прочее", dayOfMonth=20)
         val inactive = RecurringPayment(title="Пауза", amount=100.0, category="Прочее", dayOfMonth=25, active=false)
-        val completedToday = RecurringPayment(title="Уже оплачен", amount=100.0, category="Прочее", dayOfMonth=24, completedMonths=setOf("2026-11"))
+        val completedToday = RecurringPayment(
+            title="Уже оплачен", amount=100.0, category="Прочее", dayOfMonth=24,
+            completedMonths=setOf("2026-11")
+        )
+
         assertTrue(recurringPaymentRemindersFor(listOf(overdue, inactive, completedToday), today).isEmpty())
     }
 
@@ -207,6 +195,7 @@ class RecurringPaymentReminderTest {
         val today = LocalDate.of(2026, 2, 27)
         val payment = RecurringPayment(title="Платёж", amount=100.0, category="Прочее", dayOfMonth=28)
         val reminders = recurringPaymentRemindersFor(listOf(payment), today)
+
         assertEquals(1, reminders.size)
         assertEquals(LocalDate.of(2026, 2, 28), reminders.single().dueDate)
         assertTrue(reminders.single().isDayBefore)
@@ -216,6 +205,7 @@ class RecurringPaymentReminderTest {
         val today = LocalDate.of(2026, 11, 30)
         val payment = RecurringPayment(title="Подписка", amount=100.0, category="Прочее", dayOfMonth=1)
         val reminder = recurringPaymentRemindersFor(listOf(payment), today).single()
+
         assertEquals(LocalDate.of(2026, 12, 1), reminder.dueDate)
         assertTrue(reminder.isDayBefore)
     }
