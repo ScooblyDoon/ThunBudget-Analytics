@@ -640,7 +640,7 @@ private fun ThunBudgetApp() {
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.amount }
     val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
-    val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, false)
+    val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, analyticsIncomeMode == 1)
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(periodIncome>0.0) periodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
@@ -1364,7 +1364,7 @@ private fun ThunBudgetApp() {
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
                     }
-                    item { Text("Месячный доход для расчёта бюджета: ${money(analyticsMonthIncome)}", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(analyticsMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(analyticsMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
                         Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
