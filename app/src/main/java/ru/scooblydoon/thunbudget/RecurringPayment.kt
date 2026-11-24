@@ -76,3 +76,35 @@ class RecurringPaymentStore(context: Context) {
         return true
     }
 }
+
+internal data class RecurringPaymentReminder(
+    val payment: RecurringPayment,
+    val dueDate: LocalDate,
+    val isDayBefore: Boolean
+)
+
+/**
+ * Returns only the two intended reminder moments: the calendar day before
+ * a payment and the payment date itself. Overdue payments are deliberately excluded.
+ */
+internal fun recurringPaymentRemindersFor(
+    payments: List<RecurringPayment>,
+    today: LocalDate
+): List<RecurringPaymentReminder> {
+    val tomorrow = today.plusDays(1)
+    return payments.asSequence()
+        .filter { it.active }
+        .flatMap { payment ->
+            sequenceOf(today, tomorrow).mapNotNull { targetDate ->
+                val month = YearMonth.from(targetDate)
+                val dueDate = payment.dueDate(month)
+                if (dueDate != targetDate || payment.isCompleted(month)) {
+                    null
+                } else {
+                    RecurringPaymentReminder(payment, dueDate, isDayBefore = targetDate == tomorrow)
+                }
+            }
+        }
+        .sortedWith(compareBy<RecurringPaymentReminder> { it.dueDate }.thenBy { it.payment.title })
+        .toList()
+}
