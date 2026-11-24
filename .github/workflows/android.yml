@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       THUNBUDGET_SIGNING_KEY: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
       ANDROID_I_WANT_MY_TCG: "yes"
@@ -30,36 +30,75 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Run unit tests, launch Android emulator, instrumentation tests and build debug APK
+
+      - name: Run JVM unit tests (no emulator required)
+        run: gradle :app:testDebugUnitTest --stacktrace
+
+      - name: Run Android instrumentation tests and build debug APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 35
           emulator-boot-timeout: 1200
-          target: default
+          target: google_apis
           arch: x86_64
           profile: pixel_2
-          force-avd-creation: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -camera-back none
           disable-animations: true
-          script: bash -c 'set +e; gradle :app:testDebugUnitTest --stacktrace; UNIT_STATUS=$?; if [ "$UNIT_STATUS" -ne 0 ]; then adb logcat -d -v threadtime > "$GITHUB_WORKSPACE/unit-test-logcat.txt" 2>&1; exit "$UNIT_STATUS"; fi; adb logcat -c; gradle :app:connectedDebugAndroidTest --stacktrace --info; TEST_STATUS=$?; if [ "$TEST_STATUS" -ne 0 ]; then adb logcat -d -v threadtime > "$GITHUB_WORKSPACE/instrumentation-logcat.txt" 2>&1; adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/activity-state.txt" 2>&1; adb shell dumpsys meminfo > "$GITHUB_WORKSPACE/emulator-memory.txt" 2>&1; adb shell dumpsys package ru.scooblydoon.thunbudget.analytics > "$GITHUB_WORKSPACE/app-package-state.txt" 2>&1; exit "$TEST_STATUS"; fi; gradle :app:assembleDebug --stacktrace'
+          script: |
+            set -euo pipefail
+            echo "=== ADB device state ==="
+            adb devices -l
+            adb wait-for-device
+            for attempt in $(seq 1 120); do
+              boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+              sdk="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r' || true)"
+              if [ "$boot_completed" = "1" ] && [ "$sdk" = "35" ]; then
+                echo "Emulator ready: API $sdk"
+                break
+              fi
+              if [ "$attempt" -eq 120 ]; then
+                echo "Emulator did not become ready (boot=$boot_completed sdk=$sdk)"
+                adb devices -l || true
+                adb logcat -d -v threadtime > "$GITHUB_WORKSPACE/emulator-startup-logcat.txt" 2>&1 || true
+                exit 1
+              fi
+              sleep 5
+            done
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+            adb logcat -c
+            if ! gradle :app:connectedDebugAndroidTest --stacktrace --info; then
+              adb logcat -d -v threadtime > "$GITHUB_WORKSPACE/instrumentation-logcat.txt" 2>&1 || true
+              adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/activity-state.txt" 2>&1 || true
+              adb shell dumpsys meminfo > "$GITHUB_WORKSPACE/emulator-memory.txt" 2>&1 || true
+              adb shell dumpsys package ru.scooblydoon.thunbudget.analytics > "$GITHUB_WORKSPACE/app-package-state.txt" 2>&1 || true
+              adb devices -l > "$GITHUB_WORKSPACE/adb-devices.txt" 2>&1 || true
+              exit 1
+            fi
+            gradle :app:assembleDebug --stacktrace
+
       - name: Upload emulator diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: emulator-diagnostics
           path: |
+            emulator-startup-logcat.txt
             instrumentation-logcat.txt
-            unit-test-logcat.txt
             activity-state.txt
             emulator-memory.txt
             app-package-state.txt
+            adb-devices.txt
           if-no-files-found: ignore
           retention-days: 7
+
       - name: Decode persistent release keystore
         if: ${{ (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]')) && env.THUNBUDGET_SIGNING_KEY != '' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
         run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/thunbudget-release.jks"
+
       - name: Build signed release APK
         id: signed_release
         continue-on-error: true
@@ -70,6 +109,7 @@ jobs:
           THUNBUDGET_KEY_ALIAS: ${{ secrets.THUNBUDGET_KEY_ALIAS }}
           THUNBUDGET_KEY_PASSWORD: ${{ secrets.THUNBUDGET_KEY_PASSWORD }}
         run: gradle :app:assembleRelease
+
       - name: Upload signed release APK
         if: ${{ (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]')) && env.THUNBUDGET_SIGNING_KEY != '' && steps.signed_release.outcome == 'success' }}
         uses: actions/upload-artifact@v4
@@ -78,9 +118,11 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
       - name: Build debug APK (temporary, not suitable for upgrades)
         if: ${{ always() && ((github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[final-apk]')) || env.THUNBUDGET_SIGNING_KEY == '' || steps.signed_release.outcome == 'failure') }}
         run: gradle :app:assembleDebug
+
       - name: Upload debug APK
         if: ${{ always() && ((github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[final-apk]')) || env.THUNBUDGET_SIGNING_KEY == '' || steps.signed_release.outcome == 'failure') }}
         uses: actions/upload-artifact@v4
