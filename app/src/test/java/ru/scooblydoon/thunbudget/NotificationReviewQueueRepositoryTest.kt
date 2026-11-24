@@ -33,6 +33,18 @@ class NotificationReviewQueueRepositoryTest {
         assertEquals(listOf("one", "two"), queue.loadPending().map { it.sourcePayload })
     }
 
+    @Test fun oversizedSourcePayloadIsCappedWithoutChangingParsedOperation() {
+        val queue = NotificationReviewQueueRepository(MemoryStore())
+        val longPayload = "Покупка Магнит 100 ₽ " + "x".repeat(5_000)
+
+        queue.enqueue(event("Покупка Магнит 100 ₽"), packageName, longPayload)
+
+        val saved = queue.loadPending().single()
+        assertEquals(2_000, saved.sourcePayload.length)
+        assertTrue(saved.sourcePayload.startsWith("Покупка Магнит 100 ₽"))
+        assertEquals(10_000L, saved.amountKopecks)
+    }
+
     @Test fun sameMerchantAndAmountWithoutStableIdentityRemainSeparate() {
         val queue = NotificationReviewQueueRepository(MemoryStore())
         queue.enqueue(event("Покупка КрасАвтоТранс 48 ₽"), packageName, "first")
