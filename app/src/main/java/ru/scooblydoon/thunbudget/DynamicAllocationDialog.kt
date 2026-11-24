@@ -69,7 +69,11 @@ internal fun DynamicAllocationDialog(
         else category.percent
     }
     val sum = resultingShares.values.sum()
-    val valid = resultingShares.values.all { it.isFinite() && it in 0.0..100.0 } && sum <= 100.0001
+    val inputsValid = regular.all { category ->
+        if (accepted[category.name] != true) true
+        else values[category.name]?.replace(',', '.')?.toDoubleOrNull()?.let { it.isFinite() && it in 0.0..100.0 } == true
+    }
+    val valid = inputsValid && resultingShares.values.all { it.isFinite() && it in 0.0..100.0 } && sum <= 100.0001
     val totalAverage = averageFacts.values.sum()
     AlertDialog(
         onDismissRequest = onDismiss,
