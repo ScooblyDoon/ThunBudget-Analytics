@@ -64,6 +64,33 @@ class BudgetForecastCalculatorTest {
             monthsToAnalyze = 1,
             nextPeriodDays = 15
         )
-        assertEquals(3000.0 / 30.0 * 15.0, result.categories.single().forecastForPeriod, 0.001)
+        assertEquals(3000.0 / 31.0 * 15.0, result.categories.single().forecastForPeriod, 0.001)
     }
+    @Test fun includesReportingMonthOnItsFinalCalendarDay() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = listOf(ForecastExpense("Продукты", 1000.0, LocalDate.parse("2026-10-10"))),
+            asOf = LocalDate.parse("2026-11-08"),
+            firstStartDay = 9,
+            firstEndDay = 23,
+            monthsToAnalyze = 1
+        )
+        assertEquals(1, result.historyMonths)
+        assertEquals(1000.0, result.categories.single().averageMonthlySpend, 0.001)
+    }
+
+    @Test fun keepsCategoriesWithoutHistoryInForecastWithZeroSpend() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты", "Накопления"),
+            expenses = listOf(ForecastExpense("Продукты", 1200.0, LocalDate.parse("2026-10-10"))),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = 9,
+            firstEndDay = 23,
+            monthsToAnalyze = 1
+        )
+        val savings = result.categories.single { it.category == "Накопления" }
+        assertFalse(savings.hasHistory)
+        assertEquals(0.0, savings.averageMonthlySpend, 0.001)
+    }
+
 }
