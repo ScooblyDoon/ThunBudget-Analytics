@@ -1,3 +1,10 @@
+## Income calculation fixes (2026-11-24)
+- Sum both reporting-period income entries for the selected month and show the raw total separately from the estimated full-calendar-month income.
+- Estimate a full-month amount from the average daily income across the selected reporting periods, scaled to the calendar month's actual number of days.
+- Change the period-income quick action to append a new income transaction without overwriting existing entries.
+- Carry forward the unspent balance of completed reporting periods into the next period's available budget, without counting carryover as new income.
+- Add regression tests for monthly normalization and accumulated carryover.
+
 # Changelog
 
 ## 1.3.14
