@@ -135,7 +135,7 @@ class NotificationReviewQueueRepository(
         runCatching { store.write(encode(items)) }.getOrDefault(false)
 
     private fun encode(items: List<NotificationQueueItem>): String = buildString {
-        append(HEADER).append('\\n')
+        append(HEADER).append('\n')
         items.forEach { item ->
             val fields = listOf(
                 item.id, item.sourcePackage, item.notificationKey, item.bankReferenceId,
@@ -146,7 +146,7 @@ class NotificationReviewQueueRepository(
                 item.editedMerchant, item.editedCategory, item.decisionAtMillis?.toString(),
                 item.stableDeduplicationKey, item.amountWasCleared.toString()
             )
-            append(fields.joinToString("\\t") { encodeField(it) }).append('\\n')
+            append(fields.joinToString("\t") { encodeField(it) }).append('\n')
         }
     }
 
@@ -158,7 +158,7 @@ class NotificationReviewQueueRepository(
         val expectedFields = if (header == HEADER) FIELD_COUNT else FIELD_COUNT_V1
         return lines.drop(1).mapNotNull { line ->
             runCatching {
-                val parts = line.split('\\t')
+                val parts = line.split('\t')
                 require(parts.size == expectedFields)
                 val values = parts.map(::decodeField)
                 val item = NotificationQueueItem(
