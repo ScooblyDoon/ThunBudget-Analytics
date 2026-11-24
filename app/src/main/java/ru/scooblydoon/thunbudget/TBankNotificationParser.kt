@@ -61,10 +61,10 @@ object TBankNotificationParser {
         if (raw.isBlank()) return null
 
         val normalized = normalize(raw)
-        val amount = parseAmountKopecks(raw)
+        val type = classify(normalized)
+        val amount = parseAmountKopecks(raw, type)
         val currency = if (Regex("""(?i)(₽|руб(?:\.|лей|ля)?|RUB)""").containsMatchIn(raw)) "RUB" else null
         val merchant = extractMerchant(raw, normalized, input.title)
-        val type = classify(normalized)
         val reasons = mutableListOf<ReviewReason>()
 
         var flow = when (type) {
@@ -162,29 +162,48 @@ object TBankNotificationParser {
     }
 
     /**
-     * Extract currency amounts independently, then discard values belonging to
-     * cashback/balance clauses. This works regardless of clause order.
-     * If zero or multiple transaction candidates remain, refuse to guess.
+     * Extract the transaction amount while treating informational amounts
+     * conservatively. Cashback-only notifications keep their own amount.
      */
-    private fun parseAmountKopecks(raw: String): Long? {
+    private fun parseAmountKopecks(raw: String, type: OperationType): Long? {
         val amountPattern =
-            """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)"""
+            """(?<![\\p{L}\\d])(?:−|-)?\\s*(\\d{1,3}(?:[\\s\\u00A0]\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?\\s*(?:₽|руб(?:\\.|лей|ля)?|RUB)"""
         val amountRegex = Regex(amountPattern, RegexOption.IGNORE_CASE)
+        var candidateText = raw
 
-        // Remove amounts explicitly labelled as informational (cashback or balance)
-        // before looking for the transaction amount. This avoids relying on sentence
-        // punctuation, which varies across notification formats.
-        val informationalAmountRegex = Regex(
-            """(?i)(?:кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)[^₽\n]*?\s*$amountPattern""",
-            RegexOption.IGNORE_CASE
-        )
-        val transactionText = informationalAmountRegex.replace(raw, " ")
-        val candidates = amountRegex.findAll(transactionText).toList()
+        if (type == OperationType.PURCHASE) {
+            // Cashback is informational only in a purchase notification. In a
+            // cashback-only notification its amount is the actual operation.
+            val cashbackAmount = Regex(
+                """(?i)(?:кэшбэк|кешбэк|cashback)[^₽\\n]*?\\s*$amountPattern"""
+            )
+            candidateText = cashbackAmount.replace(candidateText, " ")
 
-        // Multiple remaining amounts are deliberately not guessed.
+            // "Остаток" is an informational balance label wherever it appears.
+            val remainingAmount = Regex(
+                """(?i)остаток[^₽\\n]*?\\s*$amountPattern"""
+            )
+            candidateText = remainingAmount.replace(candidateText, " ")
+
+            // A card-balance figure is discarded when it precedes the purchase.
+            // If it follows the purchase, keep both amounts and require review
+            // rather than silently assuming which one is the transaction.
+            val balanceIndex = Regex("""(?i)баланс|доступно на счете|доступно на карте""")
+                .find(candidateText)?.range?.first
+            val purchaseIndex = Regex("""(?i)покупка|оплата|оплачено|списание|purchase|payment""")
+                .find(candidateText)?.range?.first
+            if (balanceIndex != null && purchaseIndex != null && balanceIndex < purchaseIndex) {
+                val balanceAmount = Regex(
+                    """(?i)(?:баланс|доступно на счете|доступно на карте)[^₽\\n]*?\\s*$amountPattern"""
+                )
+                candidateText = balanceAmount.replace(candidateText, " ")
+            }
+        }
+
+        val candidates = amountRegex.findAll(candidateText).toList()
         if (candidates.size != 1) return null
         val match = candidates.single()
-        val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
+        val whole = match.groupValues[1].replace(Regex("""[\\s\\u00A0]"""), "")
         val fraction = match.groupValues[2].ifBlank { "0" }.padEnd(2, '0')
         return runCatching {
             BigDecimal(whole).add(BigDecimal("0.$fraction"))
