@@ -1294,7 +1294,6 @@ private fun ThunBudgetApp() {
                         }
                     }
                     item {
-                        val forecastMonths = 6
                         val forecastPeriodProposal = ReportingPeriodCalculator.propose(
                             YearMonth.from(today), firstPeriodStartDay, firstPeriodEndDay
                         )
@@ -1316,7 +1315,6 @@ private fun ThunBudgetApp() {
                             asOf = today,
                             firstStartDay = firstPeriodStartDay,
                             firstEndDay = firstPeriodEndDay,
-                            monthsToAnalyze = forecastMonths,
                             nextPeriodDays = forecastDays
                         )
                         Card(shape = RoundedCornerShape(20.dp)) {
@@ -1326,7 +1324,7 @@ private fun ThunBudgetApp() {
                                     TextButton(onClick = { showExpenseForecast = !showExpenseForecast }) { Text(if (showExpenseForecast) "Свернуть ▲" else "Развернуть ▼") }
                                 }
                                 if (showExpenseForecast) {
-                                Text("Средние расходы по завершённым отчётным месяцам. Текущий незавершённый месяц не учитывается.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Средние расходы по завершённым отчётным периодам. Текущий незавершённый период не учитывается.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text("Учтено отчётных периодов: ${forecast.historyMonths}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
@@ -1344,7 +1342,7 @@ private fun ThunBudgetApp() {
                                         Column(Modifier.weight(1f)) {
                                             Text(categoryForecast.category, fontWeight = FontWeight.Medium)
                                             if (!categoryForecast.hasHistory) {
-                                                Text("Нет расходов в выбранной истории", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text("Нет расходов в доступной истории", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
                                         Column(horizontalAlignment = Alignment.End) {
