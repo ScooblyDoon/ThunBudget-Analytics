@@ -165,4 +165,22 @@ class TBankNotificationParserTest {
         assertTrue(event.requiresReview)
         assertTrue(event.reviewReasons.contains(TBankNotificationParser.ReviewReason.AMBIGUOUS_AMOUNT))
     }
+    @Test fun decimalPunctuationDoesNotSplitTransactionAmount() {
+        val comma = TBankNotificationParser.parse(input("Покупка Магнит 220,96 ₽"))!!
+        val dot = TBankNotificationParser.parse(input("Покупка Магнит 220.96 ₽"))!!
+        assertEquals(22096L, comma.amountKopecks)
+        assertEquals(22096L, dot.amountKopecks)
+    }
+
+    @Test fun informationalAmountAndPurchaseAmountSeparatedBySentenceAreHandled() {
+        val event = TBankNotificationParser.parse(input("Баланс карты 5 000 ₽. Покупка Магнит 220,96 ₽"))!!
+        assertEquals(22096L, event.amountKopecks)
+    }
+
+    @Test fun ambiguousAmountsInsideSameClauseRequireReview() {
+        val event = TBankNotificationParser.parse(input("Покупка Магнит 220 ₽ и списание 300 ₽"))!!
+        assertNull(event.amountKopecks)
+        assertTrue(event.requiresReview)
+    }
+
 }
