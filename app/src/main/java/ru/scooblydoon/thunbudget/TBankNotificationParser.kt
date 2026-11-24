@@ -167,25 +167,24 @@ object TBankNotificationParser {
      * If zero or multiple transaction candidates remain, refuse to guess.
      */
     private fun parseAmountKopecks(raw: String): Long? {
-        val amountRegex = Regex(
-            """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)""",
+        val amountPattern =
+            """(?<![\\p{L}\\d])(?:−|-)?\\s*(\\d{1,3}(?:[\\s\\u00A0]\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?\\s*(?:₽|руб(?:\\.|лей|ля)?|RUB)"""
+        val amountRegex = Regex(amountPattern, RegexOption.IGNORE_CASE)
+
+        // Remove amounts explicitly labelled as informational (cashback or balance)
+        // before looking for the transaction amount. This avoids relying on sentence
+        // punctuation, which varies across notification formats.
+        val informationalAmountRegex = Regex(
+            """(?i)(?:кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)[^₽\\n]*?\\s*$amountPattern""",
             RegexOption.IGNORE_CASE
         )
-        val informational = Regex(
-            """(?i)(кэшбэк|кешбэк|cashback|баланс|остаток|доступно на счете|доступно на карте)"""
-        )
+        val transactionText = informationalAmountRegex.replace(raw, " ")
+        val candidates = amountRegex.findAll(transactionText).toList()
 
-        // Split on clause boundaries only. Decimal separators have no following
-        // whitespace, so 220,96 ₽ and 220.96 ₽ stay intact.
-        val clauses = raw.split(Regex("""[,;]\s+|[.!?]\s+|\n+"""))
-        val candidates = clauses
-            .filterNot { informational.containsMatchIn(it) }
-            .flatMap { clause -> amountRegex.findAll(clause).toList() }
-
-        // Multiple possible transaction amounts are deliberately not guessed.
+        // Multiple remaining amounts are deliberately not guessed.
         if (candidates.size != 1) return null
         val match = candidates.single()
-        val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
+        val whole = match.groupValues[1].replace(Regex("""[\\s\\u00A0]"""), "")
         val fraction = match.groupValues[2].ifBlank { "0" }.padEnd(2, '0')
         return runCatching {
             BigDecimal(whole).add(BigDecimal("0.$fraction"))
