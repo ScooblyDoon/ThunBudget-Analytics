@@ -77,8 +77,21 @@ object BudgetForecastCalculator {
             val average = if (monthCount > 0) total / monthCount else 0.0
             val hasHistory = inHistory.any { it.category.equals(category, ignoreCase = true) }
             val periodForecast = if (monthCount > 0 && nextPeriodDays != null) {
-                val targetMonth = latestCompleted!!.plusMonths(1)
-                average / targetMonth.lengthOfMonth() * nextPeriodDays.coerceAtLeast(0)
+                // A reporting period may cross two calendar months (e.g. 24th–8th).
+                // Scale the monthly average by the exact number of days in the next
+                // configured reporting period, using the observed average cycle length.
+                val nextCycle = ReportingPeriodCalculator.propose(
+                    latestCompleted!!.plusMonths(1), firstStartDay, firstEndDay
+                )
+                val targetDays = java.time.temporal.ChronoUnit.DAYS.between(
+                    nextCycle.first.start, nextCycle.second.end
+                ) + 1
+                val historyDays = history.sumOf { month ->
+                    val cycle = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
+                    java.time.temporal.ChronoUnit.DAYS.between(cycle.first.start, cycle.second.end) + 1
+                }
+                val averageCycleDays = if (history.isNotEmpty()) historyDays.toDouble() / history.size else targetDays.toDouble()
+                if (averageCycleDays > 0.0) average / averageCycleDays * targetDays else 0.0
             } else average
             CategoryForecast(category, average, average, periodForecast, monthCount, hasHistory)
         }
@@ -111,7 +124,7 @@ object BudgetForecastCalculator {
         return (0L..12L).map { current.minusMonths(it) }
             .filter { month ->
                 val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
-                asOf.isAfter(proposal.second.end)
+                !asOf.isBefore(proposal.second.end)
             }.sorted()
     }
 }
