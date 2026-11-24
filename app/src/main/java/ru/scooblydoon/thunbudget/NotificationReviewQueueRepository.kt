@@ -54,6 +54,7 @@ class NotificationReviewQueueRepository(
         private const val HEADER = "THUNBUDGET_NOTIFICATION_QUEUE_V2"
         private const val FIELD_COUNT_V1 = 21
         private const val FIELD_COUNT = 22
+        private const val MAX_SOURCE_PAYLOAD_CHARS = 2_000
         private const val T_BANK_PACKAGE = TBankNotificationParser.T_BANK_PACKAGE
     }
 
@@ -86,7 +87,8 @@ class NotificationReviewQueueRepository(
             amountKopecks = event.amountKopecks, currency = event.currency,
             merchant = event.merchant, category = event.category,
             observedAtMillis = event.observedAtMillis, confidence = event.confidence,
-            reviewReasons = event.reviewReasons.map { it.name }, sourcePayload = sourcePayload
+            reviewReasons = event.reviewReasons.map { it.name },
+            sourcePayload = sourcePayload.take(MAX_SOURCE_PAYLOAD_CHARS)
         )
         check(persist(current)) { "Не удалось сохранить очередь уведомлений." }
         return NotificationQueueEnqueueResult.INSERTED
