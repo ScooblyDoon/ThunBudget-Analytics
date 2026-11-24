@@ -27,7 +27,7 @@ class AnalyticsBudgetTest {
             YearMonth.of(2026, 11),
             true
         )
-        assertEquals(70000.0, result, 0.001)
+        assertEquals(70000.0 / 31.0 * 30.0, result, 0.001)
     }
 
     @Test fun metricsShowFreePercentAndRequiredIncrease() {
@@ -50,4 +50,26 @@ class AnalyticsBudgetTest {
         assertEquals(0.0, proposal.percentages["Развлечения"]!!, 0.001)
         assertEquals(100.0, proposal.percentages.values.sum(), 0.001)
     }
+    @Test fun carryoverAddsPreviousUnusedBalanceAndSubtractsExpenses() {
+        val incomes = listOf(
+            PeriodIncome("2026-10-24", "2026-11-08", 50000.0),
+            PeriodIncome("2026-11-09", "2026-11-23", 40000.0)
+        )
+        val expenses = listOf(
+            Expense(1L, "Покупки", "Продукты", 30000.0, "2026-11-01"),
+            Expense(2L, "Проезд", "Транспорт", 10000.0, "2026-11-15")
+        )
+        assertEquals(50000.0, AnalyticsBudgetCalculator.carryoverBefore("2026-11-24", incomes, expenses), 0.001)
+    }
+
+    @Test fun carryoverNeverBecomesNegativeAndIgnoresCurrentPeriodIncome() {
+        val incomes = listOf(
+            PeriodIncome("2026-10-24", "2026-11-08", 10000.0),
+            PeriodIncome("2026-11-09", "2026-11-23", 50000.0),
+            PeriodIncome("2026-11-24", "2026-12-08", 90000.0)
+        )
+        val expenses = listOf(Expense(1L, "Покупки", "Продукты", 15000.0, "2026-11-01"))
+        assertEquals(0.0, AnalyticsBudgetCalculator.carryoverBefore("2026-11-24", incomes, expenses), 0.001)
+    }
+
 }
