@@ -583,6 +583,7 @@ private fun ThunBudgetApp() {
     var showAllocationDialog by remember { mutableStateOf(false) }
     var showDynamicAllocationDialog by remember { mutableStateOf(false) }
     var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
+    var showExpenseForecast by rememberSaveable { mutableStateOf(false) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
@@ -1261,9 +1262,39 @@ private fun ThunBudgetApp() {
                 }
                 1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
-                    item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick={showAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Рассчитать доли по истории расходов") }; Button(onClick={showDynamicAllocationDialog=true},modifier=Modifier.fillMaxWidth()) { Text("Динамический прогноз по факту из «Обзора»") } } }
                     item {
-                        var forecastMonths by rememberSaveable { mutableIntStateOf(6) }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { showAllocationDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Рассчитать доли по истории расходов")
+                            }
+                            Card {
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Автоматическое распределение", fontWeight = FontWeight.SemiBold)
+                                        Text("Доли рассчитываются по всей истории расходов.", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
+                                        if (enabled) {
+                                            val snapshot = categories.map { it.copy() }
+                                            manualAllocationSnapshot = snapshot
+                                            store.saveManualAllocationSnapshot(snapshot)
+                                            autoAllocationEnabled = true
+                                            store.saveAutoAllocationEnabled(true)
+                                            showDynamicAllocationDialog = true
+                                        } else {
+                                            val restored = manualAllocationSnapshot.map { it.copy() }
+                                            store.restoreCategoriesExactly(restored)
+                                            categories = restored
+                                            autoAllocationEnabled = false
+                                            store.saveAutoAllocationEnabled(false)
+                                        }
+                                    })
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        val forecastMonths = 6
                         val forecastPeriodProposal = ReportingPeriodCalculator.propose(
                             YearMonth.from(today), firstPeriodStartDay, firstPeriodEndDay
                         )
@@ -1290,22 +1321,13 @@ private fun ThunBudgetApp() {
                         )
                         Card(shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Прогноз расходов", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                Text("Средние расходы по завершённым отчётным месяцам. Текущий незавершённый месяц не учитывается.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("История:", style = MaterialTheme.typography.bodyMedium)
-                                    Spacer(Modifier.width(8.dp))
-                                    SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
-                                        (1..6).forEach { months ->
-                                            SegmentedButton(
-                                                selected = forecastMonths == months,
-                                                onClick = { forecastMonths = months },
-                                                shape = SegmentedButtonDefaults.itemShape(months - 1, 6)
-                                            ) { Text(months.toString()) }
-                                        }
-                                    }
+                                    Text("Прогноз расходов", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                                    TextButton(onClick = { showExpenseForecast = !showExpenseForecast }) { Text(if (showExpenseForecast) "Свернуть ▲" else "Развернуть ▼") }
                                 }
-                                Text("В расчёте: ${forecast.historyMonths} заверш. мес.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (showExpenseForecast) {
+                                Text("Средние расходы по завершённым отчётным месяцам. Текущий незавершённый месяц не учитывается.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Учтено отчётных периодов: ${forecast.historyMonths}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
@@ -1334,6 +1356,7 @@ private fun ThunBudgetApp() {
                                 if (forecast.historyMonths == 0) {
                                     Text("Пока недостаточно завершённых отчётных месяцев для прогноза. Данные появятся после закрытия первого периода.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
+                                }
                             }
                         }
                     }
@@ -1343,34 +1366,6 @@ private fun ThunBudgetApp() {
                         val currentEnd = LocalDate.parse(periodEnd)
                         val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
-                    }
-                    item {
-                        Card {
-                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                Row(verticalAlignment=Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text("Автоматическое распределение", fontWeight=FontWeight.SemiBold)
-                                        Text("Доли обновляются по фактическим расходам выбранного периода.", style=MaterialTheme.typography.bodySmall)
-                                    }
-                                    Switch(checked=autoAllocationEnabled, onCheckedChange={ enabled ->
-                                        if (enabled) {
-                                            val snapshot = categories.map { it.copy() }
-                                            manualAllocationSnapshot = snapshot
-                                            store.saveManualAllocationSnapshot(snapshot)
-                                            autoAllocationEnabled = true
-                                            store.saveAutoAllocationEnabled(true)
-                                            showDynamicAllocationDialog = true
-                                        } else {
-                                            val restored = manualAllocationSnapshot.map { it.copy() }
-                                            store.restoreCategoriesExactly(restored)
-                                            categories = restored
-                                            autoAllocationEnabled = false
-                                            store.saveAutoAllocationEnabled(false)
-                                        }
-                                    })
-                                }
-                            }
-                        }
                     }
                     item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; val selectedMonthIncome=AnalyticsBudgetCalculator.monthlyIncome(income,periodIncomes,analyticsMonth,analyticsIncomeMode==1); Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(selectedMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(selectedMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
