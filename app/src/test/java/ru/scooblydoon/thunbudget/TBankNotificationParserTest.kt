@@ -134,4 +134,35 @@ class TBankNotificationParserTest {
         assertEquals(TBankNotificationParser.OperationType.BALANCE_NOTICE, event.operationType)
         assertEquals(TBankNotificationParser.Flow.NONE, event.flow)
     }
+
+    @Test fun ignoresCashbackAmountWhenCashbackAppearsBeforePurchase() {
+        val event = TBankNotificationParser.parse(
+            input("Кэшбэк 11 ₽, покупка Магнит 220,96 ₽")
+        )!!
+        assertEquals(TBankNotificationParser.OperationType.PURCHASE, event.operationType)
+        assertEquals(22096L, event.amountKopecks)
+        assertEquals(TBankNotificationParser.Flow.EXPENSE, event.flow)
+    }
+
+    @Test fun ignoresBalanceAmountWhenBalanceAppearsBeforePurchase() {
+        val event = TBankNotificationParser.parse(
+            input("Баланс карты 5 000 ₽. Покупка Магнит 220 ₽")
+        )!!
+        assertEquals(TBankNotificationParser.OperationType.PURCHASE, event.operationType)
+        assertEquals(22000L, event.amountKopecks)
+    }
+
+    @Test fun parsesNonBreakingSpaceGroupedThousandsAndKopecks() {
+        val event = TBankNotificationParser.parse(input("Покупка Магнит 12 345,67 ₽"))!!
+        assertEquals(1_234_567L, event.amountKopecks)
+    }
+
+    @Test fun refusesToChooseBetweenTwoTransactionAmounts() {
+        val event = TBankNotificationParser.parse(
+            input("Покупка Магнит 100 ₽. Покупка Аптека 200 ₽")
+        )!!
+        assertNull(event.amountKopecks)
+        assertTrue(event.requiresReview)
+        assertTrue(event.reviewReasons.contains(TBankNotificationParser.ReviewReason.AMBIGUOUS_AMOUNT))
+    }
 }
