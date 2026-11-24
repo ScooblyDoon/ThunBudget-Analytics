@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationManagerCompat
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -46,7 +45,7 @@ object RecurringPaymentNotifications {
             Log.w(TAG, "Notification skipped: POST_NOTIFICATIONS permission is not granted")
             return false
         }
-        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+        if (!manager.areNotificationsEnabled()) {
             Log.w(TAG, "Notification skipped: notifications are disabled by the system")
             return false
         }
