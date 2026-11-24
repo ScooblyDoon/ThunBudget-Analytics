@@ -19,38 +19,28 @@ internal fun DynamicAllocationDialog(
     expenses: List<Expense>,
     periodStart: String,
     periodEnd: String,
+    firstPeriodStartDay: Int = 9,
     firstPeriodEndDay: Int = 23,
     onDismiss: () -> Unit,
     onSave: (List<BudgetCategory>) -> Unit
 ) {
     val regular = categories.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
     var monthsToAnalyze by remember { mutableIntStateOf(3) }
-    val monthBuckets = remember(expenses, firstPeriodEndDay, monthsToAnalyze) {
-        val today = LocalDate.now()
-        val latestCompletedMonth = YearMonth.from(today).let { current ->
-            val endDay = firstPeriodEndDay.coerceAtMost(current.lengthOfMonth())
-            if (today.dayOfMonth > endDay) current else current.minusMonths(1)
-        }
-        (0 until monthsToAnalyze).map { offset ->
-            val month = latestCompletedMonth.minusMonths(offset.toLong())
-            val end = month.atDay(firstPeriodEndDay.coerceAtMost(month.lengthOfMonth()))
-            val previous = month.minusMonths(1)
-            val start = previous.atDay(firstPeriodEndDay.coerceAtMost(previous.lengthOfMonth())).plusDays(1)
-            val rows = expenses.filter { runCatching {
-                val date = LocalDate.parse(it.date)
-                !date.isBefore(start) && !date.isAfter(end)
-            }.getOrDefault(false) }
-            month to rows
-        }.filter { (_, rows) -> rows.isNotEmpty() }
+    val forecast = remember(expenses, categories, firstPeriodStartDay, firstPeriodEndDay, monthsToAnalyze) {
+        BudgetForecastCalculator.calculate(
+            categories = regular.map { it.name },
+            expenses = expenses.mapNotNull { row ->
+                runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+            },
+            asOf = LocalDate.now(),
+            firstStartDay = firstPeriodStartDay,
+            firstEndDay = firstPeriodEndDay,
+            monthsToAnalyze = monthsToAnalyze
+        )
     }
-    val availableMonths = monthBuckets.size
-    val averageFacts = remember(monthBuckets, regular) {
-        val monthsWithData = availableMonths.coerceAtLeast(1)
-        regular.associate { category ->
-            category.name to monthBuckets.sumOf { (_, rows) ->
-                rows.filter { it.category == category.name }.sumOf { it.amount.coerceAtLeast(0.0) }
-            } / monthsWithData
-        }
+    val availableMonths = forecast.historyMonths
+    val averageFacts = remember(forecast) {
+        forecast.categories.associate { it.category to it.averageMonthlySpend }
     }
     val proposal = remember(categories, averageFacts, availableMonths) {
         AnalyticsBudgetCalculator.dynamicProposal(regular.map { it.name to it.percent }, averageFacts)
@@ -80,7 +70,7 @@ internal fun DynamicAllocationDialog(
         title = { Text("Динамический прогноз долей") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 560.dp)) {
-                Text("Средние расходы по двум отчётным периодам за месяц", fontWeight = FontWeight.SemiBold)
+                Text("Прогноз расходов по полной истории отчётных периодов", fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     (1..6).forEach { count ->
                         FilterChip(selected = monthsToAnalyze == count, onClick = { monthsToAnalyze = count }, label = { Text("$count") })
@@ -88,7 +78,7 @@ internal fun DynamicAllocationDialog(
                 }
                 Text(
                     if (availableMonths == 0) "За выбранную историю расходов нет."
-                    else "Учтено месяцев с расходами: $availableMonths из $monthsToAnalyze · Средний расход: ${String.format(Locale("ru", "RU"), "%,.0f ₽", totalAverage)} в месяц",
+                    else "Учтено месяцев с расходами: $availableMonths из $monthsToAnalyze · Средний расход: ${String.format(Locale("ru", "RU"), "%,.0f ₽", forecast.totalMonthlyForecast)} на следующий месяц",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text("Для каждой категории можно отдельно принять рекомендацию, оставить прежнюю долю или изменить предложенный процент.", style = MaterialTheme.typography.bodySmall)
@@ -103,7 +93,7 @@ internal fun DynamicAllocationDialog(
                                     Checkbox(checked = isAccepted, onCheckedChange = { accepted[category.name] = it })
                                     Column(Modifier.weight(1f)) {
                                         Text(category.name, fontWeight = FontWeight.SemiBold)
-                                        Text("Среднее за месяц: ${String.format(Locale("ru", "RU"), "%,.0f ₽", spent)} · Было: ${String.format(Locale("ru", "RU"), "%.1f", category.percent)}%", style = MaterialTheme.typography.labelSmall)
+                                        Text("Прогноз на месяц: ${String.format(Locale("ru", "RU"), "%,.0f ₽", spent)} · Было: ${String.format(Locale("ru", "RU"), "%.1f", category.percent)}%", style = MaterialTheme.typography.labelSmall)
                                     }
                                     OutlinedTextField(
                                         value = proposed,
