@@ -167,7 +167,7 @@ object TBankNotificationParser {
      */
     private fun parseAmountKopecks(raw: String, type: OperationType): Long? {
         val amountPattern =
-            """(?<![\\p{L}\\d])(?:−|-)?\\s*(\\d{1,3}(?:[\\s\\u00A0]\\d{3})+|\\d+)(?:[.,](\\d{1,2}))?\\s*(?:₽|руб(?:\\.|лей|ля)?|RUB)"""
+            """(?<![\p{L}\d])(?:−|-)?\s*(\d{1,3}(?:[\s\u00A0]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб(?:\.|лей|ля)?|RUB)"""
         val amountRegex = Regex(amountPattern, RegexOption.IGNORE_CASE)
         var candidateText = raw
 
@@ -175,13 +175,13 @@ object TBankNotificationParser {
             // Cashback is informational only in a purchase notification. In a
             // cashback-only notification its amount is the actual operation.
             val cashbackAmount = Regex(
-                """(?i)(?:кэшбэк|кешбэк|cashback)[^₽\\n]*?\\s*$amountPattern"""
+                """(?i)(?:кэшбэк|кешбэк|cashback)[^₽\n]*?\s*$amountPattern"""
             )
             candidateText = cashbackAmount.replace(candidateText, " ")
 
             // "Остаток" is an informational balance label wherever it appears.
             val remainingAmount = Regex(
-                """(?i)остаток[^₽\\n]*?\\s*$amountPattern"""
+                """(?i)остаток[^₽\n]*?\s*$amountPattern"""
             )
             candidateText = remainingAmount.replace(candidateText, " ")
 
@@ -194,7 +194,7 @@ object TBankNotificationParser {
                 .find(candidateText)?.range?.first
             if (balanceIndex != null && purchaseIndex != null && balanceIndex < purchaseIndex) {
                 val balanceAmount = Regex(
-                    """(?i)(?:баланс|доступно на счете|доступно на карте)[^₽\\n]*?\\s*$amountPattern"""
+                    """(?i)(?:баланс|доступно на счете|доступно на карте)[^₽\n]*?\s*$amountPattern"""
                 )
                 candidateText = balanceAmount.replace(candidateText, " ")
             }
@@ -203,7 +203,7 @@ object TBankNotificationParser {
         val candidates = amountRegex.findAll(candidateText).toList()
         if (candidates.size != 1) return null
         val match = candidates.single()
-        val whole = match.groupValues[1].replace(Regex("""[\\s\\u00A0]"""), "")
+        val whole = match.groupValues[1].replace(Regex("""[\s\u00A0]"""), "")
         val fraction = match.groupValues[2].ifBlank { "0" }.padEnd(2, '0')
         return runCatching {
             BigDecimal(whole).add(BigDecimal("0.$fraction"))
