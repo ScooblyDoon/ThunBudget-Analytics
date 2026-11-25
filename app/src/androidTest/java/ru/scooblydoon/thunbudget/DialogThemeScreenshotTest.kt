@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.Modifier
@@ -30,7 +31,8 @@ class DialogThemeScreenshotTest {
         assertDialogSurface(
             dark = true,
             expected = android.graphics.Color.rgb(0x21, 0x22, 0x2D),
-            forbidden = android.graphics.Color.WHITE
+            forbidden = android.graphics.Color.WHITE,
+            expectedField = android.graphics.Color.rgb(0x34, 0x34, 0x40)
         )
     }
 
@@ -39,11 +41,12 @@ class DialogThemeScreenshotTest {
         assertDialogSurface(
             dark = false,
             expected = android.graphics.Color.WHITE,
-            forbidden = android.graphics.Color.rgb(0x21, 0x22, 0x2D)
+            forbidden = android.graphics.Color.rgb(0x21, 0x22, 0x2D),
+            expectedField = android.graphics.Color.rgb(0xF0, 0xF2, 0xF5)
         )
     }
 
-    private fun assertDialogSurface(dark: Boolean, expected: Int, forbidden: Int) {
+    private fun assertDialogSurface(dark: Boolean, expected: Int, forbidden: Int, expectedField: Int) {
         // ComposeTestRule performs setContent on the Activity's main/UI thread.
         // Calling activity.setContent directly from the instrumentation test thread
         // throws CalledFromWrongThreadException before the dialog is even rendered.
@@ -62,7 +65,12 @@ class DialogThemeScreenshotTest {
                 AppAlertDialog(
                     onDismissRequest = {},
                     title = { Text("Проверка темы окна") },
-                    text = { Text("Проверка фактического цвета поверхности") },
+                    text = {
+                        androidx.compose.foundation.layout.Column {
+                            Text("Проверка фактического цвета поверхности")
+                            TextField(value = "Тестовое поле", onValueChange = {})
+                        }
+                    },
                     confirmButton = { Button(onClick = {}) { Text("OK") } }
                 )
             }
@@ -74,12 +82,17 @@ class DialogThemeScreenshotTest {
         try {
             val expectedPixels = countNear(bitmap, expected)
             val forbiddenPixels = countNear(bitmap, forbidden)
+            val fieldPixels = countNear(bitmap, expectedField)
             assertTrue(
                 "Ожидаемый цвет " + Integer.toHexString(expected) + " найден только в " + expectedPixels +
                     " пикселях; контрольный цвет " + Integer.toHexString(forbidden) + " найден в " + forbiddenPixels,
                 // Surface area depends on emulator density and dialog height; compare against
                 // the forbidden color rather than requiring a fixed 5,000 exact-color pixels.
                 expectedPixels > 500 && expectedPixels > forbiddenPixels + 1_000
+            )
+            assertTrue(
+                "Ожидаемый цвет поверхности поля " + Integer.toHexString(expectedField) + " найден только в " + fieldPixels + " пикселях",
+                fieldPixels > 100
             )
             assertTrue(
                 "В окне обнаружено слишком много пикселей контрольного цвета " +
