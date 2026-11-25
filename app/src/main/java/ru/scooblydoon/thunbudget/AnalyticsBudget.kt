@@ -39,24 +39,36 @@ internal object AnalyticsBudgetCalculator {
     fun carryoverBefore(
         currentPeriodStart: String,
         periodIncomes: List<PeriodIncome>,
-        expenses: List<Expense>
+        expenses: List<Expense>,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
     ): Double {
         val cutoff = java.time.LocalDate.parse(currentPeriodStart)
-        val completed = periodIncomes.mapNotNull { row ->
-            runCatching {
-                val start = java.time.LocalDate.parse(row.start)
-                val end = java.time.LocalDate.parse(row.end)
-                if (end.isBefore(cutoff) && !end.isBefore(start)) {
-                    Triple(start, end, row.amount.coerceAtLeast(0.0))
-                } else null
-            }.getOrNull()
-        }.sortedBy { it.first }
+        val earliest = periodIncomes.mapNotNull { row ->
+            runCatching { java.time.LocalDate.parse(row.start) }.getOrNull()
+        }.minOrNull() ?: return 0.0
+        val firstMonth = java.time.YearMonth.from(earliest)
+        val lastMonth = java.time.YearMonth.from(cutoff)
+        val monthCount = java.time.temporal.ChronoUnit.MONTHS.between(firstMonth, lastMonth).coerceAtLeast(0L)
+        val periods = (0L..monthCount).flatMap { offset ->
+            val month = firstMonth.plusMonths(offset)
+            runCatching { ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay) }
+                .getOrNull()
+                ?.let { listOf(it.first, it.second) }
+                .orEmpty()
+        }.filter { it.start >= earliest && it.end.isBefore(cutoff) }
+            .distinctBy { it.start to it.end }
+            .sortedBy { it.start }
+        val incomeByPeriod = periodIncomes.associate { row ->
+            (row.start to row.end) to row.amount.coerceAtLeast(0.0)
+        }
         var balance = 0.0
-        completed.forEach { (start, end, amount) ->
+        periods.forEach { period ->
+            val amount = incomeByPeriod[period.start.toString() to period.end.toString()] ?: 0.0
             val spent = expenses.asSequence().filter { expense ->
                 runCatching {
                     val date = java.time.LocalDate.parse(expense.date)
-                    !date.isBefore(start) && !date.isAfter(end)
+                    !date.isBefore(period.start) && !date.isAfter(period.end)
                 }.getOrDefault(false)
             }.sumOf { it.amount.coerceAtLeast(0.0) }
             balance = (balance + amount - spent).coerceAtLeast(0.0)
