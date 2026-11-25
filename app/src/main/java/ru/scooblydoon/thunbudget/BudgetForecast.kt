@@ -39,7 +39,8 @@ data class BudgetForecast(
 
 object BudgetForecastCalculator {
     private const val RECENCY_DECAY = 0.85
-    private const val MAX_CURRENT_PACE_WEIGHT = 0.50
+    private const val MAX_CURRENT_PACE_WEIGHT = 0.35
+    private const val MAX_CURRENT_PACE_MULTIPLIER = 2.0
 
     /**
      * Uses the full available history of completed reporting periods as a
@@ -126,11 +127,21 @@ object BudgetForecastCalculator {
                 currentCategoryExpenses.sumOf { it.amount } / activeElapsedDays.toDouble()
             } else 0.0
 
+            // A single unusually large purchase must not be extrapolated as if it
+            // were a new daily habit. Existing categories may accelerate, but the
+            // observed pace is capped at 2x their historical baseline and blended
+            // in gradually. New categories need repeated evidence or at least half
+            // a reporting period before their current pace is extrapolated.
+            val cappedCurrentRate = if (hasCompletedHistory && historicalRate > 0.0) {
+                minOf(currentRate, historicalRate * MAX_CURRENT_PACE_MULTIPLIER)
+            } else currentRate
+            val enoughNewCategoryEvidence = currentCategoryExpenses.size >= 2 ||
+                (activeTotalDays > 0L && activeElapsedDays.toDouble() / activeTotalDays.toDouble() >= 0.5)
             val dailyRate = when {
                 hasCompletedHistory && hasCurrentData ->
-                    historicalRate * (1.0 - activeWeight) + currentRate * activeWeight
+                    historicalRate * (1.0 - activeWeight) + cappedCurrentRate * activeWeight
                 hasCompletedHistory -> historicalRate
-                hasCurrentData -> currentRate
+                hasCurrentData && enoughNewCategoryEvidence -> currentRate
                 else -> 0.0
             }.coerceAtLeast(0.0)
 
