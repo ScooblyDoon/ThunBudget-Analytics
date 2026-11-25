@@ -2,7 +2,6 @@ package ru.scooblydoon.thunbudget
 
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,16 +27,27 @@ class DialogThemeScreenshotTest {
 
     @Test
     fun darkDialogSurfaceIsGraphiteNotWhite() {
-        assertDialogSurface(true, android.graphics.Color.rgb(0x21, 0x22, 0x2D), android.graphics.Color.WHITE)
+        assertDialogSurface(
+            dark = true,
+            expected = android.graphics.Color.rgb(0x21, 0x22, 0x2D),
+            forbidden = android.graphics.Color.WHITE
+        )
     }
 
     @Test
     fun lightDialogSurfaceIsWhite() {
-        assertDialogSurface(false, android.graphics.Color.WHITE, android.graphics.Color.rgb(0x21, 0x22, 0x2D))
+        assertDialogSurface(
+            dark = false,
+            expected = android.graphics.Color.WHITE,
+            forbidden = android.graphics.Color.rgb(0x21, 0x22, 0x2D)
+        )
     }
 
     private fun assertDialogSurface(dark: Boolean, expected: Int, forbidden: Int) {
-        composeRule.activity.setContent {
+        // ComposeTestRule performs setContent on the Activity's main/UI thread.
+        // Calling activity.setContent directly from the instrumentation test thread
+        // throws CalledFromWrongThreadException before the dialog is even rendered.
+        composeRule.setContent {
             val scheme = if (dark) {
                 darkColorScheme(background = Color(0xFF090A10), surface = Color(0xFF171821))
             } else {
@@ -53,18 +63,26 @@ class DialogThemeScreenshotTest {
                 )
             }
         }
+
         composeRule.waitForIdle()
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         val bitmap: Bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
             ?: throw AssertionError("Не удалось получить скриншот окна")
-        val expectedPixels = countNear(bitmap, expected)
-        val forbiddenPixels = countNear(bitmap, forbidden)
-        assertTrue(
-            "Ожидаемый цвет " + Integer.toHexString(expected) + " найден только в " + expectedPixels +
-                " пикселях; контрольный цвет " + Integer.toHexString(forbidden) + " найден в " + forbiddenPixels,
-            expectedPixels > 5_000
-        )
-        bitmap.recycle()
+        try {
+            val expectedPixels = countNear(bitmap, expected)
+            val forbiddenPixels = countNear(bitmap, forbidden)
+            assertTrue(
+                "Ожидаемый цвет " + Integer.toHexString(expected) + " найден только в " + expectedPixels +
+                    " пикселях; контрольный цвет " + Integer.toHexString(forbidden) + " найден в " + forbiddenPixels,
+                expectedPixels > 5_000
+            )
+            assertTrue(
+                "В окне обнаружено слишком много пикселей контрольного цвета " +
+                    Integer.toHexString(forbidden) + ": " + forbiddenPixels,
+                forbiddenPixels < 5_000
+            )
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private fun countNear(bitmap: Bitmap, color: Int): Int {
