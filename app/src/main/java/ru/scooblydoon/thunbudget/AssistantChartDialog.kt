@@ -17,6 +17,7 @@ internal fun AssistantChartDialog(
     val maxValue = values.maxOfOrNull { it.second }?.coerceAtLeast(1.0) ?: 1.0
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
