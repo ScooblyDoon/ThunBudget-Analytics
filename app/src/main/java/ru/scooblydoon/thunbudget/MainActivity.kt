@@ -16,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
@@ -613,6 +614,21 @@ private fun ThunBudgetApp() {
     var showResetConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
+    SideEffect {
+        (context as? Activity)?.window?.let { window ->
+            val navigationColor = if (darkTheme) android.graphics.Color.rgb(41, 43, 67)
+                else android.graphics.Color.rgb(255, 254, 255)
+            window.navigationBarColor = navigationColor
+            window.statusBarColor = if (darkTheme) android.graphics.Color.rgb(17, 19, 33)
+                else android.graphics.Color.rgb(246, 245, 252)
+            if (Build.VERSION.SDK_INT >= 29) {
+                window.isNavigationBarContrastEnforced = false
+                window.isStatusBarContrastEnforced = false
+            }
+            WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = !darkTheme
+            WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !darkTheme
+        }
+    }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
     var showCarryoverConfirmation by remember { mutableStateOf(false) }
