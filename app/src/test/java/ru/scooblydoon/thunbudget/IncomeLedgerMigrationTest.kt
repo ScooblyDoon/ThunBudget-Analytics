@@ -29,6 +29,24 @@ class IncomeLedgerMigrationTest {
     }
 
     @Test
+    fun migrationPreservesEarnedAndCarryoverAmountsSeparately() {
+        val migrated = IncomeLedgerMigration.migrate(
+            listOf(
+                LegacyPeriodIncome(
+                    start = "2026-11-09",
+                    end = "2026-11-23",
+                    amount = 70000.0,
+                    earnedAmount = 50000.0,
+                    carryoverAmount = 20000.0
+                )
+            )
+        )
+        assertEquals(2, migrated.size)
+        assertEquals(50000.0, migrated.filterNot { it.isCarryover }.sumOf { it.amount }, 0.001)
+        assertEquals(20000.0, migrated.filter { it.isCarryover }.sumOf { it.amount }, 0.001)
+    }
+
+    @Test
     fun leavesBaseBudgetIncomeOutsideTheLedger() {
         val migrated = IncomeLedgerMigration.migrate(
             listOf(LegacyPeriodIncome("2026-11-01", "2026-11-30", 0.0))
