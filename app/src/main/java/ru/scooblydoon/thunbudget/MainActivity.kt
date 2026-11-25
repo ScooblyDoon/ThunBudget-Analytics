@@ -1484,12 +1484,33 @@ private fun ThunBudgetApp() {
                         val periodFacts = categories.associate { cat ->
                             cat.name to expenses.filter { it.category == cat.name && it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         }
+                        val selectedStart = LocalDate.parse(periodStart)
+                        val selectedEnd = LocalDate.parse(periodEnd)
+                        val forecastFrom = maxOf(today, selectedStart)
+                        val forecastDays = if (today.isAfter(selectedEnd)) 0 else
+                            (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, selectedEnd) + 1L).toInt()
+                        val periodForecast = BudgetForecastCalculator.calculate(
+                            categories = categories.map { it.name },
+                            expenses = expenses.mapNotNull { row ->
+                                runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+                            },
+                            asOf = today,
+                            firstStartDay = firstPeriodStartDay,
+                            firstEndDay = firstPeriodEndDay,
+                            monthsToAnalyze = 6,
+                            nextPeriodDays = forecastDays
+                        )
+                        val projectedSpend = periodFacts.mapValues { (category, actual) ->
+                            actual + (periodForecast.categories.firstOrNull { it.category == category }?.forecastForPeriod ?: 0.0)
+                        }
                         val budgetPerPercent = if (periodIncome > 0.0) periodIncome / 100.0
                             else plannedForPeriod(income, 1.0, periodStart, periodEnd)
                         val redistribution = BudgetAllocationCalculator.redistribute(
-                            categories.map { it.name to it.percent },
-                            periodFacts,
-                            budgetPerPercent
+                            categories = categories.map { it.name to it.percent },
+                            spentByCategory = periodFacts,
+                            budgetPerPercent = budgetPerPercent,
+                            forecastSpentByCategory = projectedSpend,
+                            safetyBufferPercent = 2.0
                         )
                         if (redistribution.transfers.isEmpty()) {
                             Text("Превышений, которые можно покрыть за счёт категорий с достаточным свободным остатком, нет.")
@@ -1503,7 +1524,7 @@ private fun ThunBudgetApp() {
                                     )
                                 }
                                 Text(
-                                    "Сначала используются категории с запасом от 20%, затем от 15% и от 10%. Категории с запасом 5% и менее не затрагиваются.",
+                                    "Сначала используются резервные средства и перенос средств. Затем учитывается прогноз по завершённым отчётным периодам: обычные категории сохраняют запас 2% дохода, а доноры выбираются по наибольшему прогнозному остатку.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
