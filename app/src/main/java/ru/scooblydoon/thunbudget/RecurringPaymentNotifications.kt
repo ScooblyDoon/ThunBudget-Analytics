@@ -11,6 +11,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.work.WorkManager
+import androidx.work.Worker
+import androidx.work.WorkerParameters
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -30,6 +33,7 @@ object RecurringPaymentNotifications {
      */
     fun schedule(context: Context) {
         val appContext = context.applicationContext
+        WorkManager.getInstance(appContext).cancelUniqueWork("thunbudget_recurring_payment_reminders")
         val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val now = ZonedDateTime.now()
         var nextRun = now.toLocalDate().atTime(DAILY_CHECK_TIME).atZone(now.zone)
@@ -138,5 +142,14 @@ class RecurringPaymentBootReceiver : BroadcastReceiver() {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
             RecurringPaymentNotifications.schedule(context)
         }
+    }
+}
+
+
+/** Compatibility worker for periodic jobs scheduled by older app versions. */
+class RecurringPaymentReminderWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    override fun doWork(): Result {
+        RecurringPaymentNotifications.checkAndReschedule(applicationContext)
+        return Result.success()
     }
 }
