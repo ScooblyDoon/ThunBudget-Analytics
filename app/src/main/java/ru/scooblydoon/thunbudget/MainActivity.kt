@@ -2971,7 +2971,7 @@ private fun SettingsDialog(
     var sourceNames by remember { mutableStateOf(categories.map { it.name }) }
     var from by remember { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     var to by remember { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
-    var section by rememberSaveable { mutableStateOf("income") }
+    var section by rememberSaveable { mutableStateOf("categories") }
     val sections = listOf(
         "categories" to "Категории",
         "income" to "Доход",
