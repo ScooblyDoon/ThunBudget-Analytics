@@ -1253,7 +1253,7 @@ private fun ThunBudgetApp() {
             }
         ) { padding ->
             when(tab) {
-                0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=24.dp)) {
+                0 -> LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=24.dp)) {
                     item { Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     items(dashboardOrder,key={it}) { section ->
                         when(section) {
@@ -1353,7 +1353,7 @@ private fun ThunBudgetApp() {
                         }
                     }
                 }
-                1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+                1 -> LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1685,7 +1685,7 @@ private fun ThunBudgetApp() {
                     }
                     item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
                 }
-                2 -> Box(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                2 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     ChartsScreen(
                         expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
                         showPlan=showPlanChart,onShowPlanChange={showPlanChart=it; persistUiExpanded(context,"chart_plan",it)},showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
@@ -1694,10 +1694,10 @@ private fun ThunBudgetApp() {
                         fallbackIncome=income,periodIncomes=periodIncomes
                     )
                 }
-                3 -> Box(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                3 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     AnnualChartsScreen(expenses=expenses,categories=categories,year=annualChartYear,onYearChange={annualChartYear=it},selectedCategoryNames=selectedAnnualChartCategoryNames,onSelectedCategoryNamesChange={selectedAnnualChartCategoryNames=it},showCategoryCharts=showAnnualCategoryCharts,onShowCategoryChartsChange={showAnnualCategoryCharts=it; persistUiExpanded(context,"annual_category_charts",it)})
                 }
-                5 -> Box(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                5 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     RecurringPaymentsScreen(
                     payments = recurringPayments,
                     categories = categories,
@@ -1721,7 +1721,7 @@ private fun ThunBudgetApp() {
                     }
                     )
                 }
-                else -> LazyColumn(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                else -> LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     item { Text("История операций",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item { Row(verticalAlignment=Alignment.CenterVertically) {
                         Text("Фильтры операций",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
