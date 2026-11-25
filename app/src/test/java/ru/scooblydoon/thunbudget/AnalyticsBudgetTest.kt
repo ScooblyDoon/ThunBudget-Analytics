@@ -30,6 +30,28 @@ class AnalyticsBudgetTest {
         assertEquals(70000.0, result, 0.001)
     }
 
+
+    @Test fun carryoverIsIncludedInPeriodTotalButExcludedFromEarnedMonthlyIncome() {
+        val period = PeriodIncome(
+            start = "2026-11-09",
+            end = "2026-11-23",
+            amount = 70000.0,
+            earnedAmount = 50000.0,
+            carryoverAmount = 20000.0
+        )
+        assertEquals(70000.0, period.amount, 0.001)
+        assertEquals(
+            50000.0,
+            AnalyticsBudgetCalculator.monthlyIncome(
+                120000.0,
+                listOf(period),
+                YearMonth.of(2026, 11),
+                true
+            ),
+            0.001
+        )
+    }
+
     @Test fun metricsShowFreePercentAndRequiredIncrease() {
         val free = AnalyticsBudgetCalculator.metrics(10000.0, 7500.0)
         assertEquals(25.0, free.remainingPercent!!, 0.001)
