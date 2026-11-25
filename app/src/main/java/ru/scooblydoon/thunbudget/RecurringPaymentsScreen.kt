@@ -478,8 +478,21 @@ private fun RecurringPaymentDetailsDialog(
                     TextButton(onClick = onDelete) { Text("Удалить", color = MaterialTheme.colorScheme.error) }
                 }
             }
-        }
-    }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm, enabled = canConfirm) {
+                Text(
+                    when {
+                        payment.isCompleted(month) -> "Оплачен"
+                        !payment.active -> "На паузе"
+                        dueDate.isAfter(today) -> "Ещё рано"
+                        else -> "Подтвердить"
+                    }
+                )
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Закрыть") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
