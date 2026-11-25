@@ -1636,8 +1636,8 @@ private fun ThunBudgetApp() {
                     }
                     item { TextButton(onClick={showMonthCategories=!showMonthCategories; persistUiExpanded(context,"month_categories",showMonthCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showMonthCategories) items(categories,key={ "month-"+it.name }) { cat ->
-                        val from=analyticsMonth.atDay(1).toString()
-                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
+                        val from=analyticsRangeStart
+                        val to=minOf(analyticsRangeEnd,today.toString())
                         val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
                         val plan=plannedForPeriod(analyticsMonthIncome,cat.percent,from,to)
                         Card { Column(Modifier.padding(14.dp)) {
@@ -2244,6 +2244,29 @@ private fun ThunBudgetApp() {
             dismissButton = { TextButton(onClick = { showCarryoverConfirmation = false }) { Text("Отмена") } }
         )
     }
+    if (showAnalyticsRangeEditor) PeriodEditorDialog(
+        analyticsRangeStart, analyticsRangeEnd,
+        onDismiss = { showAnalyticsRangeEditor = false },
+        onSave = { from, to ->
+            analyticsRangeStart = from
+            analyticsRangeEnd = to
+            selectedSavedAnalyticsPeriod = null
+            showAnalyticsRangeEditor = false
+        }
+    )
+    if (showSaveAnalyticsPeriod) SaveAnalyticsPeriodDialog(
+        start = analyticsRangeStart,
+        end = analyticsRangeEnd,
+        existingNames = savedAnalyticsPeriods.map { it.name },
+        onDismiss = { showSaveAnalyticsPeriod = false },
+        onSave = { name ->
+            val saved = SavedAnalyticsPeriod(name.trim(), analyticsRangeStart, analyticsRangeEnd)
+            store.saveAnalyticsPeriod(saved)
+            savedAnalyticsPeriods = store.loadSavedAnalyticsPeriods()
+            selectedSavedAnalyticsPeriod = saved.name
+            showSaveAnalyticsPeriod = false
+        }
+    )
     if(showPeriodEditor) PeriodEditorDialog(periodStart,periodEnd,onDismiss={showPeriodEditor=false},onSave={from,to->
         periodStart=from; periodEnd=to; store.savePeriod(from,to); selectedPeriod=-1; store.saveSelectedPeriod(-1); showPeriodEditor=false
     })
@@ -3258,6 +3281,41 @@ private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (
             }
         )
     }
+}
+
+@Composable
+private fun SaveAnalyticsPeriodDialog(
+    start: String,
+    end: String,
+    existingNames: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    val duplicate = existingNames.any { it.equals(name.trim(), true) }
+    AlertDialog(
+        containerColor = themedDialogContainerColor(),
+        onDismissRequest = onDismiss,
+        title = { Text("Сохранить период") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("$start — $end", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(32) },
+                    label = { Text("Название периода") },
+                    placeholder = { Text("Например, Период зарплаты") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (duplicate) Text("Период с таким названием уже есть — он будет обновлён.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text(if (duplicate) "Обновить" else "Сохранить") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
 }
 
 @Composable
