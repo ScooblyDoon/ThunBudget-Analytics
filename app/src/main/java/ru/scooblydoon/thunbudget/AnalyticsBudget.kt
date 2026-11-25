@@ -91,17 +91,21 @@ internal object AnalyticsBudgetCalculator {
         currentShares: List<Pair<String, Double>>,
         actualSpent: Map<String, Double>
     ): DynamicAllocationProposal {
-        val regular = currentShares.filterNot { it.first.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
-        val total = actualSpent.values.sumOf { it.coerceAtLeast(0.0) }
+        val regular = currentShares.filterNot {
+            it.first.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) ||
+                it.first.equals("Перенос средств", true)
+        }
+        val relevantSpent = actualSpent.filterKeys { !it.equals("Перенос средств", true) }
+        val total = relevantSpent.values.sumOf { it.coerceAtLeast(0.0) }
         if (regular.isEmpty()) return DynamicAllocationProposal(emptyMap(), total, false)
         if (total <= 0.0) return DynamicAllocationProposal(regular.toMap(), 0.0, false)
         val knownNames = regular.map { it.first }.toSet()
-        val actualTotal = actualSpent.filterKeys { it in knownNames }.values.sumOf { it.coerceAtLeast(0.0) }
+        val actualTotal = relevantSpent.filterKeys { it in knownNames }.values.sumOf { it.coerceAtLeast(0.0) }
         val spentShares = regular.associate { (name, _) ->
-            name to ((actualSpent[name] ?: 0.0).coerceAtLeast(0.0) / total * 100.0)
+            name to ((relevantSpent[name] ?: 0.0).coerceAtLeast(0.0) / total * 100.0)
         }
-        val actualNames = regular.filter { (actualSpent[it.first] ?: 0.0) > 0.0 }
-        val noSpend = regular.filter { (actualSpent[it.first] ?: 0.0) <= 0.0 }
+        val actualNames = regular.filter { (relevantSpent[it.first] ?: 0.0) > 0.0 }
+        val noSpend = regular.filter { (relevantSpent[it.first] ?: 0.0) <= 0.0 }
         val remainder = (100.0 - actualNames.sumOf { spentShares[it.first] ?: 0.0 }).coerceAtLeast(0.0)
         val noSpendCurrent = noSpend.sumOf { it.second.coerceAtLeast(0.0) }
         val result = spentShares.toMutableMap()
