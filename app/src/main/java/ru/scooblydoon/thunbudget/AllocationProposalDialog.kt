@@ -51,9 +51,8 @@ internal fun AllocationProposalDialog(
         v != null && v.isFinite() && v in 0.0..100.0
     }
     val reserve = (100.0 - sum).coerceAtLeast(0.0)
-    AlertDialog(
-        containerColor = themedDialogContainerColor(),
-        onDismissRequest = onDismiss,
+    AppAlertDialog(
+                onDismissRequest = onDismiss,
         title = { Text("Распределение бюджета") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 540.dp)) {
