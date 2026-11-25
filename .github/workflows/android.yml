@@ -58,7 +58,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Build debug APK (temporary, not suitable for upgrades)
-        if: ${{ always() && ((github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[final-apk]')) || env.THUNBUDGET_SIGNING_KEY == '' || steps.signed_release.outcome == 'failure') }}
+        if: ${{ !cancelled() && ((github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[final-apk]')) || env.THUNBUDGET_SIGNING_KEY == '' || steps.signed_release.outcome == 'failure') }}
         run: gradle :app:assembleDebug
       - name: Upload debug APK
         if: ${{ always() && ((github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[final-apk]')) || env.THUNBUDGET_SIGNING_KEY == '' || steps.signed_release.outcome == 'failure') }}
