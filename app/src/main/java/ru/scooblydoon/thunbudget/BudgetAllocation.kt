@@ -71,30 +71,63 @@ object BudgetAllocationCalculator {
     }
 
     /**
-     * Covers overspent categories from donors with the largest relative remaining balance.
-     * Donor priority is >=20%, then >=15%, then >=10%; <=5% and the 6–9% gap are not used.
+     * Covers actual overspending from reserve categories first, then from categories
+     * whose forecast remains safely below their planned limit.
+     *
+     * forecastSpentByCategory is the expected total spend for the selected period
+     * (actual spend to date plus the forecast for its remaining days). Ordinary
+     * donors keep a safety margin of [safetyBufferPercent] percentage points.
      */
     fun redistribute(
         categories: List<Pair<String, Double>>,
         spentByCategory: Map<String, Double>,
-        budgetPerPercent: Double
+        budgetPerPercent: Double,
+        forecastSpentByCategory: Map<String, Double> = emptyMap(),
+        safetyBufferPercent: Double = 2.0
     ): Redistribution {
         if (budgetPerPercent <= 0.0) return Redistribution(emptyList(), categories.toMap())
+
+        fun isReserve(name: String): Boolean =
+            name.equals(RESERVE_CATEGORY, ignoreCase = true) ||
+                name.equals("Непредвиденные расходы", ignoreCase = true) ||
+                name.equals("Перенос средств", ignoreCase = true)
+
         val updated = categories.toMap().toMutableMap()
-        val caps = categories.associate { it.first to it.second * budgetPerPercent }
-        val remaining = caps.mapValues { (name, cap) -> cap - (spentByCategory[name] ?: 0.0) }.toMutableMap()
+        val caps = categories.associate { it.first to it.second.coerceAtLeast(0.0) * budgetPerPercent }
+        val actual = categories.associate { (name, _) -> name to (spentByCategory[name] ?: 0.0).coerceAtLeast(0.0) }
+        val projected = categories.associate { (name, _) ->
+            name to maxOf(actual[name] ?: 0.0, (forecastSpentByCategory[name] ?: actual[name] ?: 0.0).coerceAtLeast(0.0))
+        }
+        val remaining = caps.mapValues { (name, cap) -> cap - (actual[name] ?: 0.0) }.toMutableMap()
+
         val deficits = categories.mapNotNull { (name, _) ->
-            val deficit = -(remaining[name] ?: 0.0)
-            if (deficit > 0.0001 && !name.equals(RESERVE_CATEGORY, true)) name to deficit else null
+            val deficit = (actual[name] ?: 0.0) - (caps[name] ?: 0.0)
+            if (deficit > 0.0001 && !isReserve(name)) name to deficit else null
         }.sortedByDescending { it.second }
+
+        val bufferAmount = safetyBufferPercent.coerceAtLeast(0.0) * budgetPerPercent
         val donors = categories.mapNotNull { (name, _) ->
             val cap = caps[name] ?: 0.0
-            val spare = remaining[name] ?: 0.0
-            val free = freePercent(cap, spentByCategory[name] ?: 0.0)
-            if (cap > 0.0 && spare > 0.0 && free != null && free >= 10.0 &&
-                !name.equals(RESERVE_CATEGORY, true) && !name.equals("Накопления", true)
-            ) Triple(name, spare, free) else null
-        }.sortedWith(compareByDescending<Triple<String, Double, Double>> { donorTier(it.third) }.thenByDescending { it.third }.thenByDescending { it.second })
+            val actualSpent = actual[name] ?: 0.0
+            val projectedSpend = projected[name] ?: actualSpent
+            val effectiveFreePercent = freePercent(cap, projectedSpend)
+            val reserve = isReserve(name)
+            val available = if (reserve) {
+                (cap - actualSpent).coerceAtLeast(0.0)
+            } else {
+                (cap - projectedSpend - bufferAmount).coerceAtLeast(0.0)
+            }
+            val eligible = cap > 0.0 && available > 0.0001 &&
+                (reserve || (effectiveFreePercent != null && effectiveFreePercent >= 10.0)) &&
+                !name.equals("Накопления", ignoreCase = true)
+            if (eligible) Triple(name, available, effectiveFreePercent ?: 100.0) else null
+        }.sortedWith(
+            compareByDescending<Triple<String, Double, Double>> { isReserve(it.first) }
+                .thenByDescending { if (isReserve(it.first)) Int.MAX_VALUE else donorTier(it.third) }
+                .thenByDescending { it.third }
+                .thenByDescending { it.second }
+        )
+
         val transfers = mutableListOf<Transfer>()
         val donorRemaining = donors.associate { it.first to it.second }.toMutableMap()
         deficits.forEach { (target, deficit) ->
@@ -109,6 +142,7 @@ object BudgetAllocationCalculator {
                 uncovered -= amount
             }
         }
+
         transfers.forEach { transfer ->
             val points = transfer.amount / budgetPerPercent
             updated[transfer.toCategory] = (updated[transfer.toCategory] ?: 0.0) + points
