@@ -47,7 +47,7 @@ internal fun ThunBudgetTheme(
 /** Shared visual system for every modal in ThunBudget. */
 @Composable
 internal fun themedDialogContainerColor(): Color =
-    if (LocalThunBudgetDarkTheme.current) Color(0xFF23242D)
+    if (LocalThunBudgetDarkTheme.current) Color(0xFF21222D)
     else Color(0xFFFFFFFF)
 
 @Composable
@@ -63,10 +63,10 @@ internal fun AppAlertDialog(
 ) {
     val base = MaterialTheme.colorScheme
     val isDark = LocalThunBudgetDarkTheme.current
-    val surfaceColor = if (isDark) Color(0xFF23242D) else Color(0xFFFFFFFF)
+    val surfaceColor = if (isDark) Color(0xFF21222D) else Color(0xFFFFFFFF)
     val foreground = if (isDark) Color(0xFFF3F2F8) else Color(0xFF1F2937)
     val secondary = if (isDark) Color(0xFFB4B7C2) else Color(0xFF6B7280)
-    val rowSurface = if (isDark) Color(0xFF343640) else Color(0xFFF0F2F5)
+    val rowSurface = if (isDark) Color(0xFF343440) else Color(0xFFF0F2F5)
     val primary = if (isDark) Color(0xFFB59AFF) else Color(0xFF445264)
     val error = if (isDark) Color(0xFFFF817A) else Color(0xFFD77A72)
     val outline = if (isDark) Color(0xFF50535F) else Color(0xFFD9DEE5)
