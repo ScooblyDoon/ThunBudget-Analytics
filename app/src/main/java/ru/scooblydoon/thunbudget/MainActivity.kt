@@ -615,7 +615,18 @@ private fun ThunBudgetApp() {
     val nextFirstMonth = baseMonth.plusMonths(1)
     val secondPeriodEnd = nextFirstMonth.atDay(firstPeriodStartDay.coerceAtMost(nextFirstMonth.lengthOfMonth())).minusDays(1)
     val isSecondPeriodToday = today.dayOfMonth < firstPeriodStartDay || today.dayOfMonth > firstPeriodEndDay
-    var selectedPeriod by remember { mutableIntStateOf(if (store.loadPeriodStart()!=null) -1 else if (isSecondPeriodToday) 1 else 0) }
+    val savedPeriodStart = store.loadPeriodStart()
+    val savedPeriodEnd = store.loadPeriodEnd()
+    var selectedPeriod by remember {
+        mutableIntStateOf(
+            when {
+                savedPeriodStart == firstPeriodStart.toString() && savedPeriodEnd == firstPeriodEnd.toString() -> 0
+                savedPeriodStart == secondPeriodStart.toString() && savedPeriodEnd == secondPeriodEnd.toString() -> 1
+                savedPeriodStart != null && savedPeriodEnd != null -> -1
+                else -> if (isSecondPeriodToday) 1 else 0
+            }
+        )
+    }
     var periodStart by remember { mutableStateOf(store.loadPeriodStart() ?: (if (isSecondPeriodToday) (if(today.dayOfMonth < firstPeriodStartDay) baseMonth.atDay(firstPeriodEndDay.coerceAtMost(baseMonth.lengthOfMonth())).plusDays(1) else secondPeriodStart) else firstPeriodStart).toString()) }
     var periodEnd by remember { mutableStateOf(store.loadPeriodEnd() ?: (if (isSecondPeriodToday) secondPeriodEnd else firstPeriodEnd).toString()) }
     var selectedExpense by remember { mutableStateOf<Expense?>(null) }
@@ -652,11 +663,6 @@ private fun ThunBudgetApp() {
     val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
     val monthTotal=monthExpenses.sumOf { it.amount }
 
-    LaunchedEffect(autoAllocationEnabled, expenses, periodStart, periodEnd) {
-        if (autoAllocationEnabled && !showDynamicAllocationDialog) {
-            showDynamicAllocationDialog = true
-        }
-    }
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
         if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
