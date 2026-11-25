@@ -522,6 +522,23 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ThunBudgetApp() {
     val context = LocalContext.current
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
+            .edit().putBoolean("payment_notification_permission_requested", true).apply()
+        if (granted) RecurringPaymentNotifications.checkAndReschedule(context)
+    }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            val notificationPrefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
+            if (!notificationPrefs.getBoolean("payment_notification_permission_requested", false)) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            RecurringPaymentNotifications.checkAndReschedule(context)
+        }
+    }
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     // Use a compact layout on narrow, short, or enlarged-text screens.
