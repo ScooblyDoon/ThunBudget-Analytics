@@ -43,7 +43,7 @@ object BudgetAllocationCalculator {
         asOf: LocalDate
     ): List<AllocationSuggestion> {
         val window = windowFor(asOf, expenses)
-        val knownCategories = categories.filterNot { it.equals(RESERVE_CATEGORY, ignoreCase = true) }
+        val knownCategories = categories.filterNot { it.equals(RESERVE_CATEGORY, ignoreCase = true) || it.equals("Перенос средств", ignoreCase = true) }
         val totals = knownCategories.associateWith { category ->
             expenses.asSequence()
                 .filter { it.category.equals(category, ignoreCase = true) }
