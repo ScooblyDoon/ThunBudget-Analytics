@@ -1456,7 +1456,7 @@ private fun ThunBudgetApp() {
                         val forecastCarryover = AnalyticsBudgetCalculator.carryoverBefore(
                             nextForecastRange.start.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay
                         )
-                        val forecastAvailableIncome = forecastIncomeRow?.amount?.plus(forecastCarryover)
+                        val forecastAvailableIncome = forecastIncomeRow?.earnedAmount?.plus(forecastCarryover)
                             ?: plannedForPeriod(income, 100.0, nextForecastRange.start.toString(), nextForecastRange.end.toString())
                         val forecastBalance = forecastAvailableIncome - forecastExpectedSpend
                         Card(shape = RoundedCornerShape(20.dp)) {
