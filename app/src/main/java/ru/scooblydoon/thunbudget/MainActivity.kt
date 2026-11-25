@@ -1411,6 +1411,20 @@ private fun ThunBudgetApp() {
                             monthsToAnalyze = 6,
                             nextPeriodDays = forecastDays
                         )
+                        val forecastActualToDate = expenses.filter { row ->
+                            row.date >= nextForecastRange.start.toString() && row.date <= minOf(today, nextForecastRange.end).toString() &&
+                                !row.category.equals("Перенос средств", true)
+                        }.sumOf { it.amount }
+                        val forecastExpectedSpend = forecastActualToDate + forecast.totalPeriodForecast
+                        val forecastIncomeRow = periodIncomes.firstOrNull {
+                            it.start == nextForecastRange.start.toString() && it.end == nextForecastRange.end.toString()
+                        }
+                        val forecastCarryover = AnalyticsBudgetCalculator.carryoverBefore(
+                            nextForecastRange.start.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay
+                        )
+                        val forecastAvailableIncome = forecastIncomeRow?.amount?.plus(forecastCarryover)
+                            ?: plannedForPeriod(income, 100.0, nextForecastRange.start.toString(), nextForecastRange.end.toString())
+                        val forecastBalance = forecastAvailableIncome - forecastExpectedSpend
                         Card(shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1418,36 +1432,65 @@ private fun ThunBudgetApp() {
                                     TextButton(onClick = { showExpenseForecast = !showExpenseForecast }) { Text(if (showExpenseForecast) "Свернуть ▲" else "Развернуть ▼") }
                                 }
                                 if (showExpenseForecast) {
-                                Text("Средние расходы по завершённым отчётным периодам. Текущий незавершённый период не учитывается.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("Учтено отчётных периодов: ${forecast.historyMonths}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
-                                        Text(money(forecast.totalMonthlyForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                    }
-                                    Column(Modifier.weight(1f)) {
-                                        Text("До ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
-                                        Text(money(forecast.totalPeriodForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                    }
-                                }
-                                Divider()
-                                forecast.categories.forEach { categoryForecast ->
+                                    Text(
+                                        "Оценка по исторической средней дневной трате. Прогноз расходов не ограничивается доходом: он показывает, сколько может быть потрачено при сохранении текущего темпа.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text("Учтено периодов в истории: ${forecast.historyPeriods}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text(categoryForecast.category, fontWeight = FontWeight.Medium)
-                                            if (!categoryForecast.hasHistory) {
-                                                Text("Нет расходов в доступной истории", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
+                                            Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
+                                            Text(money(forecast.totalMonthlyForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                         }
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            Text(money(categoryForecast.forecastForNextMonth), fontWeight = FontWeight.SemiBold)
-                                            Text("Период: ${money(categoryForecast.forecastForPeriod)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Ожидаемые расходы до ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
+                                            Text(money(forecastExpectedSpend), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                         }
                                     }
-                                }
-                                if (forecast.historyMonths == 0) {
-                                    Text("Пока недостаточно завершённых отчётных месяцев для прогноза. Данные появятся после закрытия первого периода.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                                    Divider()
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("Доход / доступные средства периода", style = MaterialTheme.typography.bodySmall)
+                                            Text(money(forecastAvailableIncome), fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Column(Modifier.weight(1f)) {
+                                            Text(if (forecastBalance >= 0.0) "Ожидаемый остаток" else "Прогнозируемый дефицит", style = MaterialTheme.typography.bodySmall)
+                                            Text(
+                                                money(kotlin.math.abs(forecastBalance)),
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (forecastBalance >= 0.0) Color(0xFF168A72) else Color(0xFFC74444)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        "Факт на сегодня: ${money(forecastActualToDate)} · Оценка оставшихся расходов: ${money(forecast.totalPeriodForecast)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Divider()
+                                    forecast.categories.forEach { categoryForecast ->
+                                        val categoryActual = expenses.filter { row ->
+                                            row.category.equals(categoryForecast.category, true) &&
+                                                row.date >= nextForecastRange.start.toString() &&
+                                                row.date <= minOf(today, nextForecastRange.end).toString()
+                                        }.sumOf { it.amount }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(categoryForecast.category, fontWeight = FontWeight.Medium)
+                                                if (!categoryForecast.hasHistory) {
+                                                    Text("Нет расходов в доступной истории", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                            }
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                Text(money(categoryForecast.forecastForNextMonth), fontWeight = FontWeight.SemiBold)
+                                                Text("До конца периода: ${money(categoryActual + categoryForecast.forecastForPeriod)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                    }
+                                    if (forecast.historyPeriods == 0) {
+                                        Text("Пока недостаточно истории завершённых периодов для надёжного прогноза.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             }
                         }
