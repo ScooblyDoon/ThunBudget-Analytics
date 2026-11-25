@@ -1324,6 +1324,8 @@ private fun ThunBudgetApp() {
                                             store.saveManualAllocationSnapshot(snapshot)
                                             autoAllocationEnabled = true
                                             store.saveAutoAllocationEnabled(true)
+                                            showAdvice = true
+                                            persistUiExpanded(context, "analytics_advice", true)
                                             showDynamicAllocationDialog = true
                                         } else {
                                             val restored = manualAllocationSnapshot.map { it.copy() }
