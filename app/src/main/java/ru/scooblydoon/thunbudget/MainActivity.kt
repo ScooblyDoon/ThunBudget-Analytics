@@ -2431,7 +2431,7 @@ private fun ChartsScreen(
     val from=month.atDay(1).toString(); val to=month.atEndOfMonth().toString()
     val monthExpenses=expenses.filter { it.date>=from && it.date<=to }
     val total=monthExpenses.sumOf { it.amount }
-    val monthIncome=periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==month }.getOrDefault(false) }.sumOf { it.amount }.let { if(it>0) it else fallbackIncome }
+    val monthIncome=periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==month }.getOrDefault(false) }.sumOf { it.earnedAmount }.let { if(it>0) it else fallbackIncome }
     val palette=listOf(Color(0xFF315CBA),Color(0xFF168A72),Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
     LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
         item { Text("Графики",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
