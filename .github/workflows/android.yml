@@ -73,3 +73,5 @@ jobs:
           retention-days: 14
 
 # [final-apk] Trigger release build from the dialog design branch.
+
+# [final-apk] Rebuild after forcing transparent dialog window background and explicit app theme propagation.
