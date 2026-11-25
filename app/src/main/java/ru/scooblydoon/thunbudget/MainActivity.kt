@@ -999,7 +999,7 @@ private fun ThunBudgetApp() {
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
         if (uri != null) {
             backupMessage = runCatching {
-                XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, periodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (monthKey, entries) ->
+                XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, effectivePeriodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (monthKey, entries) ->
                             runCatching { AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, YearMonth.parse(monthKey), true) }
                                 .getOrDefault(entries.sumOf { it.earnedAmount })
                         })
