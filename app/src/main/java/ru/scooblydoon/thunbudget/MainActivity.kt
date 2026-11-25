@@ -1311,6 +1311,7 @@ private fun ThunBudgetApp() {
                                                 Column(Modifier.weight(1f)) {
                                                     Text(entry.title,fontWeight=FontWeight.Medium)
                                                     Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(entry.isCarryover) Text("Это перенос между отчётными периодами. Изменение или удаление суммы синхронно изменит запись «Перенос средств» в исходном периоде.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                                 Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
                                                 TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
