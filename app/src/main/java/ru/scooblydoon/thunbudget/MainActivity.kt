@@ -552,7 +552,7 @@ private fun ThunBudgetApp() {
         ) {
             val notificationPrefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
             if (!notificationPrefs.getBoolean("payment_notification_permission_requested", false)) {
-                paymentNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         } else {
             RecurringPaymentNotifications.checkAndReschedule(context)
@@ -943,7 +943,7 @@ private fun ThunBudgetApp() {
         }
     }
 
-    val paymentNotificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     val voicePermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) {
@@ -1622,7 +1622,7 @@ private fun ThunBudgetApp() {
                     categories = categories,
                     onAdd = { payment ->
                         recurringPayments = recurringPayments + payment; store.saveRecurringPayments(recurringPayments)
-                        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) paymentNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     },
                     onUpdate = { payment ->
                         recurringPayments = recurringPayments.map { if (it.id == payment.id) payment else it }
