@@ -29,6 +29,13 @@ class VoiceInputUtilsTest {
         assertEquals(1250.75, (parseSpokenAmount("добавь расход 1 250,75 рублей") ?: 0.0), 0.001)
     }
 
+    @Test fun parsesSpokenThousandsAndGroupedThousands() {
+        assertEquals(54000.0, parseSpokenAmount("54 тысячи рублей") ?: 0.0, 0.001)
+        assertEquals(54000.0, parseSpokenAmount("54 тысяч рублей") ?: 0.0, 0.001)
+        assertEquals(54000.0, parseSpokenAmount("54 тыс. рублей") ?: 0.0, 0.001)
+        assertEquals(54000.0, parseSpokenAmount("54 000 рублей") ?: 0.0, 0.001)
+    }
+
     @Test fun parsesAmountWrittenInWords() {
         assertEquals(2550.0, (parseSpokenAmount("две тысячи пятьсот пятьдесят рублей") ?: 0.0), 0.001)
     }
