@@ -104,7 +104,7 @@ internal fun AllocationProposalDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = valid && sum <= 100.0001 && regular.isNotEmpty(), onClick = {
+            Button(enabled = valid && sum <= 100.0001 && regular.isNotEmpty(), onClick = {
                 val updated = regular.map { it.copy(percent = values[it.name]!!.replace(',', '.').toDouble()) }
                 val withReserve = BudgetAllocationCalculator.withReserve(updated.map { it.name to it.percent })
                 val reserveRow = withReserve.firstOrNull { it.first == BudgetAllocationCalculator.RESERVE_CATEGORY }?.let { BudgetCategory(it.first, it.second) }
