@@ -37,6 +37,6 @@ internal fun AssistantChartDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+        confirmButton = { Button(onClick = onDismiss) { Text("Закрыть") } }
     )
 }
