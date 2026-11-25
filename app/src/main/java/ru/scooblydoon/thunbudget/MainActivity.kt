@@ -1916,7 +1916,7 @@ private fun ThunBudgetApp() {
                 }
                 Text("Проверь данные перед сохранением.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
-            confirmButton={TextButton(
+            confirmButton={Button(
                 enabled = (draft.isCategoryRename || draft.isCategoryAdd || draft.isCategoryEdit ||
                     (if (draft.isDelete) voiceEditCandidates.any { it.id == voiceSelectedExpenseId }
                     else ((voiceAmount.replace(',', '.').toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true) && (!draft.isEdit || voiceEditCandidates.any { it.id == voiceSelectedExpenseId }))) &&
@@ -2043,7 +2043,7 @@ private fun ThunBudgetApp() {
             },
             confirmButton = {
                 Row {
-                    TextButton(onClick = {
+                    Button(onClick = {
                         if (ttsReady) speechOutput.speak(assistantSpeechText(message), TextToSpeech.QUEUE_FLUSH, null, "thunbudget_assistant_manual")
                     }, enabled = ttsReady) { Text("Повторить голосом") }
                     TextButton(onClick = { voiceMessage = null; assistantChartData = emptyList() }) { Text("Понятно") }
@@ -2125,7 +2125,7 @@ private fun ThunBudgetApp() {
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     enabled = assistantTextInput.isNotBlank(),
                     onClick = {
                         val phrase = assistantTextInput.trim()
@@ -2153,7 +2153,7 @@ private fun ThunBudgetApp() {
                 Text("Сумма ${money(carryoverAmount)} будет учтена как расход «Перенос средств» в первом периоде и как дополнительный доход во втором периоде. В первом периоде доступный остаток станет 0 ₽. Перенос не будет повторно учитываться как заработанный месячный доход.")
             },
             confirmButton = {
-                TextButton(onClick = {
+                Button(onClick = {
                     val amount = carryoverAmount
                     if (amount > 0.0 && selectedPeriod == 0) {
                         store.prepareUndoSnapshot()
@@ -2280,7 +2280,7 @@ private fun ThunBudgetApp() {
                     }
                 }
             }
-        },confirmButton={TextButton(onClick={addFromCategory=categoryName;selectedCategory=null;showAdd=true}) { Text("Добавить расход") }},dismissButton={TextButton(onClick={selectedCategory=null}) { Text("Закрыть") }})
+        },confirmButton={Button(onClick={addFromCategory=categoryName;selectedCategory=null;showAdd=true}) { Text("Добавить расход") }},dismissButton={TextButton(onClick={selectedCategory=null}) { Text("Закрыть") }})
     }
     if(showAdd) AddExpenseDialog(categories,initialCategory=addFromCategory,onDismiss={showAdd=false},onSave={title,category,amount,date->
         store.prepareUndoSnapshot(); canUndo=true
@@ -2355,7 +2355,7 @@ private fun ThunBudgetApp() {
         title={Text("Полностью сбросить данные?")},
         text={Text("Все операции, доходы, категории, настройки бюджета и локальные резервные копии будут удалены без возможности отмены. Внешние экспортированные файлы не затрагиваются.")},
         confirmButton={
-            TextButton(onClick={
+            Button(onClick={
                 showResetConfirmation=false
                 val reset = store.resetAllData()
                 if (reset) {
@@ -2394,14 +2394,14 @@ private fun ThunBudgetApp() {
                 onDismissRequest={showRestoreConfirmation=false},
         title={Text("Восстановить резервную копию?")},
         text={Text("Текущие данные приложения будут заменены данными из выбранного файла. Перед продолжением убедись, что текущая версия бюджета сохранена отдельно.")},
-        confirmButton={TextButton(onClick={showRestoreConfirmation=false;backupImportLauncher.launch(arrayOf("application/json","text/*"))}) { Text("Выбрать файл") }},
+        confirmButton={Button(onClick={showRestoreConfirmation=false;backupImportLauncher.launch(arrayOf("application/json","text/*"))}) { Text("Выбрать файл") }},
         dismissButton={TextButton(onClick={showRestoreConfirmation=false}) { Text("Отмена") }}
     )
     if(showUndoConfirmation) AppAlertDialog(
                 onDismissRequest={showUndoConfirmation=false},
         title={Text("Отменить последнее действие?")},
         text={Text("Будут восстановлены расходы, категории и настройки бюджета до последнего поддерживаемого изменения.")},
-        confirmButton={TextButton(onClick={
+        confirmButton={Button(onClick={
             showUndoConfirmation=false
             if (store.restoreUndoSnapshot()) {
                 expenses=store.loadExpenses(); categories=store.loadCategories(); recurringPayments=store.loadRecurringPayments()
@@ -2420,7 +2420,7 @@ private fun ThunBudgetApp() {
     )
     backupMessage?.let { message ->
         AppAlertDialog(
-                onDismissRequest={backupMessage=null},title={Text("Результат операции")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
+                onDismissRequest={backupMessage=null},title={Text("Результат операции")},text={Text(message)},confirmButton={Button(onClick={backupMessage=null}) { Text("Понятно") }})
     }
     if(showDashboardArrangeDialog) {
         AppAlertDialog(
@@ -2439,7 +2439,7 @@ private fun ThunBudgetApp() {
                     }
                 }
             },
-            confirmButton={TextButton(onClick={showDashboardArrangeDialog=false}) { Text("Готово") }},
+            confirmButton={Button(onClick={showDashboardArrangeDialog=false}) { Text("Готово") }},
             dismissButton={TextButton(onClick={val defaults=listOf("period","budget","income","categories");dashboardOrder=defaults;store.saveDashboardOrder(defaults)}) { Text("Сбросить") }}
         )
     }
@@ -2635,7 +2635,7 @@ private fun IncomeEntryEditDialog(entry: IncomeEntry, onDismiss:()->Unit, onSave
                 OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
             }
         },
-        confirmButton={TextButton(enabled=parsed!=null && parsed.isFinite() && parsed>0.0,onClick={onSave(parsed!!)}) { Text("Сохранить") }},
+        confirmButton={Button(enabled=parsed!=null && parsed.isFinite() && parsed>0.0,onClick={onSave(parsed!!)}) { Text("Сохранить") }},
         dismissButton={Row {
             TextButton(onClick=onDelete) { Text("Удалить") }
             TextButton(onClick=onDismiss) { Text("Отмена") }
@@ -2654,7 +2654,7 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
             OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Заработанный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
             Text("Доходы за два отчётных периода автоматически суммируются в месячный доход. Перенос средств учитывается отдельно и не увеличивает заработанный доход.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    },confirmButton={TextButton(onClick={if(parsed!=null&&parsed>=0) onSave(parsed)},enabled=parsed!=null&&parsed>=0){Text("Сохранить")}},dismissButton={
+    },confirmButton={Button(onClick={if(parsed!=null&&parsed>=0) onSave(parsed)},enabled=parsed!=null&&parsed>=0){Text("Сохранить")}},dismissButton={
         Row { if(current>0) TextButton(onClick={onSave(0.0)}) { Text("Очистить") }; TextButton(onClick=onDismiss){Text("Отмена")} }
     })
 }
@@ -2985,7 +2985,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
             }
             OutlinedTextField(date,{date=it.filter(Char::isDigit).take(8)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
         }
-    },confirmButton={ TextButton(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null) onSave(title,category,v,parseUserDate(date)!!.toString()) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0 && parseUserDate(date)!=null) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+    },confirmButton={ Button(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null) onSave(title,category,v,parseUserDate(date)!!.toString()) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0 && parseUserDate(date)!=null) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 @Composable
@@ -3132,7 +3132,7 @@ private fun SettingsDialog(
             }
         },
         confirmButton={
-            TextButton(
+            Button(
                 onClick={
                     if(validIncome!=null && validIncome.isFinite() && validIncome>0 &&
                         validSavings!=null && validSavings.isFinite() && validSavings in 0.0..100.0 &&
@@ -3186,7 +3186,7 @@ private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (
                     Text("Второе окно автоматически заполнит оставшиеся календарные дни до следующего первого окна.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
-            confirmButton={TextButton(onClick={showConfirmation=false;onSave(start,end)}){Text("Подтвердить")}},
+            confirmButton={Button(onClick={showConfirmation=false;onSave(start,end)}){Text("Подтвердить")}},
             dismissButton={
                 Row {
                     TextButton(onClick={showConfirmation=false}){Text("Изменить период")}
@@ -3212,7 +3212,7 @@ private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave
             OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
             if(!valid) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
         }
-    },confirmButton={TextButton(onClick={if(valid) onSave(parsedFrom!!.toString(),parsedTo!!.toString())},enabled=valid){Text("Применить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+    },confirmButton={Button(onClick={if(valid) onSave(parsedFrom!!.toString(),parsedTo!!.toString())},enabled=valid){Text("Применить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 @Composable
@@ -3269,7 +3269,7 @@ private fun CategoryManagerDialog(
                 ) {
                     Text("+ Добавить категорию", maxLines = 1)
                 }
-                TextButton(onClick = onDismiss) { Text("Готово") }
+                Button(onClick = onDismiss) { Text("Готово") }
             }
         },
         dismissButton = {}
@@ -3339,7 +3339,7 @@ private fun CategoryAddDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            Button(
                 onClick = {
                     when {
                         cleanName.isBlank() -> validationMessage = "Введи название категории."
@@ -3368,7 +3368,7 @@ private fun CategoryEditDialog(category:BudgetCategory,onDismiss:()->Unit,onSave
             OutlinedTextField(name,{name=it},label={Text("Название категории")},singleLine=true)
             OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, %")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
         }
-    },confirmButton={TextButton(onClick={if(name.isNotBlank()&&value!=null&&value>=0) onSave(name.trim(),value)},enabled=name.isNotBlank()&&value!=null&&value>=0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
+    },confirmButton={Button(onClick={if(name.isNotBlank()&&value!=null&&value>=0) onSave(name.trim(),value)},enabled=name.isNotBlank()&&value!=null&&value>=0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
 private fun plannedForPeriod(income: Double, percent: Double, start: String, end: String): Double {
@@ -3416,7 +3416,7 @@ private fun ExpenseEditDialog(
             }
         },
         confirmButton={
-            TextButton(onClick={
+            Button(onClick={
                 val v=amount.replace(',','.').toDoubleOrNull()
                 if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null)
                     onSave(expense.copy(title=title,category=category,amount=v,date=parseUserDate(date)!!.toString()))
