@@ -1770,9 +1770,9 @@ private fun ThunBudgetApp() {
                     if(showHistoryFilters) item {
                         var expandedCategory by rememberSaveable { mutableStateOf(false) }
                         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value=historyQuery,onValueChange={historyQuery=it},modifier=Modifier.fillMaxWidth(),label={Text("Поиск по названию или категории")},singleLine=true,leadingIcon={Text("⌕")})
+                            OutlinedTextField(value=historyQuery,onValueChange={historyQuery=it},modifier=Modifier.fillMaxWidth(),label={Text("Поиск по названию или категории")},singleLine=true,leadingIcon={Text("⌕")}, colors = themedDialogOutlinedTextFieldColors())
                             ExposedDropdownMenuBox(expanded=expandedCategory,onExpandedChange={expandedCategory=it}) {
-                                OutlinedTextField(value=historyCategoryFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedCategory)})
+                                OutlinedTextField(value=historyCategoryFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedCategory)}, colors = themedDialogOutlinedTextFieldColors())
                                 ExposedDropdownMenu(expanded=expandedCategory,onDismissRequest={expandedCategory=false}) {
                                     (listOf("Все категории")+categories.map { it.name }).distinct().forEach { option ->
                                         DropdownMenuItem(text={Text(option)},onClick={historyCategoryFilter=option;expandedCategory=false})
@@ -1786,14 +1786,14 @@ private fun ThunBudgetApp() {
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
                                 var expandedYear by rememberSaveable { mutableStateOf(false) }
                                 ExposedDropdownMenuBox(expanded=expandedYear,onExpandedChange={expandedYear=it},modifier=Modifier.weight(1f)) {
-                                    OutlinedTextField(value=historyYearFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Год")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedYear)},singleLine=true)
+                                    OutlinedTextField(value=historyYearFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Год")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedYear)},singleLine=true, colors = themedDialogOutlinedTextFieldColors())
                                     ExposedDropdownMenu(expanded=expandedYear,onDismissRequest={expandedYear=false}) {
                                         (listOf("Все годы")+historyYears).forEach { option -> DropdownMenuItem(text={Text(option)},onClick={historyYearFilter=option;expandedYear=false}) }
                                     }
                                 }
                                 var expandedMonth by rememberSaveable { mutableStateOf(false) }
                                 ExposedDropdownMenuBox(expanded=expandedMonth,onExpandedChange={expandedMonth=it},modifier=Modifier.weight(1f)) {
-                                    OutlinedTextField(value=historyMonthNumberFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Месяц")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedMonth)},singleLine=true)
+                                    OutlinedTextField(value=historyMonthNumberFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Месяц")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedMonth)},singleLine=true, colors = themedDialogOutlinedTextFieldColors())
                                     ExposedDropdownMenu(expanded=expandedMonth,onDismissRequest={expandedMonth=false}) {
                                         historyMonths.forEach { option ->
                                             val label=if(option=="Все месяцы") option else runCatching { java.time.Month.of(option.toInt()).getDisplayName(java.time.format.TextStyle.FULL,Locale("ru","RU")).replaceFirstChar { it.uppercase(Locale("ru","RU")) } }.getOrDefault(option)
@@ -1803,15 +1803,15 @@ private fun ThunBudgetApp() {
                                 }
                                 var expandedDay by rememberSaveable { mutableStateOf(false) }
                                 ExposedDropdownMenuBox(expanded=expandedDay,onExpandedChange={expandedDay=it},modifier=Modifier.weight(0.8f)) {
-                                    OutlinedTextField(value=historyDayFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Число")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedDay)},singleLine=true)
+                                    OutlinedTextField(value=historyDayFilter,onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),label={Text("Число")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedDay)},singleLine=true, colors = themedDialogOutlinedTextFieldColors())
                                     ExposedDropdownMenu(expanded=expandedDay,onDismissRequest={expandedDay=false}) {
                                         historyDays.forEach { option -> DropdownMenuItem(text={Text(option)},onClick={historyDayFilter=option;expandedDay=false}) }
                                     }
                                 }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
-                                OutlinedTextField(value=historyToDate,onValueChange={historyToDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                                OutlinedTextField(value=historyFromDate,onValueChange={historyFromDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("С даты")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
+                                OutlinedTextField(value=historyToDate,onValueChange={historyToDate=it.filter(Char::isDigit).take(8)},modifier=Modifier.weight(1f),label={Text("По дату")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
                             }
                             TextButton(onClick={historyQuery="";historyCategoryFilter="Все категории";historyYearFilter="Все годы";historyMonthNumberFilter="Все месяцы";historyDayFilter="Все числа";historyFromDate="";historyToDate="";amountLimit=expenses.maxOfOrNull { it.amount }?.toFloat()?.coerceAtLeast(100000f) ?: 100000f},modifier=Modifier.align(Alignment.End)) { Text("Сбросить фильтры") }
                         }
@@ -1820,7 +1820,7 @@ private fun ThunBudgetApp() {
                         var expandedSort by remember { mutableStateOf(false) }
                         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                             ExposedDropdownMenuBox(expanded=expandedSort,onExpandedChange={expandedSort=it}) {
-                                OutlinedTextField(value="Сортировка: $historySort",onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedSort)})
+                                OutlinedTextField(value="Сортировка: $historySort",onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expandedSort)}, colors = themedDialogOutlinedTextFieldColors())
                                 ExposedDropdownMenu(expanded=expandedSort,onDismissRequest={expandedSort=false}) {
                                     listOf("Название","Дата","Категория","Сумма").forEach { option -> DropdownMenuItem(text={Text(option)},onClick={historySort=option;expandedSort=false}) }
                                 }
@@ -1897,7 +1897,7 @@ private fun ThunBudgetApp() {
                                 value=selected?.let { "${it.title} · ${it.date} · ${money(it.amount)}" } ?: "Операция не выбрана",
                                 onValueChange={},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth(),
                                 label={Text(if (draft.isDelete) "Какую операцию удалить" else "Какую операцию изменить")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(voiceEditExpanded)}
-                            )
+                            , colors = themedDialogOutlinedTextFieldColors())
                             ExposedDropdownMenu(expanded=voiceEditExpanded,onDismissRequest={voiceEditExpanded=false}) {
                                 candidates.forEach { candidate ->
                                     DropdownMenuItem(
@@ -1915,7 +1915,7 @@ private fun ThunBudgetApp() {
                         label={Text("Сумма, ₽")},
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),
                         singleLine=true
-                    )
+                    , colors = themedDialogOutlinedTextFieldColors())
                     if (!draft.isDelete) OutlinedTextField(
                         value=voiceDate,
                         onValueChange={voiceDate=it.filter(Char::isDigit).take(8)},
@@ -1924,7 +1924,7 @@ private fun ThunBudgetApp() {
                         visualTransformation=DateDigitsVisualTransformation,
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),
                         singleLine=true
-                    )
+                    , colors = themedDialogOutlinedTextFieldColors())
                     Text("Описание: ${draft.title}")
                     Text("Если распознавание пропустило слово «тысяч», исправь сумму здесь. Неверную сумму не сохраняй.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -2115,7 +2115,7 @@ private fun ThunBudgetApp() {
                         placeholder = { Text("Например: сколько осталось до зарплаты?") },
                         minLines = 2,
                         maxLines = 4
-                    )
+                    , colors = themedDialogOutlinedTextFieldColors())
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         FilledTonalButton(
                             onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
@@ -2647,7 +2647,7 @@ private fun IncomeEntryEditDialog(entry: IncomeEntry, onDismiss:()->Unit, onSave
                 Text("Дата: ${entry.date} · ${entry.periodStart} — ${entry.periodEnd}", style=MaterialTheme.typography.bodySmall)
                 if(entry.isLegacyAggregate) Text("Это перенесённая общая сумма старого периода, а не отдельное поступление.", style=MaterialTheme.typography.bodySmall)
                 if(entry.isCarryover) Text("Это перенос между отчётными периодами. Изменение или удаление суммы синхронно изменит запись «Перенос средств» в исходном периоде.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+                OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
             }
         },
         confirmButton={Button(enabled=parsed!=null && parsed.isFinite() && parsed>0.0,onClick={onSave(parsed!!)}) { Text("Сохранить") }},
@@ -2666,7 +2666,7 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
                 onDismissRequest=onDismiss,title={Text("Заработанный доход за период")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("${LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",style=MaterialTheme.typography.bodySmall)
-            OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Заработанный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+            OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Заработанный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
             Text("Доходы за два отчётных периода автоматически суммируются в месячный доход. Перенос средств учитывается отдельно и не увеличивает заработанный доход.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     },confirmButton={Button(onClick={if(parsed!=null&&parsed>=0) onSave(parsed)},enabled=parsed!=null&&parsed>=0){Text("Сохранить")}},dismissButton={
@@ -2992,13 +2992,13 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
     AppAlertDialog(
                 onDismissRequest=onDismiss,title={Text("Новый расход")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
-            OutlinedTextField(amount,{amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+            OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true, colors = themedDialogOutlinedTextFieldColors())
+            OutlinedTextField(amount,{amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
             ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
+                OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)}, colors = themedDialogOutlinedTextFieldColors())
                 ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { categories.forEach { DropdownMenuItem(text={Text(it.name)},onClick={category=it.name;expanded=false}) } }
             }
-            OutlinedTextField(date,{date=it.filter(Char::isDigit).take(8)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+            OutlinedTextField(date,{date=it.filter(Char::isDigit).take(8)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
         }
     },confirmButton={ Button(onClick={ val v=amount.replace(',','.').toDoubleOrNull(); if(title.isNotBlank() && v!=null && v>0 && parseUserDate(date)!=null) onSave(title,category,v,parseUserDate(date)!!.toString()) },enabled=title.isNotBlank() && (amount.replace(',','.').toDoubleOrNull() ?: 0.0)>0 && parseUserDate(date)!=null) { Text("Сохранить") } },dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
@@ -3058,8 +3058,8 @@ private fun SettingsDialog(
                 when(section) {
                     "income" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Доход и накопления",fontWeight=FontWeight.Bold)
-                        OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())
-                        OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())
+                        OutlinedTextField(inc,{inc=it},label={Text("Месячный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth(), colors = themedDialogOutlinedTextFieldColors())
+                        OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth(), colors = themedDialogOutlinedTextFieldColors())
                         Text("Цель рассчитывается от дохода и используется в планировании бюджета.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     "period" -> ReportingPeriodSettingsSection(startDay=firstPeriodStartDay,endDay=firstPeriodEndDay,onSave=onSaveReportingDays)
@@ -3082,7 +3082,7 @@ private fun SettingsDialog(
                         item { Text("Категории бюджета",fontWeight=FontWeight.Bold) }
                         items(cats.size) { index ->
                             Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                OutlinedTextField(cats[index].name,{v->cats=cats.toMutableList().also{it[index]=it[index].copy(name=v)}},label={Text("Название категории")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                                OutlinedTextField(cats[index].name,{v->cats=cats.toMutableList().also{it[index]=it[index].copy(name=v)}},label={Text("Название категории")},singleLine=true,modifier=Modifier.fillMaxWidth(), colors = themedDialogOutlinedTextFieldColors())
                                 Row(verticalAlignment=Alignment.CenterVertically) {
                                     OutlinedTextField(
                                         value = categoryPercentTexts.getOrNull(index).orEmpty(),
@@ -3097,7 +3097,7 @@ private fun SettingsDialog(
                                         modifier = Modifier.weight(1f),
                                         singleLine = true,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                                    )
+                                    , colors = themedDialogOutlinedTextFieldColors())
                                     TextButton(onClick={
                                         cats=cats.filterIndexed{idx,_->idx!=index}
                                         categoryPercentTexts=categoryPercentTexts.filterIndexed{idx,_->idx!=index}
@@ -3179,8 +3179,8 @@ private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (
     val preview = if (valid) runCatching { ReportingPeriodCalculator.propose(YearMonth.now(), start!!, end!!) }.getOrNull() else null
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Два отчётных периода", fontWeight = FontWeight.Bold)
-        OutlinedTextField(value=startText,onValueChange={startText=it.filter(Char::isDigit).take(2)},label={Text("Начало первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
-        OutlinedTextField(value=endText,onValueChange={endText=it.filter(Char::isDigit).take(2)},label={Text("Окончание первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(value=startText,onValueChange={startText=it.filter(Char::isDigit).take(2)},label={Text("Начало первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth(), colors = themedDialogOutlinedTextFieldColors())
+        OutlinedTextField(value=endText,onValueChange={endText=it.filter(Char::isDigit).take(2)},label={Text("Окончание первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth(), colors = themedDialogOutlinedTextFieldColors())
         if (preview != null) {
             val firstDays = java.time.temporal.ChronoUnit.DAYS.between(preview.first.start, preview.first.end) + 1
             val secondDays = java.time.temporal.ChronoUnit.DAYS.between(preview.second.start, preview.second.end) + 1
@@ -3223,8 +3223,8 @@ private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave
                 onDismissRequest=onDismiss,title={Text("Отчётный период")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text("Укажи любые даты. Например, с 1-го по 14-е число или с 1-го по конец месяца.")
-            OutlinedTextField(from,{from=it.filter(Char::isDigit).take(8)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
-            OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+            OutlinedTextField(from,{from=it.filter(Char::isDigit).take(8)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
+            OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
             if(!valid) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
         }
     },confirmButton={Button(onClick={if(valid) onSave(parsedFrom!!.toString(),parsedTo!!.toString())},enabled=valid){Text("Применить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
@@ -3361,7 +3361,7 @@ private fun CategoryAddDialog(
                     placeholder = { Text("Например, Одежда") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
-                )
+                , colors = themedDialogOutlinedTextFieldColors())
                 OutlinedTextField(
                     value = percent,
                     onValueChange = {
@@ -3372,7 +3372,7 @@ private fun CategoryAddDialog(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
-                )
+                , colors = themedDialogOutlinedTextFieldColors())
                 if (validationMessage != null) {
                     Text(
                         validationMessage!!,
@@ -3409,8 +3409,8 @@ private fun CategoryEditDialog(category:BudgetCategory,onDismiss:()->Unit,onSave
     AppAlertDialog(
                 onDismissRequest=onDismiss,title={Text("Изменить категорию")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(name,{name=it},label={Text("Название категории")},singleLine=true)
-            OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, %")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+            OutlinedTextField(name,{name=it},label={Text("Название категории")},singleLine=true, colors = themedDialogOutlinedTextFieldColors())
+            OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, %")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal), colors = themedDialogOutlinedTextFieldColors())
         }
     },confirmButton={Button(onClick={if(name.isNotBlank()&&value!=null&&value>=0) onSave(name.trim(),value)},enabled=name.isNotBlank()&&value!=null&&value>=0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
@@ -3450,13 +3450,13 @@ private fun ExpenseEditDialog(
         title={Text("Изменить расход")},
         text={
             Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
-                OutlinedTextField(amount,{amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
+                OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true, colors = themedDialogOutlinedTextFieldColors())
+                OutlinedTextField(amount,{amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
                 ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) {
-                    OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)})
+                    OutlinedTextField(value=category,onValueChange={},modifier=Modifier.menuAnchor(),readOnly=true,label={Text("Категория")},trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded)}, colors = themedDialogOutlinedTextFieldColors())
                     ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { categories.forEach { DropdownMenuItem(text={Text(it.name)},onClick={category=it.name;expanded=false}) } }
                 }
-                OutlinedTextField(date,{date=it.filter(Char::isDigit).take(8)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                OutlinedTextField(date,{date=it.filter(Char::isDigit).take(8)},label={Text("Дата (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
             }
         },
         confirmButton={
