@@ -41,7 +41,10 @@ object IncomeLedgerMigration {
             val start = LocalDate.parse(row.start)
             val end = LocalDate.parse(row.end)
             require(!end.isBefore(start)) { "Некорректный отчётный период." }
-            require(row.amount.isFinite() && row.amount >= 0.0) { "Некорректная сумма дохода." }
+            require(row.amount.isFinite() && row.amount >= 0.0 &&
+                row.earnedAmount.isFinite() && row.earnedAmount >= 0.0 &&
+                row.carryoverAmount.isFinite() && row.carryoverAmount >= 0.0
+            ) { "Некорректная сумма дохода." }
             val id = "legacy-${row.start}-${row.end}-${index}"
             if (row.earnedAmount > 0.0 && knownIds.add(id)) {
                 result += IncomeEntry(
