@@ -18,7 +18,8 @@ data class IncomeEntry(
     val periodStart: String,
     val periodEnd: String,
     val isLegacyAggregate: Boolean = false,
-    val isCarryover: Boolean = false
+    val isCarryover: Boolean = false,
+    val linkedExpenseId: Long? = null
 )
 
 data class LegacyPeriodIncome(
@@ -104,7 +105,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
         date: LocalDate,
         periodStart: LocalDate,
         periodEnd: LocalDate,
-        isCarryover: Boolean = false
+        isCarryover: Boolean = false,
+        linkedExpenseId: Long? = null
     ): IncomeEntry {
         require(title.isNotBlank())
         require(amount.isFinite() && amount > 0.0)
@@ -117,7 +119,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
             date = date.toString(),
             periodStart = periodStart.toString(),
             periodEnd = periodEnd.toString(),
-            isCarryover = isCarryover
+            isCarryover = isCarryover,
+            linkedExpenseId = linkedExpenseId
         )
         check(save(load() + entry)) { "Не удалось сохранить доход." }
         return entry
@@ -162,7 +165,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 periodStart = item.getString("periodStart"),
                 periodEnd = item.getString("periodEnd"),
                 isLegacyAggregate = item.optBoolean("isLegacyAggregate", false),
-                isCarryover = item.optBoolean("isCarryover", false)
+                isCarryover = item.optBoolean("isCarryover", false),
+                linkedExpenseId = if (item.has("linkedExpenseId") && !item.isNull("linkedExpenseId")) item.optLong("linkedExpenseId").takeIf { it > 0L } else null
             )
         }.also(::validate)
     }
@@ -179,7 +183,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 .put("periodStart", entry.periodStart)
                 .put("periodEnd", entry.periodEnd)
                 .put("isLegacyAggregate", entry.isLegacyAggregate)
-                .put("isCarryover", entry.isCarryover))
+                .put("isCarryover", entry.isCarryover)
+                .put("linkedExpenseId", entry.linkedExpenseId))
         }
         return array.toString()
     }
