@@ -5,9 +5,9 @@ import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 
 /**
- * Forecasts are based on completed reporting periods, not calendar months.
- * The current unfinished period is excluded; all older completed periods
- * between the first observed expense and today are included.
+ * Forecasts use all completed reporting periods plus the observed days of the
+ * current period when it already contains expenses. Partial periods are
+ * extrapolated by their observed daily spending rate.
  */
 data class ForecastExpense(
     val category: String,
