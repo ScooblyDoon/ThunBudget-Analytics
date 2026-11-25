@@ -2101,7 +2101,8 @@ private fun ThunBudgetApp() {
                             date = nextStart,
                             start = nextStart,
                             end = nextEnd,
-                            isCarryover = true
+                            isCarryover = true,
+                            linkedExpenseId = transferExpense.id
                         )
                         incomeEntries = store.loadIncomeEntries()
                         periodIncomes = store.loadPeriodIncomes()
