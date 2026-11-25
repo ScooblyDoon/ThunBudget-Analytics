@@ -59,6 +59,21 @@ class BudgetAllocationTest {
         assertEquals(60.0 + 70.0 + 80.0 + 90.0 + 100.0 + 110.0, suggestion.totalSpent, 0.001)
     }
 
+    @Test fun spendingAllocationIgnoresCarryoverTransferCategory() {
+        val suggestions = BudgetAllocationCalculator.suggest(
+            listOf("Кафе", "Транспорт", "Перенос средств"),
+            listOf(
+                AllocationExpense("Кафе", 600.0, LocalDate.of(2026, 11, 10)),
+                AllocationExpense("Транспорт", 400.0, LocalDate.of(2026, 11, 11)),
+                AllocationExpense("Перенос средств", 10000.0, LocalDate.of(2026, 11, 12))
+            ),
+            LocalDate.of(2026, 11, 25)
+        )
+        assertEquals(setOf("Кафе", "Транспорт"), suggestions.map { it.category }.toSet())
+        assertEquals(60.0, suggestions.first { it.category == "Кафе" }.suggestedPercent!!, 0.001)
+        assertEquals(40.0, suggestions.first { it.category == "Транспорт" }.suggestedPercent!!, 0.001)
+    }
+
     @Test fun redistributionUsesDonorsInTwentyFifteenTenPercentTiersAndLeavesSmallReserves() {
         val categories = listOf("Превышение" to 20.0, "Запас20" to 30.0, "Запас15" to 30.0, "Запас10" to 10.0, "Запас5" to 10.0)
         val result = BudgetAllocationCalculator.redistribute(
