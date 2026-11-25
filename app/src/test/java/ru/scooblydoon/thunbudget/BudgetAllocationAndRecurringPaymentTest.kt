@@ -72,14 +72,14 @@ class BudgetAllocationTest {
         assertTrue(result.updatedPercents["Превышение"]!! > 20.0)
     }
 
-    @Test fun redistributionDoesNotUseSavingsReserveOrDonorsBelowTenPercentFree() {
+    @Test fun redistributionUsesReserveFirstAndProtectsSavingsAndSmallDonors() {
         val categories = listOf(
             "Цель" to 20.0,
             "Накопления" to 20.0,
-            BudgetAllocationCalculator.RESERVE_CATEGORY to 10.0,
+            BudgetAllocationCalculator.RESERVE_CATEGORY to 5.0,
             "Запас9" to 20.0,
             "Запас10" to 20.0,
-            "Перерасход" to 10.0
+            "Перерасход" to 15.0
         )
         val result = BudgetAllocationCalculator.redistribute(
             categories,
@@ -89,13 +89,30 @@ class BudgetAllocationTest {
                 BudgetAllocationCalculator.RESERVE_CATEGORY to 0.0,
                 "Запас9" to 182.0,
                 "Запас10" to 180.0,
-                "Перерасход" to 150.0
+                "Перерасход" to 200.0
             ),
             10.0
         )
         assertTrue(result.transfers.isNotEmpty())
-        assertTrue(result.transfers.all { it.fromCategory == "Запас10" })
-        assertTrue(result.transfers.none { it.fromCategory == "Накопления" || it.fromCategory == BudgetAllocationCalculator.RESERVE_CATEGORY || it.fromCategory == "Запас9" })
+        assertEquals(BudgetAllocationCalculator.RESERVE_CATEGORY, result.transfers.first().fromCategory)
+        assertTrue(result.transfers.none { it.fromCategory == "Накопления" || it.fromCategory == "Запас9" })
+    }
+
+    @Test fun forecastDonorKeepsTwoPercentSafetyMargin() {
+        val categories = listOf("Кафе" to 10.0, "Транспорт" to 10.0)
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = categories,
+            spentByCategory = mapOf("Кафе" to 13000.0, "Транспорт" to 0.0),
+            budgetPerPercent = 1000.0,
+            forecastSpentByCategory = mapOf("Транспорт" to 5000.0),
+            safetyBufferPercent = 2.0
+        )
+        assertEquals(1, result.transfers.size)
+        assertEquals("Транспорт", result.transfers.single().fromCategory)
+        assertEquals("Кафе", result.transfers.single().toCategory)
+        assertEquals(3000.0, result.transfers.single().amount, 0.001)
+        assertEquals(7.0, result.updatedPercents["Транспорт"]!!, 0.001)
+        assertEquals(13.0, result.updatedPercents["Кафе"]!!, 0.001)
     }
 
     @Test fun redistributionPrioritizesTwentyPercentDonorBeforeFifteenAndTen() {
