@@ -82,7 +82,7 @@ internal fun AllocationProposalDialog(
                                         singleLine = true,
                                         label = { Text("%") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                                    )
+                                    , colors = themedDialogOutlinedTextFieldColors())
                                     TextButton(onClick = { editing[category.name] = false }) { Text("ОК") }
                                 } else {
                                     Text("${values[category.name] ?: "0"}%", fontWeight = FontWeight.Bold)
