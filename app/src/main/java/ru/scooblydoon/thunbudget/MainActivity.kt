@@ -1514,7 +1514,7 @@ private fun ThunBudgetApp() {
                                             Column(Modifier.weight(1f)) {
                                                 Text(categoryForecast.category, fontWeight = FontWeight.Medium)
                                                 if (!categoryForecast.hasHistory) {
-                                                    Text("Нет расходов в доступной истории", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text("Недостаточно истории для прогноза — фактические расходы учтены отдельно", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
