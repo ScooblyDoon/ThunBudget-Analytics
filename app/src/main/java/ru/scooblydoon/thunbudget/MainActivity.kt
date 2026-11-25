@@ -1353,7 +1353,7 @@ private fun ThunBudgetApp() {
                         }
                     }
                 }
-                1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+                1 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=0.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2796,7 +2796,7 @@ private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCate
     val total=totals.sum()
     val labels=listOf("Я","Ф","М","А","М","И","И","А","С","О","Н","Д")
     val palette=listOf(Color(0xFF315CBA),Color(0xFF168A72),Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=0.dp)) {
         item { Text("Графики за год",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
         item { Row(verticalAlignment=Alignment.CenterVertically) {
             TextButton(onClick={onYearChange(year-1)}) { Text("‹") }
