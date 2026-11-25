@@ -451,7 +451,7 @@ private fun RecurringPaymentDetailsDialog(
         Surface(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp),
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = themedDialogContainerColor(),
             tonalElevation = 6.dp
         ) {
             Column(
@@ -530,6 +530,7 @@ private fun RecurringPaymentEditorDialog(
     val parsedDay = day.toIntOrNull()
 
     AlertDialog(
+        containerColor = themedDialogContainerColor(),
         onDismissRequest = onDismiss,
         title = { Text(if (payment == null) "Новый регулярный платёж" else "Изменить платёж") },
         text = {
