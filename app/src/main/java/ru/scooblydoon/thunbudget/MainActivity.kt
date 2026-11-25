@@ -1047,41 +1047,13 @@ private fun ThunBudgetApp() {
                     }
                 } }
             ) },
-            floatingActionButton = {
-                if (!compactLayout && tab != 2 && tab != 5) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (quickActionsExpanded) {
-                            SmallFloatingActionButton(
-                                onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer
-                            ) { Icon(Icons.Filled.Mic, contentDescription = "Голосовой ввод") }
-                            SmallFloatingActionButton(
-                                onClick = { showPeriodIncomeEditor = true },
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                            ) { Text("₽+", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer) }
-                            FloatingActionButton(onClick = { showAdd = true }) {
-                                Text("+", style = MaterialTheme.typography.headlineMedium)
-                            }
-                        }
-                        SmallFloatingActionButton(
-                            onClick = {
-                                quickActionsExpanded = !quickActionsExpanded
-                                persistUiExpanded(context, "quick_actions_panel", quickActionsExpanded)
-                            },
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) {
-                            Text(if (quickActionsExpanded) "›" else "‹", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            },
+            floatingActionButton = {},
             bottomBar = {
-                Column {
-                    // Dock actions only on compact layouts; regular-width phones retain the floating controls.
-                    if (compactLayout && tab != 2 && tab != 5) {
+                Column(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
+                    // Keep quick actions in one consistent dock on every phone size.
+                    if (tab != 2 && tab != 5) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1130,7 +1102,7 @@ private fun ThunBudgetApp() {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
-                        tonalElevation = 8.dp
+                        tonalElevation = 0.dp
                     ) {
                         val navItems = listOf(
                             Triple(0, "⌂", "Обзор"),
@@ -1181,7 +1153,7 @@ private fun ThunBudgetApp() {
             }
         ) { padding ->
             when(tab) {
-                0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=if(compactLayout) 24.dp else 96.dp)) {
+                0 -> LazyColumn(Modifier.padding(padding).fillMaxSize().padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=24.dp)) {
                     item { Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     items(dashboardOrder,key={it}) { section ->
                         when(section) {
