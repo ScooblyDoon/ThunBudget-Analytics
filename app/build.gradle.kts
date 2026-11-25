@@ -7,15 +7,15 @@ plugins {
 android {
     namespace = "ru.scooblydoon.thunbudget"
     compileSdk = 35
-    // Release artifact: ThunBudget Analytics 1.3.28 (versionCode 41) [final-apk].
-// Includes list/calendar views, editable payment details and month-aware confirmation. Blended historical forecast, recurring commitments, dialog theme and tab background fixes; final signed release. [final-apk]
+    // Release artifact: ThunBudget Analytics 1.3.29 (versionCode 42) [final-apk].
+// Includes list/calendar views, editable payment details and month-aware confirmation. Blended historical forecast, outlier protection, recurring commitments, dialog theme and tab background fixes; final signed release. [final-apk]
 
     defaultConfig {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
         minSdk = 26
         targetSdk = 35
-        versionCode = 41
-        versionName = "1.3.28"
+        versionCode = 42
+        versionName = "1.3.29"
     }
 
     signingConfigs {
