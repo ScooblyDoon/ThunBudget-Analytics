@@ -144,8 +144,19 @@ internal class BudgetStore(context: Context) {
         prefs.edit().putString("period_incomes",a.toString()).commit()
     }
 
-    fun addIncomeEntry(title: String, amount: Double, date: String, start: String, end: String, isCarryover: Boolean = false) {
-        incomeLedger.add(title, amount, LocalDate.parse(date), LocalDate.parse(start), LocalDate.parse(end), isCarryover)
+    fun addIncomeEntry(
+        title: String,
+        amount: Double,
+        date: String,
+        start: String,
+        end: String,
+        isCarryover: Boolean = false,
+        linkedExpenseId: Long? = null
+    ) {
+        incomeLedger.add(
+            title, amount, LocalDate.parse(date), LocalDate.parse(start), LocalDate.parse(end),
+            isCarryover, linkedExpenseId
+        )
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
@@ -166,12 +177,25 @@ internal class BudgetStore(context: Context) {
 
     fun updateIncomeEntry(entry: IncomeEntry) {
         check(incomeLedger.update(entry)) { "Не удалось изменить доход." }
+        if (entry.isCarryover && entry.linkedExpenseId != null) {
+            val currentExpenses = loadExpenses()
+            val index = currentExpenses.indexOfFirst { it.id == entry.linkedExpenseId }
+            if (index >= 0) {
+                val updatedExpenses = currentExpenses.toMutableList()
+                updatedExpenses[index] = updatedExpenses[index].copy(amount = entry.amount)
+                saveExpenses(updatedExpenses)
+            }
+        }
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
 
     fun deleteIncomeEntry(id: String) {
+        val entry = incomeLedger.load().firstOrNull { it.id == id }
         check(incomeLedger.delete(id)) { "Не удалось удалить доход." }
+        if (entry?.isCarryover == true && entry.linkedExpenseId != null) {
+            saveExpenses(loadExpenses().filterNot { it.id == entry.linkedExpenseId })
+        }
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
