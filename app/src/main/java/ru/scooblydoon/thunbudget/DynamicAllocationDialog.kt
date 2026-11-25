@@ -100,6 +100,7 @@ internal fun DynamicAllocationDialog(
 
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest = onDismiss,
         title = { Text("Динамический прогноз долей") },
         text = {
