@@ -1,44 +1,69 @@
 package ru.scooblydoon.thunbudget
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.Worker
-import androidx.work.WorkerParameters
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.TimeUnit
 
 object RecurringPaymentNotifications {
     private const val TAG = "RecurringPayReminder"
     private const val CHANNEL_ID = "recurring_payments"
     private const val STATE_PREFS = "recurring_payment_notification_state"
+    private const val ALARM_REQUEST_CODE = 8400
+    private val DAILY_CHECK_TIME: LocalTime = LocalTime.of(7, 0)
 
+    /**
+     * Schedules a local-time daily check at 07:00. Unlike a 24-hour periodic
+     * WorkManager interval, this is anchored to the calendar day and survives
+     * normal device idle through setAndAllowWhileIdle.
+     */
     fun schedule(context: Context) {
-        val request = PeriodicWorkRequestBuilder<RecurringPaymentReminderWorker>(24, TimeUnit.HOURS).build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            "thunbudget_recurring_payment_reminders",
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request
+        val appContext = context.applicationContext
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val now = ZonedDateTime.now()
+        var nextRun = now.toLocalDate().atTime(DAILY_CHECK_TIME).atZone(now.zone)
+        if (!nextRun.isAfter(now)) nextRun = nextRun.plusDays(1)
+
+        val intent = Intent(appContext, RecurringPaymentAlarmReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            appContext,
+            ALARM_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        Log.i(TAG, "Daily reminder worker scheduled or updated")
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextRun.toInstant().toEpochMilli(), pendingIntent)
+        Log.i(TAG, "Daily calendar alarm scheduled for $nextRun")
+    }
+
+    /** Runs immediately when the app opens, then restores the next daily alarm. */
+    fun checkAndReschedule(context: Context) {
+        val appContext = context.applicationContext
+        try {
+            val today = LocalDate.now()
+            val payments = RecurringPaymentStore(appContext).load()
+            val reminders = recurringPaymentRemindersFor(payments, today)
+            Log.i(TAG, "Checking reminders: date=$today, activePayments=${payments.count { it.active }}, dueReminders=${reminders.size}")
+            reminders.forEach { show(appContext, it) }
+        } catch (error: Exception) {
+            Log.e(TAG, "Reminder check failed", error)
+        } finally {
+            schedule(appContext)
+        }
     }
 
     internal fun show(context: Context, reminder: RecurringPaymentReminder): Boolean {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT < 26) {
-            Log.w(TAG, "Notification skipped: unsupported Android version")
-            return false
-        }
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -58,9 +83,11 @@ object RecurringPaymentNotifications {
             return false
         }
 
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Регулярные платежи", NotificationManager.IMPORTANCE_DEFAULT)
-        )
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "Регулярные платежи", NotificationManager.IMPORTANCE_DEFAULT)
+            )
+        }
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: Intent(context, MainActivity::class.java)
         intent.putExtra("open_recurring_payments", true)
@@ -77,7 +104,13 @@ object RecurringPaymentNotifications {
         } else {
             "Сегодня платёж: ${reminder.payment.title}"
         }
-        val notification = android.app.Notification.Builder(context, CHANNEL_ID)
+        val builder = if (Build.VERSION.SDK_INT >= 26) {
+            android.app.Notification.Builder(context, CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            android.app.Notification.Builder(context)
+        }
+        val notification = builder
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText("${reminder.payment.amount.toLong()} ₽ · ${reminder.payment.category} · срок $dateLabel")
@@ -94,17 +127,16 @@ object RecurringPaymentNotifications {
     }
 }
 
-class RecurringPaymentReminderWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
-    override fun doWork(): Result = runCatching {
-        val today = LocalDate.now()
-        val store = RecurringPaymentStore(applicationContext)
-        val payments = store.load()
-        val reminders = recurringPaymentRemindersFor(payments, today)
-        Log.i("RecurringPayReminder", "Checking reminders: date=$today, activePayments=${payments.count { it.active }}, dueReminders=${reminders.size}")
-        reminders.forEach { RecurringPaymentNotifications.show(applicationContext, it) }
-        Result.success()
-    }.getOrElse {
-        Log.e("RecurringPayReminder", "Reminder worker failed", it)
-        Result.retry()
+class RecurringPaymentAlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        RecurringPaymentNotifications.checkAndReschedule(context)
+    }
+}
+
+class RecurringPaymentBootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent?) {
+        if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
+            RecurringPaymentNotifications.schedule(context)
+        }
     }
 }
