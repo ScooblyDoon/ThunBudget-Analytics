@@ -137,4 +137,73 @@ class BudgetForecastCalculatorTest {
         )
         assertTrue(result.totalPeriodForecast < 5000.0)
     }
+
+
+    @Test fun intermittentCategoryKeepsZeroSpendPeriodsInItsBaseline() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Подарки"),
+            expenses = listOf(ForecastExpense("Подарки", 3000.0, LocalDate.parse("2026-08-10"))),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 3,
+            nextPeriodDays = 15
+        )
+        assertEquals(7, result.reportingPeriods.size)
+        assertTrue("Zero-spend periods must reduce an intermittent category's baseline",
+            result.totalPeriodForecast > 0.0 && result.totalPeriodForecast < 3000.0)
+    }
+
+    @Test fun historyIsNotTruncatedAtSixOrTwelveMonths() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = listOf(
+                ForecastExpense("Продукты", 1500.0, LocalDate.parse("2025-01-10")),
+                ForecastExpense("Продукты", 1800.0, LocalDate.parse("2026-10-10"))
+            ),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        assertTrue("The forecast must retain more than a year of completed periods",
+            result.reportingPeriods.size > 20)
+        assertEquals(2025, result.historyFrom!!.year)
+    }
+
+    @Test fun oneLargeCurrentPeriodPurchaseCannotRaisePaceAboveTwiceHistoricalRate() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = listOf(
+                ForecastExpense("Продукты", 1500.0, LocalDate.parse("2026-10-10")),
+                ForecastExpense("Продукты", 10000.0, LocalDate.parse("2026-11-09"))
+            ),
+            asOf = LocalDate.parse("2026-11-09"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        assertTrue("A one-day spike must be capped and blended, not projected as a new habit",
+            result.totalPeriodForecast < 1200.0)
+    }
+
+    @Test fun expensesAfterAsOfAreExcludedFromForecastEvidence() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = listOf(
+                ForecastExpense("Продукты", 1500.0, LocalDate.parse("2026-10-10")),
+                ForecastExpense("Продукты", 50000.0, LocalDate.parse("2026-11-27"))
+            ),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        assertTrue("Future-dated transactions must not influence the forecast",
+            result.totalPeriodForecast < 2000.0)
+    }
+
 }
