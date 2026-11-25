@@ -97,6 +97,21 @@ class BudgetForecastCalculatorTest {
         assertEquals(0.0, savings.averagePeriodSpend, 0.001)
     }
 
+    @Test fun countsAndProjectsFromCurrentPartialPeriodWhenItHasData() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Транспорт"),
+            expenses = listOf(ForecastExpense("Транспорт", 3000.0, LocalDate.parse("2026-11-25"))),
+            asOf = LocalDate.parse("2026-11-26"),
+            firstStartDay = 9,
+            firstEndDay = 23,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 12
+        )
+        assertEquals(1, result.historyPeriods)
+        assertEquals(3000.0 / 3.0 * 15.0, result.categories.single().averagePeriodSpend, 0.001)
+        assertEquals(3000.0 / 3.0 * 12.0, result.categories.single().forecastForPeriod, 0.001)
+    }
+
     @Test fun reportsOneCompletedPeriodWhenOnlyOnePeriodHasBeenRecorded() {
         val result = BudgetForecastCalculator.calculate(
             categories = listOf("Транспорт"),
