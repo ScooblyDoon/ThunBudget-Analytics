@@ -2634,7 +2634,7 @@ private fun ChartsScreen(
     val total=monthExpenses.sumOf { it.amount }
     val monthIncome=AnalyticsBudgetCalculator.monthlyIncome(fallbackIncome, periodIncomes, month, true).let { if(it>0) it else fallbackIncome }
     val palette=listOf(Color(0xFF315CBA),Color(0xFF168A72),Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=0.dp)) {
         item { Text("Графики",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
         item { Row(verticalAlignment=Alignment.CenterVertically) {
             TextButton(onClick={onMonthChange(month.minusMonths(1))}) { Text("‹") }
@@ -2971,11 +2971,11 @@ private fun SettingsDialog(
     var to by remember { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     var section by rememberSaveable { mutableStateOf("income") }
     val sections = listOf(
+        "categories" to "Категории",
         "income" to "Доход",
         "period" to "Период",
-        "reporting" to "Отчётные окна",
+        "flexible" to "Гибкие периоды",
         "overview" to "Обзор",
-        "categories" to "Категории",
         "export" to "Excel",
         "backup" to "Копирование",
         "reset" to "Сброс данных"
@@ -3010,13 +3010,17 @@ private fun SettingsDialog(
                         OutlinedTextField(sav,{sav=it},label={Text("Цель накоплений, %")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true,modifier=Modifier.fillMaxWidth())
                         Text("Цель рассчитывается от дохода и используется в планировании бюджета.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    "period" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Text("Период планирования",fontWeight=FontWeight.Bold)
-                        OutlinedTextField(from,{from=it.filter(Char::isDigit).take(8)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
-                        OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
-                        if(!validDates) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
+                    "period" -> ReportingPeriodSettingsSection(startDay=firstPeriodStartDay,endDay=firstPeriodEndDay,onSave=onSaveReportingDays)
+                    "flexible" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                        Text("Произвольные отчётные периоды",fontWeight=FontWeight.Bold)
+                        Text("В будущем можно будет создавать любое количество периодов: 4 недельных, 6 периодов по 4–5 дней или ежедневные интервалы.",style=MaterialTheme.typography.bodyMedium)
+                        Text("Предлагаемая логика аналитики:",fontWeight=FontWeight.SemiBold)
+                        Text("• Операция относится ровно к одному периоду по дате — без пропусков и двойного учёта.")
+                        Text("• Прогноз считается по фактическому числу дней каждого периода, а не по условному месяцу.")
+                        Text("• Сводки за месяц и год остаются календарными; отчётные периоды показываются отдельным срезом.")
+                        Text("• Доходы, регулярные платежи и перенос остатков распределяются по датам, а не делятся механически на число периодов.")
+                        Text("Пока это проектируемый режим: он не меняет текущие расчёты и историю.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    "reporting" -> ReportingPeriodSettingsSection(startDay=firstPeriodStartDay,endDay=firstPeriodEndDay,onSave=onSaveReportingDays)
                     "overview" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Настройка главного экрана",fontWeight=FontWeight.Bold)
                         Text("Измени порядок информационных блоков на вкладке «Обзор».",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -3176,7 +3180,7 @@ private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave
 @Composable
 private fun CategoryManagerDialog(categories:List<BudgetCategory>,onDismiss:()->Unit,onAdd:(String,Double)->Unit,onDelete:(BudgetCategory)->Unit,onEdit:(BudgetCategory)->Unit) {
     var name by remember { mutableStateOf("") }
-    var percent by remember { mutableStateOf("") }
+    var percent by remember { mutableStateOf("0") }
     AlertDialog(
         containerColor = themedDialogContainerColor(),
         onDismissRequest=onDismiss,title={Text("Категории бюджета")},text={
@@ -3190,12 +3194,12 @@ private fun CategoryManagerDialog(categories:List<BudgetCategory>,onDismiss:()->
             }
             Divider()
             Text("Добавить категорию",fontWeight=FontWeight.SemiBold)
-            OutlinedTextField(name,{name=it},label={Text("Название")},singleLine=true)
-            OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, %")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
+            OutlinedTextField(name,{name=it},label={Text("Название")},singleLine=true,modifier=Modifier.fillMaxWidth())
+            OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, % (по умолчанию 0)")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),modifier=Modifier.fillMaxWidth())
         }
     },confirmButton={
         val value=percent.replace(',','.').toDoubleOrNull()
-        TextButton(onClick={if(name.isNotBlank()&&value!=null&&value>=0) {onAdd(name.trim(),value);name="";percent=""}},enabled=name.isNotBlank()&&value!=null&&value>=0) { Text("Добавить") }
+        TextButton(onClick={if(name.isNotBlank()&&value!=null&&value.isFinite()&&value>=0) {onAdd(name.trim(),value);name="";percent="0"}},enabled=name.isNotBlank()&&value!=null&&value.isFinite()&&value>=0) { Text("Добавить") }
     },dismissButton={TextButton(onClick=onDismiss){Text("Готово")}})
 }
 
