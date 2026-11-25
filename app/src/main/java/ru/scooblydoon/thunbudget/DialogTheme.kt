@@ -81,6 +81,16 @@ internal fun AppAlertDialog(
         onSurface = foreground,
         surfaceVariant = rowSurface,
         onSurfaceVariant = secondary,
+        // Material 3 filled fields, menus and selection surfaces read these roles.
+        // Keep every modal control in the same graphite/soft-neutral family instead
+        // of inheriting the underlying screen's light surface containers.
+        surfaceDim = surfaceColor,
+        surfaceBright = rowSurface,
+        surfaceContainerLowest = surfaceColor,
+        surfaceContainerLow = rowSurface,
+        surfaceContainer = rowSurface,
+        surfaceContainerHigh = rowSurface,
+        surfaceContainerHighest = rowSurface,
         error = error,
         outline = outline,
         outlineVariant = outline.copy(alpha = 0.58f)
