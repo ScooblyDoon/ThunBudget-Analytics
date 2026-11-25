@@ -1601,36 +1601,27 @@ private fun ThunBudgetApp() {
                         }
                     }
                     item {
-                        val previousMonth = analyticsMonth.minusMonths(1)
-                        val currentFrom = analyticsMonth.atDay(1)
-                        val currentTo = minOf(analyticsMonth.atEndOfMonth(), if (analyticsMonth == YearMonth.now()) today else analyticsMonth.atEndOfMonth())
-                        val previousTo = if (analyticsMonth == YearMonth.now()) {
-                            previousMonth.atDay(today.dayOfMonth.coerceAtMost(previousMonth.lengthOfMonth()))
-                        } else previousMonth.atEndOfMonth()
-                        val currentTotal = expenses.filter { it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount }
-                        val previousTotal = expenses.filter { it.date >= previousMonth.atDay(1).toString() && it.date <= previousTo.toString() }.sumOf { it.amount }
+                        val currentFrom = LocalDate.parse(analyticsRangeStart)
+                        val currentTo = minOf(LocalDate.parse(analyticsRangeEnd), today)
+                        val duration = if (currentTo.isBefore(currentFrom)) 0L else java.time.temporal.ChronoUnit.DAYS.between(currentFrom, currentTo) + 1L
+                        val previousTo = currentFrom.minusDays(1)
+                        val previousFrom = if (duration > 0) previousTo.minusDays(duration - 1) else previousTo
+                        val currentTotal = if (duration == 0L) 0.0 else expenses.filter { it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount }
+                        val previousTotal = if (duration == 0L) 0.0 else expenses.filter { it.date >= previousFrom.toString() && it.date <= previousTo.toString() }.sumOf { it.amount }
                         val change = currentTotal - previousTotal
                         val changePercent = if (previousTotal > 0.0) change / previousTotal * 100.0 else 0.0
-                        val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(currentFrom, currentTo) + 1
-                        val dailyAverage = if (elapsedDays > 0) currentTotal / elapsedDays else 0.0
-                        val topCategory = categories.map { cat ->
-                            cat.name to expenses.filter { it.category == cat.name && it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount }
-                        }.maxByOrNull { it.second }
+                        val dailyAverage = if (duration > 0) currentTotal / duration else 0.0
+                        val topCategory = categories.map { cat -> cat.name to expenses.filter { it.category == cat.name && it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount } }.maxByOrNull { it.second }
                         Card(shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Динамика расходов", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                                Text("К " + previousMonth.format(DateTimeFormatter.ofPattern("LLLL", Locale("ru", "RU"))) + ": " +
-                                    (if (previousTotal <= 0.0) "нет данных для сравнения" else
-                                        (if (change > 0.0) "рост " else if (change < 0.0) "снижение " else "без изменений ") +
-                                        money(kotlin.math.abs(change)) + " (" +
-                                        String.format(Locale("ru", "RU"), "%.1f", kotlin.math.abs(changePercent)) + "%)"),
+                                Text("К предыдущему периоду (" + previousFrom.format(formatter) + " — " + previousTo.format(formatter) + "): " +
+                                    (if (previousTotal <= 0.0) "нет данных для сравнения" else (if (change > 0.0) "рост " else if (change < 0.0) "снижение " else "без изменений ") + money(kotlin.math.abs(change)) + " (" + String.format(Locale("ru", "RU"), "%.1f", kotlin.math.abs(changePercent)) + "%)"),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (change > 0.0) Color(0xFFC74444) else Color(0xFF168A72))
                                 Text("Средний расход в день: " + money(dailyAverage), style = MaterialTheme.typography.bodyMedium)
-                                Text("Крупнейшая категория: " +
-                                    (topCategory?.takeIf { it.second > 0.0 }?.let { it.first + " · " + money(it.second) } ?: "нет расходов"),
-                                    style = MaterialTheme.typography.bodyMedium)
-                                if (analyticsMonth == YearMonth.now()) Text("Сравнение выполнено за одинаковое количество прошедших дней месяца.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Крупнейшая категория: " + (topCategory?.takeIf { it.second > 0.0 }?.let { it.first + " · " + money(it.second) } ?: "нет расходов"), style = MaterialTheme.typography.bodyMedium)
+                                Text("Сравнение выполнено с предыдущим интервалом такой же продолжительности.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
