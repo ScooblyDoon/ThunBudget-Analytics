@@ -148,7 +148,7 @@ object BudgetForecastCalculator {
             val monthlyForecast = dailyRate * monthDays
             val periodForecast = dailyRate * targetDays
             val historicalPeriodAverage = if (completedPeriods.isNotEmpty()) historicalRate * averagePeriodDays else dailyRate * averagePeriodDays
-            val hasHistory = observedExpenses.any { it.category.equals(category, ignoreCase = true) }
+            val hasHistory = hasCompletedHistory || (hasCurrentData && enoughNewCategoryEvidence)
 
             CategoryForecast(
                 category = category,
