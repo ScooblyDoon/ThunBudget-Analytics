@@ -78,15 +78,18 @@ internal object ExternalBackupStorage {
             }
         } ?: return
 
-        // Keep only the newest copy from each calendar day, then retain the latest seven days.
-        // Existing timestamped copies from older app versions are deduplicated by their YYYYMMDD prefix.
-        val newestPerDay = rows
-            .sortedWith(compareByDescending<Triple<Long, String, Uri>> { it.first }.thenByDescending { it.second })
-            .distinctBy { row ->
-                Regex("""^ThunBudget-auto-(\d{8})-.*\.json$""")
-                    .find(row.second)?.groupValues?.get(1) ?: row.second
-            }
-        newestPerDay.drop(KEEP_FILES).forEach { (_, _, uri) ->
+        // Keep exactly one newest verified backup per calendar day and at most seven days.
+        // Older versions could leave several timestamped files for the same day; delete those
+        // duplicates as well as backups outside the retention window.
+        val sorted = rows.sortedWith(
+            compareByDescending<Triple<Long, String, Uri>> { it.first }.thenByDescending { it.second }
+        )
+        val newestPerDay = sorted.distinctBy { row ->
+            Regex("""^ThunBudget-auto-(\d{8})-.*\.json$""")
+                .find(row.second)?.groupValues?.get(1) ?: row.second
+        }
+        val keepUris = newestPerDay.take(KEEP_FILES).map { it.third.toString() }.toSet()
+        rows.filter { it.third.toString() !in keepUris }.forEach { (_, _, uri) ->
             runCatching { DocumentsContract.deleteDocument(resolver, uri) }
         }
     }
