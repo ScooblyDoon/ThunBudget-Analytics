@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
+import android.util.Log
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,10 +97,23 @@ internal fun AppAlertDialog(
             onDismissRequest = onDismissRequest,
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)
         ) {
-            val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+            val dialogView = LocalView.current
+            // DialogWindowProvider is implemented by the dialog root view. Depending on the
+            // Compose host/version, LocalView may be that root or a child hosted below it.
+            val dialogWindowProvider = (dialogView as? DialogWindowProvider)
+                ?: (dialogView.parent as? DialogWindowProvider)
+            val dialogWindow = dialogWindowProvider?.window
             SideEffect {
-                // Prevent the platform window's default light background from showing around
-                // the Compose surface when the app itself is in dark mode.
+                // Emit runtime evidence before changing the platform window background.
+                // This distinguishes a wrong Compose palette from a platform window issue.
+                Log.d(
+                    "ThunBudgetDialog",
+                    "darkTheme=$isDark surface=${surfaceColor.value.toULong().toString(16)} " +
+                        "baseSurface=${base.surface.value.toULong().toString(16)} " +
+                        "view=${dialogView.javaClass.name} parent=${dialogView.parent?.javaClass?.name} " +
+                        "providerFound=${dialogWindow != null} " +
+                        "windowBackground=${dialogWindow?.decorView?.background?.javaClass?.name ?: "null"}"
+                )
                 dialogWindow?.setBackgroundDrawableResource(android.R.color.transparent)
             }
             Surface(
