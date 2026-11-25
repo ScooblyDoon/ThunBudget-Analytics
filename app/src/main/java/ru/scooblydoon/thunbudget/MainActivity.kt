@@ -2194,12 +2194,14 @@ private fun ThunBudgetApp() {
         IncomeEntryEditDialog(selected, onDismiss={selectedIncomeEntry=null}, onSave={amount->
             store.prepareUndoSnapshot(); canUndo=true
             store.updateIncomeEntry(selected.copy(amount=amount))
+            expenses=store.loadExpenses()
             incomeEntries=store.loadIncomeEntries()
             periodIncomes=store.loadPeriodIncomes()
             selectedIncomeEntry=null
         }, onDelete={
             store.prepareUndoSnapshot(); canUndo=true
             store.deleteIncomeEntry(selected.id)
+            expenses=store.loadExpenses()
             incomeEntries=store.loadIncomeEntries()
             periodIncomes=store.loadPeriodIncomes()
             selectedIncomeEntry=null
