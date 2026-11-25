@@ -959,7 +959,7 @@ private fun ThunBudgetApp() {
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
         if (uri != null) {
             backupMessage = runCatching {
-                XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, periodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (_, entries) -> entries.sumOf { it.amount } })
+                XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, periodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (_, entries) -> entries.sumOf { it.earnedAmount } })
                 "Excel-отчёт успешно сохранён."
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
         }
