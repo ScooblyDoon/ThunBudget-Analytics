@@ -2729,6 +2729,7 @@ private fun SettingsDialog(
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
+    var categoryPercentTexts by remember(categories) { mutableStateOf(categories.map { it.percent.toString() }) }
     var sourceNames by remember { mutableStateOf(categories.map { it.name }) }
     var from by remember { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     var to by remember { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
@@ -2748,8 +2749,12 @@ private fun SettingsDialog(
     val parsedFrom = parseUserDate(from)
     val parsedTo = parseUserDate(to)
     val validDates = parsedFrom != null && parsedTo != null && !parsedTo.isBefore(parsedFrom)
-    val validCategories = cats.isNotEmpty() && cats.all { it.name.isNotBlank() && it.percent.isFinite() && it.percent >= 0.0 } &&
-        cats.map { it.name.trim().lowercase() }.distinct().size == cats.size && cats.sumOf { it.percent } <= 100.0
+    val parsedCategoryPercents = categoryPercentTexts.map { it.replace(',', '.').toDoubleOrNull() }
+    val validCategories = cats.isNotEmpty() && categoryPercentTexts.size == cats.size &&
+        parsedCategoryPercents.all { it != null && it.isFinite() && it >= 0.0 } &&
+        cats.all { it.name.isNotBlank() } &&
+        cats.map { it.name.trim().lowercase() }.distinct().size == cats.size &&
+        parsedCategoryPercents.sumOf { it ?: 0.0 } <= 100.0
     AlertDialog(
         onDismissRequest=onDismiss,
         title={Text("Настройки")},
@@ -2786,13 +2791,34 @@ private fun SettingsDialog(
                             Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
                                 OutlinedTextField(cats[index].name,{v->cats=cats.toMutableList().also{it[index]=it[index].copy(name=v)}},label={Text("Название категории")},singleLine=true,modifier=Modifier.fillMaxWidth())
                                 Row(verticalAlignment=Alignment.CenterVertically) {
-                                    OutlinedTextField(cats[index].percent.toString(),{v->cats=cats.toMutableList().also{it[index]=it[index].copy(percent=v.replace(',','.').toDoubleOrNull()?:0.0)}},label={Text("Доля, %")},modifier=Modifier.weight(1f),singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal))
-                                    TextButton(onClick={cats=cats.filterIndexed{idx,_->idx!=index};sourceNames=sourceNames.filterIndexed{idx,_->idx!=index}}) { Text("Удалить",color=Color(0xFFC74444)) }
+                                    OutlinedTextField(
+                                        value = categoryPercentTexts.getOrNull(index).orEmpty(),
+                                        onValueChange = { raw ->
+                                            categoryPercentTexts = categoryPercentTexts.toMutableList().also { it[index] = raw }
+                                            val parsed = raw.replace(',', '.').toDoubleOrNull()
+                                            if (parsed != null && parsed.isFinite() && parsed >= 0.0) {
+                                                cats = cats.toMutableList().also { it[index] = it[index].copy(percent = parsed) }
+                                            }
+                                        },
+                                        label = { Text("Доля, %") },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                    )
+                                    TextButton(onClick={
+                                        cats=cats.filterIndexed{idx,_->idx!=index}
+                                        categoryPercentTexts=categoryPercentTexts.filterIndexed{idx,_->idx!=index}
+                                        sourceNames=sourceNames.filterIndexed{idx,_->idx!=index}
+                                    }) { Text("Удалить",color=Color(0xFFC74444)) }
                                 }
                             }
                         }
-                        item { OutlinedButton(onClick={cats=cats+BudgetCategory("",0.0);sourceNames=sourceNames+""},modifier=Modifier.fillMaxWidth()) { Text("Добавить категорию") } }
-                        item { Text("Сумма долей: ${cats.sumOf{it.percent}}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(cats.sumOf{it.percent}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        item { OutlinedButton(onClick={
+                            cats=cats+BudgetCategory("",0.0)
+                            categoryPercentTexts=categoryPercentTexts+""
+                            sourceNames=sourceNames+""
+                        },modifier=Modifier.fillMaxWidth()) { Text("Добавить категорию") } }
+                        item { Text("Сумма долей: ${parsedCategoryPercents.sumOf{it ?: 0.0}}% (не более 100%)",style=MaterialTheme.typography.labelMedium,color=if(parsedCategoryPercents.sumOf{it ?: 0.0}>100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     "export" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Импорт и экспорт Excel",fontWeight=FontWeight.Bold)
@@ -2833,8 +2859,11 @@ private fun SettingsDialog(
                     if(validIncome!=null && validIncome.isFinite() && validIncome>0 &&
                         validSavings!=null && validSavings.isFinite() && validSavings in 0.0..100.0 &&
                         validCategories && validDates) {
-                        onSave(validIncome,validSavings,cats.map{it.copy(name=it.name.trim())},parsedFrom!!.toString(),parsedTo!!.toString(),
-                            sourceNames.zip(cats).filter{it.first.isNotBlank()}.associate{it.first to it.second.name.trim()})
+                        val finalCategories = cats.mapIndexed { index, category ->
+                            category.copy(name = category.name.trim(), percent = parsedCategoryPercents[index] ?: category.percent)
+                        }
+                        onSave(validIncome,validSavings,finalCategories,parsedFrom!!.toString(),parsedTo!!.toString(),
+                            sourceNames.zip(finalCategories).filter{it.first.isNotBlank()}.associate{it.first to it.second.name.trim()})
                     }
                 },
                 enabled=validIncome!=null && validIncome.isFinite() && validIncome>0 &&
