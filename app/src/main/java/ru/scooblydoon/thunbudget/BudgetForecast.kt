@@ -173,11 +173,13 @@ object BudgetForecastCalculator {
     }
 
     private fun capHighOutliers(rates: List<Double>): List<Double> {
-        if (rates.size < 5) return rates
-        val sorted = rates.sorted()
-        val p90Index = ((sorted.size - 1) * 0.90).toInt()
-        val ceiling = sorted[p90Index]
-        return rates.map { minOf(it, ceiling) }
+        // Zero-spend periods are meaningful in the average, but must not push
+        // the percentile ceiling to zero for intermittent categories.
+        val positive = rates.filter { it > 0.0 }.sorted()
+        if (positive.size < 5) return rates
+        val p90Index = ((positive.size - 1) * 0.90).toInt()
+        val ceiling = positive[p90Index]
+        return rates.map { if (it > 0.0) minOf(it, ceiling) else 0.0 }
     }
 
     private fun weightedAverage(rates: List<Double>): Double {
