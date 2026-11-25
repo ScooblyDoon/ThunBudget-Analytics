@@ -3221,7 +3221,6 @@ private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave
         containerColor = themedDialogContainerColor(),
         onDismissRequest=onDismiss,title={Text("Отчётный период")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            Text("Укажи любые даты. Например, с 1-го по 14-е число или с 1-го по конец месяца.")
             OutlinedTextField(from,{from=it.filter(Char::isDigit).take(8)},label={Text("Начало (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
             OutlinedTextField(to,{to=it.filter(Char::isDigit).take(8)},label={Text("Окончание (ДД.ММ.ГГГГ)")},placeholder={Text("ДД.ММ.ГГГГ")},visualTransformation=DateDigitsVisualTransformation,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
             if(!valid) Text("Проверь даты и порядок периода.",color=Color(0xFFC74444),style=MaterialTheme.typography.bodySmall)
