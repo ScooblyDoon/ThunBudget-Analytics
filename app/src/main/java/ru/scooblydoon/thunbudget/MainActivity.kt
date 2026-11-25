@@ -1402,9 +1402,19 @@ private fun ThunBudgetApp() {
                         val forecastFrom = maxOf(today, nextForecastRange.start)
                         val forecastDays = if (nextForecastRange.end.isBefore(forecastFrom)) 0 else
                             (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, nextForecastRange.end) + 1L).toInt()
+                        // Known recurring payments are deterministic commitments, not part of the
+                        // variable-spend baseline. Remove their historical transactions from the
+                        // statistical model and add only unpaid occurrences due in this period.
+                        val recurringHistoryKeys = recurringPayments.map {
+                            it.title.trim().lowercase(Locale.ROOT) to it.category.trim().lowercase(Locale.ROOT)
+                        }.toSet()
+                        val variableHistoryExpenses = expenses.filterNot { row ->
+                            row.category.equals("Перенос средств", true) ||
+                                (row.title.trim().lowercase(Locale.ROOT) to row.category.trim().lowercase(Locale.ROOT)) in recurringHistoryKeys
+                        }
                         val forecast = BudgetForecastCalculator.calculate(
                             categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
-                            expenses = expenses.filterNot { it.category.equals("Перенос средств", true) }.mapNotNull { row ->
+                            expenses = variableHistoryExpenses.mapNotNull { row ->
                                 runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
                             },
                             asOf = today,
@@ -1417,7 +1427,29 @@ private fun ThunBudgetApp() {
                             row.date >= nextForecastRange.start.toString() && row.date <= minOf(today, nextForecastRange.end).toString() &&
                                 !row.category.equals("Перенос средств", true)
                         }.sumOf { it.amount }
-                        val forecastExpectedSpend = forecastActualToDate + forecast.totalPeriodForecast
+                        val recurringForecastByCategory = mutableMapOf<String, Double>()
+                        recurringPayments.filter { it.active }.forEach { payment ->
+                            var month = YearMonth.from(nextForecastRange.start)
+                            val lastMonth = YearMonth.from(nextForecastRange.end)
+                            while (!month.isAfter(lastMonth)) {
+                                val dueDate = payment.dueDate(month)
+                                val alreadyRecorded = expenses.any { row ->
+                                    row.title.equals(payment.title, true) &&
+                                        row.category.equals(payment.category, true) &&
+                                        row.date == dueDate.toString()
+                                }
+                                if (!dueDate.isBefore(nextForecastRange.start) &&
+                                    !dueDate.isAfter(nextForecastRange.end) &&
+                                    !payment.isCompleted(month) && !alreadyRecorded
+                                ) {
+                                    recurringForecastByCategory[payment.category] =
+                                        (recurringForecastByCategory[payment.category] ?: 0.0) + payment.amount
+                                }
+                                month = month.plusMonths(1)
+                            }
+                        }
+                        val upcomingRecurringSpend = recurringForecastByCategory.values.sum()
+                        val forecastExpectedSpend = forecastActualToDate + forecast.totalPeriodForecast + upcomingRecurringSpend
                         val forecastIncomeRow = periodIncomes.firstOrNull {
                             it.start == nextForecastRange.start.toString() && it.end == nextForecastRange.end.toString()
                         }
@@ -1435,7 +1467,7 @@ private fun ThunBudgetApp() {
                                 }
                                 if (showExpenseForecast) {
                                     Text(
-                                        "Прогноз основан на средней дневной трате по истории. Он не ограничивается доходом: показывает ожидаемые расходы при сохранении текущего темпа.",
+                                        "Прогноз переменных расходов строится по завершённым периодам всей истории с повышенным весом последних периодов и постепенно учитывает темп текущего периода. Регулярные платежи добавляются отдельно по датам.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1466,7 +1498,7 @@ private fun ThunBudgetApp() {
                                         }
                                     }
                                     Text(
-                                        "Уже потрачено: ${money(forecastActualToDate)} · Ожидается дополнительно: ${money(forecast.totalPeriodForecast)}",
+                                        "Уже потрачено: ${money(forecastActualToDate)} · Переменные расходы: ${money(forecast.totalPeriodForecast)} · Регулярные платежи: ${money(upcomingRecurringSpend)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1486,7 +1518,7 @@ private fun ThunBudgetApp() {
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
                                                 Text(money(categoryForecast.forecastForNextMonth), fontWeight = FontWeight.SemiBold)
-                                                Text("До конца периода: ${money(categoryActual + categoryForecast.forecastForPeriod)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text("До конца периода: ${money(categoryActual + categoryForecast.forecastForPeriod + (recurringForecastByCategory[categoryForecast.category] ?: 0.0))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
                                     }
