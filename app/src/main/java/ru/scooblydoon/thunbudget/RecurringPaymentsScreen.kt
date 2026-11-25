@@ -444,16 +444,10 @@ private fun RecurringPaymentDetailsDialog(
         else -> "Ожидает подтверждения"
     }
 
-    Dialog(
+    AppAlertDialog(
         onDismissRequest = onCancel,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = themedDialogContainerColor(),
-            tonalElevation = 6.dp
-        ) {
+        title = { Text("Платёж на ${dueDate.format(DATE_FORMAT)}") },
+        text = {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -473,6 +467,7 @@ private fun RecurringPaymentDetailsDialog(
                     Text("Периодичность: ежемесячно, ${payment.dayOfMonth}-е число", style = MaterialTheme.typography.bodyMedium)
                     Text("Статус: $status", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -481,30 +476,6 @@ private fun RecurringPaymentDetailsDialog(
                     TextButton(onClick = onEdit) { Text("Изменить") }
                     TextButton(onClick = onToggle) { Text(if (payment.active) "Пауза" else "Включить") }
                     TextButton(onClick = onDelete) { Text("Удалить", color = MaterialTheme.colorScheme.error) }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
-                        Text("Отмена", maxLines = 1)
-                    }
-                    Button(
-                        onClick = onConfirm,
-                        enabled = canConfirm,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            when {
-                                payment.isCompleted(month) -> "Оплачен"
-                                !payment.active -> "На паузе"
-                                dueDate.isAfter(today) -> "Ещё рано"
-                                else -> "Подтвердить"
-                            },
-                            maxLines = 1
-                        )
-                    }
                 }
             }
         }
@@ -529,8 +500,7 @@ private fun RecurringPaymentEditorDialog(
     val parsedAmount = amount.replace(',', '.').toDoubleOrNull()
     val parsedDay = day.toIntOrNull()
 
-    AlertDialog(
-        containerColor = themedDialogContainerColor(),
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (payment == null) "Новый регулярный платёж" else "Изменить платёж") },
         text = {
