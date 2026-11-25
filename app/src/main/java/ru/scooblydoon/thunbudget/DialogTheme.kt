@@ -32,6 +32,46 @@ import androidx.compose.ui.window.DialogProperties
 
 /** Explicit app-theme flag, kept independent from the platform dialog window theme. */
 internal val LocalThunBudgetDarkTheme = staticCompositionLocalOf { false }
+/** True only while composing content hosted by an app modal. */
+internal val LocalThunBudgetDialogFields = staticCompositionLocalOf { false }
+
+/** Shared filled graphite treatment for every OutlinedTextField hosted by a modal. */
+@Composable
+internal fun themedDialogOutlinedTextFieldColors(): androidx.compose.material3.TextFieldColors {
+    if (!LocalThunBudgetDialogFields.current) return androidx.compose.material3.OutlinedTextFieldDefaults.colors()
+    val isDark = LocalThunBudgetDarkTheme.current
+    val container = if (isDark) Color(0xFF343440) else Color(0xFFF0F2F5)
+    val foreground = if (isDark) Color(0xFFF3F2F8) else Color(0xFF1F2937)
+    val secondary = if (isDark) Color(0xFFB4B7C2) else Color(0xFF6B7280)
+    val primary = if (isDark) Color(0xFFB59AFF) else Color(0xFF445264)
+    val outline = if (isDark) Color(0xFF50535F) else Color(0xFFD9DEE5)
+    val error = if (isDark) Color(0xFFFF817A) else Color(0xFFD77A72)
+    return androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+        focusedTextColor = foreground,
+        unfocusedTextColor = foreground,
+        disabledTextColor = secondary,
+        errorTextColor = foreground,
+        focusedContainerColor = container,
+        unfocusedContainerColor = container,
+        disabledContainerColor = container.copy(alpha = 0.58f),
+        errorContainerColor = container,
+        cursorColor = primary,
+        errorCursorColor = error,
+        focusedBorderColor = primary,
+        unfocusedBorderColor = outline,
+        disabledBorderColor = outline.copy(alpha = 0.5f),
+        errorBorderColor = error,
+        focusedLabelColor = primary,
+        unfocusedLabelColor = secondary,
+        disabledLabelColor = secondary,
+        errorLabelColor = error,
+        focusedPlaceholderColor = secondary,
+        unfocusedPlaceholderColor = secondary,
+        disabledPlaceholderColor = secondary.copy(alpha = 0.7f),
+        errorPlaceholderColor = secondary
+    )
+}
+
 
 @Composable
 internal fun ThunBudgetTheme(
@@ -104,6 +144,7 @@ internal fun AppAlertDialog(
     )
 
     MaterialTheme(colorScheme = dialogColors, shapes = dialogShapes, typography = MaterialTheme.typography) {
+        CompositionLocalProvider(LocalThunBudgetDialogFields provides true) {
         Dialog(
             onDismissRequest = onDismissRequest,
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)
@@ -168,6 +209,7 @@ internal fun AppAlertDialog(
                     }
                 }
             }
+        }
         }
     }
 }
