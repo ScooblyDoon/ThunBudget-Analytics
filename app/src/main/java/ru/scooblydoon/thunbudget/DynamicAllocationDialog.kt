@@ -136,7 +136,7 @@ internal fun DynamicAllocationDialog(
                                         enabled = isAccepted,
                                         singleLine = true,
                                         label = { Text("Новая %") }
-                                    )
+                                    , colors = themedDialogOutlinedTextFieldColors())
                                 }
                             }
                         }
