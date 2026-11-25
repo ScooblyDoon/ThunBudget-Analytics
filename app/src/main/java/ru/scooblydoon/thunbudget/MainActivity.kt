@@ -1107,9 +1107,9 @@ private fun ThunBudgetApp() {
     val appColors = if (darkTheme) {
         darkColorScheme(
             primary = Color(0xFFB59AFF), onPrimary = Color(0xFF171321),
-            primaryContainer = Color(0xFF39334D), onPrimaryContainer = Color(0xFFE9DFFF),
+            primaryContainer = Color(0xFF443B58), onPrimaryContainer = Color(0xFFEDE5FF),
             secondary = Color(0xFF6BA88E), onSecondary = Color(0xFF10251D),
-            secondaryContainer = Color(0xFF263D34), onSecondaryContainer = Color(0xFFC4E4D4),
+            secondaryContainer = Color(0xFF3B344B), onSecondaryContainer = Color(0xFFE6DDF8),
             tertiary = Color(0xFF9AA3B2), background = Color(0xFF090A10),
             surface = Color(0xFF171821), surfaceVariant = Color(0xFF242631),
             onSurface = Color(0xFFF3F2F8), onSurfaceVariant = Color(0xFFB4B7C2),
@@ -1118,9 +1118,9 @@ private fun ThunBudgetApp() {
     } else {
         lightColorScheme(
             primary = Color(0xFF445264), onPrimary = Color.White,
-            primaryContainer = Color(0xFFE1E7ED), onPrimaryContainer = Color(0xFF263342),
+            primaryContainer = Color(0xFFE9E3F2), onPrimaryContainer = Color(0xFF40364F),
             secondary = Color(0xFF6BA88E), onSecondary = Color.White,
-            secondaryContainer = Color(0xFFDCEBE3), onSecondaryContainer = Color(0xFF234B39),
+            secondaryContainer = Color(0xFFEAE4F2), onSecondaryContainer = Color(0xFF493E59),
             tertiary = Color(0xFF6B7280), background = Color(0xFFF4F6F8),
             surface = Color(0xFFFFFFFF), surfaceVariant = Color(0xFFF0F2F5),
             onSurface = Color(0xFF1F2937), onSurfaceVariant = Color(0xFF6B7280),
