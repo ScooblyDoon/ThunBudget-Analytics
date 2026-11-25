@@ -1347,8 +1347,8 @@ private fun ThunBudgetApp() {
                         val forecastDays = if (nextForecastRange.end.isBefore(forecastFrom)) 0 else
                             (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, nextForecastRange.end) + 1L).toInt()
                         val forecast = BudgetForecastCalculator.calculate(
-                            categories = categories.map { it.name },
-                            expenses = expenses.mapNotNull { row ->
+                            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+                            expenses = expenses.filterNot { it.category.equals("Перенос средств", true) }.mapNotNull { row ->
                                 runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
                             },
                             asOf = today,
@@ -1523,8 +1523,8 @@ private fun ThunBudgetApp() {
                         val forecastDays = if (today.isAfter(selectedEnd)) 0 else
                             (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, selectedEnd) + 1L).toInt()
                         val periodForecast = BudgetForecastCalculator.calculate(
-                            categories = categories.map { it.name },
-                            expenses = expenses.mapNotNull { row ->
+                            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+                            expenses = expenses.filterNot { it.category.equals("Перенос средств", true) }.mapNotNull { row ->
                                 runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
                             },
                             asOf = today,
