@@ -1200,6 +1200,7 @@ private fun ThunBudgetApp() {
                 }
             },
             bottomBar = {
+                if (tab == 0) {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -1250,6 +1251,7 @@ private fun ThunBudgetApp() {
                             )
                         }
                     }
+                }
             }
         ) { padding ->
             when(tab) {
@@ -2197,11 +2199,23 @@ private fun ThunBudgetApp() {
     if(showPeriodEditor) PeriodEditorDialog(periodStart,periodEnd,onDismiss={showPeriodEditor=false},onSave={from,to->
         periodStart=from; periodEnd=to; store.savePeriod(from,to); selectedPeriod=-1; store.saveSelectedPeriod(-1); showPeriodEditor=false
     })
-    if(showCategoryManager) CategoryManagerDialog(categories,onDismiss={showCategoryManager=false},onAdd={name,percent->
-        if(categories.none{it.name.equals(name,true)}) {
-            categories=categories+BudgetCategory(name,percent); store.saveCategories(categories)
-        }
-    },onDelete={cat->
+    if (showCategoryManager) CategoryManagerDialog(
+        categories = categories,
+        onDismiss = { showCategoryManager = false },
+        onAdd = { name, percent ->
+            val normalizedName = name.trim()
+            if (normalizedName.isBlank() || categories.any { it.name.equals(normalizedName, true) }) {
+                false
+            } else {
+                store.prepareUndoSnapshot()
+                canUndo = true
+                val updatedCategories = categories + BudgetCategory(normalizedName, percent)
+                store.saveCategories(updatedCategories)
+                categories = store.loadCategories()
+                true
+            }
+        },
+        onDelete = { cat ->
         store.prepareUndoSnapshot(); canUndo=true
         categories=categories.filterNot{it.name==cat.name}; store.saveCategories(categories); showCategoryManager=false
     },onEdit={cat->editingCategory=cat;showCategoryManager=false})
@@ -3218,31 +3232,94 @@ private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave
 }
 
 @Composable
-private fun CategoryManagerDialog(categories:List<BudgetCategory>,onDismiss:()->Unit,onAdd:(String,Double)->Unit,onDelete:(BudgetCategory)->Unit,onEdit:(BudgetCategory)->Unit) {
+private fun CategoryManagerDialog(
+    categories: List<BudgetCategory>,
+    onDismiss: () -> Unit,
+    onAdd: (String, Double) -> Boolean,
+    onDelete: (BudgetCategory) -> Unit,
+    onEdit: (BudgetCategory) -> Unit
+) {
     var name by remember { mutableStateOf("") }
     var percent by remember { mutableStateOf("0") }
+    var validationMessage by remember { mutableStateOf<String?>(null) }
+    val parsedPercent = percent.replace(',', '.').toDoubleOrNull()
+    val validPercent = parsedPercent != null && parsedPercent.isFinite() && parsedPercent in 0.0..100.0
+
     AlertDialog(
         containerColor = themedDialogContainerColor(),
-        onDismissRequest=onDismiss,title={Text("Категории бюджета")},text={
-        Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState())) {
-            Text("Удаление категории не удаляет старые операции — они останутся в истории.")
-            categories.forEach { cat ->
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Text(cat.name,modifier=Modifier.weight(1f))
-                    IconButton(onClick={onEdit(cat)}) { Text("✎") }
-                    IconButton(onClick={onDelete(cat)}) { Text("×",color=Color(0xFFC74444)) }                }
+        onDismissRequest = onDismiss,
+        title = { Text("Категории бюджета") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+            ) {
+                Text("Добавить категорию", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it.take(40)
+                        validationMessage = null
+                    },
+                    label = { Text("Название категории") },
+                    placeholder = { Text("Например, Одежда") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = percent,
+                    onValueChange = {
+                        percent = it.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' }.take(6)
+                        validationMessage = null
+                    },
+                    label = { Text("Доля бюджета, %") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (validationMessage != null) {
+                    Text(validationMessage!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                Button(
+                    onClick = {
+                        val cleanName = name.trim()
+                        when {
+                            cleanName.isBlank() -> validationMessage = "Введи название категории."
+                            categories.any { it.name.equals(cleanName, true) } -> validationMessage = "Такая категория уже существует."
+                            !validPercent -> validationMessage = "Укажи долю от 0 до 100%."
+                            onAdd(cleanName, parsedPercent!!) -> {
+                                name = ""
+                                percent = "0"
+                                validationMessage = "Категория добавлена."
+                            }
+                            else -> validationMessage = "Не удалось добавить категорию. Проверь название."
+                        }
+                    },
+                    enabled = name.isNotBlank() && validPercent,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Добавить категорию")
+                }
+                Divider()
+                Text("Существующие категории", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Удаление категории не удаляет старые операции — они останутся в истории.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                categories.forEach { cat ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(cat.name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { onEdit(cat) }) { Text("✎") }
+                        IconButton(onClick = { onDelete(cat) }) { Text("×", color = Color(0xFFC74444)) }
+                    }
+                }
             }
-            Divider()
-            Text("Добавить категорию",fontWeight=FontWeight.SemiBold)
-            OutlinedTextField(name,{name=it},label={Text("Название")},singleLine=true,modifier=Modifier.fillMaxWidth())
-            OutlinedTextField(percent,{percent=it},label={Text("Доля бюджета, % (по умолчанию 0)")},singleLine=true,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),modifier=Modifier.fillMaxWidth())
-        }
-    },confirmButton={
-        val value=percent.replace(',','.').toDoubleOrNull()
-        TextButton(onClick={if(name.isNotBlank()&&value!=null&&value.isFinite()&&value>=0) {onAdd(name.trim(),value);name="";percent="0"}},enabled=name.isNotBlank()&&value!=null&&value.isFinite()&&value>=0) { Text("Добавить") }
-    },dismissButton={TextButton(onClick=onDismiss){Text("Готово")}})
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Готово") } },
+        dismissButton = {}
+    )
 }
-
 @Composable
 private fun CategoryEditDialog(category:BudgetCategory,onDismiss:()->Unit,onSave:(String,Double)->Unit) {
     var name by remember(category.name) { mutableStateOf(category.name) }
