@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.luminance
 @Composable
 internal fun themedDialogContainerColor(): Color =
     if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
-        Color(0xFF34333A)
+        Color(0xFF36343B)
     } else {
         Color.White
     }
