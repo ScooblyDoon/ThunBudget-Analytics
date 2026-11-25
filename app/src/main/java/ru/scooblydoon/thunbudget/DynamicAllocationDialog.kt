@@ -24,8 +24,7 @@ internal fun DynamicAllocationDialog(
     onSave: (List<BudgetCategory>) -> Unit
 ) {
     val regular = categories.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
-    var monthsToAnalyze by remember { mutableIntStateOf(3) }
-    val forecast = remember(expenses, categories, firstPeriodStartDay, firstPeriodEndDay, monthsToAnalyze) {
+    val forecast = remember(expenses, categories, firstPeriodStartDay, firstPeriodEndDay) {
         BudgetForecastCalculator.calculate(
             categories = regular.map { it.name },
             expenses = expenses.mapNotNull { row ->
@@ -34,7 +33,7 @@ internal fun DynamicAllocationDialog(
             asOf = LocalDate.now(),
             firstStartDay = firstPeriodStartDay,
             firstEndDay = firstPeriodEndDay,
-            monthsToAnalyze = monthsToAnalyze
+            monthsToAnalyze = 6
         )
     }
     val availableMonths = forecast.historyMonths
@@ -69,14 +68,9 @@ internal fun DynamicAllocationDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 560.dp)) {
                 Text("Прогноз расходов по полной истории отчётных периодов", fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    (1..6).forEach { count ->
-                        FilterChip(selected = monthsToAnalyze == count, onClick = { monthsToAnalyze = count }, label = { Text("$count") })
-                    }
-                }
                 Text(
-                    if (availableMonths == 0) "За выбранную историю расходов нет."
-                    else "Учтено завершённых отчётных месяцев: $availableMonths из $monthsToAnalyze · Средний расход: ${String.format(Locale("ru", "RU"), "%,.0f ₽", forecast.totalMonthlyForecast)} на следующий месяц",
+                    if (availableMonths == 0) "История расходов пока пуста. Можно сохранить текущие доли или задать их вручную."
+                    else "Учтено отчётных периодов: $availableMonths · Средний расход: ${String.format(Locale("ru", "RU"), "%,.0f ₽", forecast.totalMonthlyForecast)} в месяц",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text("Для каждой категории можно отдельно принять рекомендацию, оставить прежнюю долю или изменить предложенный процент.", style = MaterialTheme.typography.bodySmall)
@@ -111,7 +105,7 @@ internal fun DynamicAllocationDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = valid && regular.isNotEmpty() && availableMonths > 0, onClick = {
+            TextButton(enabled = valid && regular.isNotEmpty(), onClick = {
                 val updated = regular.map { category ->
                     category.copy(percent = resultingShares[category.name] ?: category.percent)
                 }
