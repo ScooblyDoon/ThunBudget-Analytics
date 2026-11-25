@@ -2083,8 +2083,8 @@ private fun ThunBudgetApp() {
                         canUndo = true
                         val transferCategory = "Перенос средств"
                         if (categories.none { it.name.equals(transferCategory, true) }) {
-                            categories = categories + BudgetCategory(transferCategory, 0.0)
-                            store.saveCategories(categories)
+                            store.saveCategories(categories + BudgetCategory(transferCategory, 0.0))
+                            categories = store.loadCategories()
                         }
                         val transferExpense = Expense(
                             id = System.currentTimeMillis(),
