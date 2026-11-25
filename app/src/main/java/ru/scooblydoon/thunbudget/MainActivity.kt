@@ -1895,6 +1895,8 @@ private fun ThunBudgetApp() {
             periodEnd = periodEnd,
             firstPeriodStartDay = firstPeriodStartDay,
             firstPeriodEndDay = firstPeriodEndDay,
+            periodIncomeByRange = periodIncomes.associate { (it.start to it.end) to it.amount },
+            fallbackPeriodIncome = if (periodIncome > 0.0) periodIncome else income / 2.0,
             onDismiss = { showDynamicAllocationDialog = false },
             onSave = { updated ->
                 store.prepareUndoSnapshot()
