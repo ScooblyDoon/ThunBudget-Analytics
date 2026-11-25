@@ -1,4 +1,5 @@
 # Full verification branch for the 2026-11-25 user feedback corrections.
+# [final-apk] Build the explicit custom dialog surface implementation.
 # Includes carryover accounting, partial-period forecasting, and payment reminder rescheduling.
 # Includes regression coverage for Russian spoken thousand amounts.
 name: Android APK
