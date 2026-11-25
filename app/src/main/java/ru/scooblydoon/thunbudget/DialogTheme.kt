@@ -101,8 +101,8 @@ internal fun AppAlertDialog(
             val dialogView = LocalView.current
             // The provider can be the dialog root itself or an ancestor of the ComposeView.
             // Walk the actual view-parent chain instead of assuming exactly one parent level.
-            var currentParent: android.view.ViewParent? = dialogView
-            var dialogWindowProvider: DialogWindowProvider? = null
+            var dialogWindowProvider: DialogWindowProvider? = dialogView as? DialogWindowProvider
+            var currentParent: android.view.ViewParent? = dialogView.parent
             while (currentParent != null && dialogWindowProvider == null) {
                 dialogWindowProvider = currentParent as? DialogWindowProvider
                 currentParent = (currentParent as? android.view.View)?.parent
