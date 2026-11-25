@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose controls the app's actual light/dark palette. Use a neutral
+         platform theme so DialogWindowTheme does not force light surfaces. -->
+    <style name="Theme.ThunBudget" parent="@android:style/Theme.Material.NoActionBar" />
+</resources>
