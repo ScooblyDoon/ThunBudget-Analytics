@@ -77,3 +77,5 @@ jobs:
 # [final-apk] Rebuild after forcing transparent dialog window background and explicit app theme propagation.
 
 # [final-apk] Rebuild soft-violet mic action and selected navigation indicator.
+
+# [final-apk] Match dark dialog graphite surface to user screenshot reference.
