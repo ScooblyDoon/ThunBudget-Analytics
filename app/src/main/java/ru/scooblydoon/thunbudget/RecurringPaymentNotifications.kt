@@ -143,8 +143,11 @@ class RecurringPaymentAlarmReceiver : BroadcastReceiver() {
 
 class RecurringPaymentBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            RecurringPaymentNotifications.schedule(context)
+        when (intent?.action) {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> RecurringPaymentNotifications.schedule(context)
         }
     }
 }
