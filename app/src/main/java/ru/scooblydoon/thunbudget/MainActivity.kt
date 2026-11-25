@@ -3033,7 +3033,7 @@ private fun SettingsDialog(
                 onDismissRequest=onDismiss,
         title={Text("Настройки")},
         text={
-            Column(verticalArrangement=Arrangement.spacedBy(10.dp),modifier=Modifier.heightIn(max=560.dp)) {
+            Column(verticalArrangement=Arrangement.spacedBy(10.dp),modifier=Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState())) {
                 androidx.compose.foundation.lazy.LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
                     items(sections) { (key,label) ->
                         FilterChip(selected=section==key,onClick={section=key},label={Text(label)})
@@ -3063,7 +3063,7 @@ private fun SettingsDialog(
                         Text("Измени порядок информационных блоков на вкладке «Обзор».",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedButton(onClick=onArrangeDashboard,modifier=Modifier.fillMaxWidth()) { Text("Настроить окна обзора") }
                     }
-                    "categories" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=440.dp)) {
+                    "categories" -> LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=340.dp)) {
                         item { Text("Категории бюджета",fontWeight=FontWeight.Bold) }
                         items(cats.size) { index ->
                             Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -3229,27 +3229,51 @@ private fun CategoryManagerDialog(
         onDismissRequest = onDismiss,
         title = { Text("Категории бюджета") },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Существующие категории", fontWeight = FontWeight.SemiBold)
-                categories.forEach { cat ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                Divider()
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())
+                ) {
+                    categories.forEach { cat ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
                         ) {
-                            Text(cat.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                            IconButton(onClick = { onEdit(cat) }) {
-                                Icon(Icons.Filled.Edit, contentDescription = "Изменить категорию", tint = MaterialTheme.colorScheme.primary)
-                            }
-                            IconButton(onClick = { onDelete(cat) }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Удалить категорию", tint = MaterialTheme.colorScheme.error)
+                            Row(
+                                modifier = Modifier.fillMaxSize().padding(start = 14.dp, end = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    cat.name,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1
+                                )
+                                IconButton(
+                                    onClick = { onEdit(cat) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Edit,
+                                        contentDescription = "Изменить категорию",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onDelete(cat) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Удалить категорию",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -3264,12 +3288,17 @@ private fun CategoryManagerDialog(
             ) {
                 Button(
                     onClick = { showAddDialog = true },
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    modifier = Modifier.weight(1f).height(40.dp),
                     shape = RoundedCornerShape(50)
                 ) {
-                    Text("+ Добавить категорию", maxLines = 1)
+                    Text("＋ Добавить категорию", maxLines = 1)
                 }
-                Button(onClick = onDismiss) { Text("Готово") }
+                TextButton(
+                    onClick = onDismiss,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text("Готово")
+                }
             }
         },
         dismissButton = {}
