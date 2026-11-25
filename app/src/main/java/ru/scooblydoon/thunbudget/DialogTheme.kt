@@ -14,20 +14,40 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.DialogProperties
+
+/** Explicit app-theme flag, kept independent from the platform dialog window theme. */
+internal val LocalThunBudgetDarkTheme = staticCompositionLocalOf { false }
+
+@Composable
+internal fun ThunBudgetTheme(
+    colorScheme: androidx.compose.material3.ColorScheme,
+    shapes: androidx.compose.material3.Shapes,
+    content: @Composable () -> Unit
+) {
+    val isDark = colorScheme.background.luminance() < 0.5f
+    CompositionLocalProvider(LocalThunBudgetDarkTheme provides isDark) {
+        MaterialTheme(colorScheme = colorScheme, shapes = shapes, content = content)
+    }
+}
 
 /** Shared visual system for every modal in ThunBudget. */
 @Composable
 internal fun themedDialogContainerColor(): Color =
-    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color(0xFF23242D)
+    if (LocalThunBudgetDarkTheme.current) Color(0xFF23242D)
     else Color(0xFFFFFFFF)
 
 @Composable
@@ -42,7 +62,7 @@ internal fun AppAlertDialog(
     containerColor: Color = Color.Unspecified
 ) {
     val base = MaterialTheme.colorScheme
-    val isDark = base.background.luminance() < 0.5f
+    val isDark = LocalThunBudgetDarkTheme.current
     val surfaceColor = if (isDark) Color(0xFF23242D) else Color(0xFFFFFFFF)
     val foreground = if (isDark) Color(0xFFF3F2F8) else Color(0xFF1F2937)
     val secondary = if (isDark) Color(0xFFB4B7C2) else Color(0xFF6B7280)
@@ -76,6 +96,12 @@ internal fun AppAlertDialog(
             onDismissRequest = onDismissRequest,
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)
         ) {
+            val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+            SideEffect {
+                // Prevent the platform window's default light background from showing around
+                // the Compose surface when the app itself is in dark mode.
+                dialogWindow?.setBackgroundDrawableResource(android.R.color.transparent)
+            }
             Surface(
                 modifier = modifier.fillMaxWidth(0.92f).widthIn(max = 440.dp),
                 shape = RoundedCornerShape(24.dp),
