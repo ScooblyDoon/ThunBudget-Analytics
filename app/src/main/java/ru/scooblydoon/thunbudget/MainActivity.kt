@@ -2146,6 +2146,7 @@ private fun ThunBudgetApp() {
     })
     if (showCarryoverConfirmation) {
         AlertDialog(
+            containerColor = themedDialogContainerColor(),
             onDismissRequest = { showCarryoverConfirmation = false },
             title = { Text("Перенести остаток дохода?") },
             text = {
