@@ -1310,8 +1310,7 @@ private fun ThunBudgetApp() {
                                             Row(verticalAlignment=Alignment.CenterVertically) {
                                                 Column(Modifier.weight(1f)) {
                                                     Text(entry.title,fontWeight=FontWeight.Medium)
-                                                    Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                if(entry.isCarryover) Text("Это перенос между отчётными периодами. Изменение или удаление суммы синхронно изменит запись «Перенос средств» в исходном периоде.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}${if(entry.isCarryover) " · перенос средств" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                                 Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
                                                 TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
@@ -2535,6 +2534,7 @@ private fun IncomeEntryEditDialog(entry: IncomeEntry, onDismiss:()->Unit, onSave
                 Text(entry.title, fontWeight=FontWeight.SemiBold)
                 Text("Дата: ${entry.date} · ${entry.periodStart} — ${entry.periodEnd}", style=MaterialTheme.typography.bodySmall)
                 if(entry.isLegacyAggregate) Text("Это перенесённая общая сумма старого периода, а не отдельное поступление.", style=MaterialTheme.typography.bodySmall)
+                if(entry.isCarryover) Text("Это перенос между отчётными периодами. Изменение или удаление суммы синхронно изменит запись «Перенос средств» в исходном периоде.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true)
             }
         },
