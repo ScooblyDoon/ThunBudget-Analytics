@@ -2156,10 +2156,10 @@ private fun ThunBudgetApp() {
                 Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.bodySmall)
                 val categoryBudget = cat?.let { if(effectivePeriodIncome>0) effectivePeriodIncome*it.percent/100.0 else plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
                 val categoryFact = inPeriod.sumOf { it.amount }
-                Text("Потрачено: ${money(categoryFact)} · Бюджет: ${money(categoryBudget)}")
                 if (categoryName.equals("Перенос средств", true)) {
                     Text("Перенесено в следующий отчётный период: ${money(categoryFact)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
+                    Text("Потрачено: ${money(categoryFact)} · Бюджет: ${money(categoryBudget)}")
                     val metrics = AnalyticsBudgetCalculator.metrics(categoryBudget, categoryFact)
                     Text(
                         "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}%",
