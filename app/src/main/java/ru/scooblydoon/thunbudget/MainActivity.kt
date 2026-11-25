@@ -1866,6 +1866,7 @@ private fun ThunBudgetApp() {
         var voiceDate by remember(draft.date) { mutableStateOf(voiceDateDigits(draft.date)) }
         AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={voiceDraft=null},
             title={Text(when { draft.isCategoryRename -> "Проверь переименование категории"; draft.isCategoryAdd -> "Проверь новую категорию"; draft.isCategoryEdit -> "Проверь изменение категории"; draft.isIncomeEdit -> "Проверь изменение дохода"; draft.isDelete -> "Подтверди удаление операции"; draft.isEdit -> "Проверь изменение операции"; draft.isIncome -> "Проверь распознанный доход"; else -> "Проверь распознанный расход" })},
             text={Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -2021,6 +2022,7 @@ private fun ThunBudgetApp() {
     voiceMessage?.let { message ->
         AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest = { voiceMessage = null },
             title = { Text("Помощник ThunBudget") },
             text = {
@@ -2090,6 +2092,7 @@ private fun ThunBudgetApp() {
     if (showAssistantDialog) {
         AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest = { showAssistantDialog = false },
             title = { Text("Помощник ThunBudget") },
             text = {
@@ -2149,6 +2152,7 @@ private fun ThunBudgetApp() {
     if (showCarryoverConfirmation) {
         AlertDialog(
             containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
             onDismissRequest = { showCarryoverConfirmation = false },
             title = { Text("Перенести остаток дохода?") },
             text = {
@@ -2240,6 +2244,7 @@ private fun ThunBudgetApp() {
         }
         AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={selectedCategory=null},title={Text(categoryName)},text={
             Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=500.dp)) {
                 Text("Операции за отчётный период",fontWeight=FontWeight.SemiBold)
@@ -2355,6 +2360,7 @@ private fun ThunBudgetApp() {
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false    })
     if(showResetConfirmation) AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={showResetConfirmation=false},
         title={Text("Полностью сбросить данные?")},
         text={Text("Все операции, доходы, категории, настройки бюджета и локальные резервные копии будут удалены без возможности отмены. Внешние экспортированные файлы не затрагиваются.")},
@@ -2396,6 +2402,7 @@ private fun ThunBudgetApp() {
     )
     if(showRestoreConfirmation) AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={showRestoreConfirmation=false},
         title={Text("Восстановить резервную копию?")},
         text={Text("Текущие данные приложения будут заменены данными из выбранного файла. Перед продолжением убедись, что текущая версия бюджета сохранена отдельно.")},
@@ -2404,6 +2411,7 @@ private fun ThunBudgetApp() {
     )
     if(showUndoConfirmation) AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={showUndoConfirmation=false},
         title={Text("Отменить последнее действие?")},
         text={Text("Будут восстановлены расходы, категории и настройки бюджета до последнего поддерживаемого изменения.")},
@@ -2427,11 +2435,13 @@ private fun ThunBudgetApp() {
     backupMessage?.let { message ->
         AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={backupMessage=null},title={Text("Результат операции")},text={Text(message)},confirmButton={TextButton(onClick={backupMessage=null}) { Text("Понятно") }})
     }
     if(showDashboardArrangeDialog) {
         AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={showDashboardArrangeDialog=false},
             title={Text("Настроить окна обзора")},
             text={
@@ -2633,6 +2643,7 @@ private fun IncomeEntryEditDialog(entry: IncomeEntry, onDismiss:()->Unit, onSave
     val parsed=amount.replace(',','.').toDoubleOrNull()
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest=onDismiss,
         title={Text("Изменить доход")},
         text={
@@ -2658,6 +2669,7 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
     val parsed=amount.replace(',','.').toDoubleOrNull()
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest=onDismiss,title={Text("Заработанный доход за период")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("${LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",style=MaterialTheme.typography.bodySmall)
@@ -2986,6 +2998,7 @@ private fun AddExpenseDialog(categories:List<BudgetCategory>,initialCategory:Str
     var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember(initialCategory,categories) { mutableStateOf(initialCategory ?: categories.firstOrNull()?.name ?: "Прочее") }; var date by remember { mutableStateOf(LocalDate.now().format(DateTimeFormatter.ofPattern("ddMMyyyy"))) }; var expanded by remember { mutableStateOf(false) }
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest=onDismiss,title={Text("Новый расход")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(title,{title=it},label={Text("Описание")},singleLine=true)
@@ -3042,6 +3055,7 @@ private fun SettingsDialog(
         parsedCategoryPercents.sumOf { it ?: 0.0 } <= 100.0
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest=onDismiss,
         title={Text("Настройки")},
         text={
@@ -3190,6 +3204,7 @@ private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (
     if (showConfirmation && preview != null && start != null && end != null) {
         AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest={showConfirmation=false},
             title={Text("Подтвердить отчётные окна")},
             text={
@@ -3219,6 +3234,7 @@ private fun PeriodEditorDialog(start:String,end:String,onDismiss:()->Unit,onSave
     val valid = parsedFrom != null && parsedTo != null && !parsedTo.isBefore(parsedFrom)
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest=onDismiss,title={Text("Отчётный период")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text("Укажи любые даты. Например, с 1-го по 14-е число или с 1-го по конец месяца.")
@@ -3241,6 +3257,7 @@ private fun CategoryManagerDialog(
 
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest = onDismiss,
         title = { Text("Категории бюджета") },
         text = {
@@ -3315,6 +3332,7 @@ private fun CategoryAddDialog(
 
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest = onDismiss,
         title = { Text("Добавить категорию") },
         text = {
@@ -3376,6 +3394,7 @@ private fun CategoryEditDialog(category:BudgetCategory,onDismiss:()->Unit,onSave
     val value=percent.replace(',','.').toDoubleOrNull()
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest=onDismiss,title={Text("Изменить категорию")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name,{name=it},label={Text("Название категории")},singleLine=true)
@@ -3416,6 +3435,7 @@ private fun ExpenseEditDialog(
     var expanded by remember { mutableStateOf(false) }
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest=onDismiss,
         title={Text("Изменить расход")},
         text={
