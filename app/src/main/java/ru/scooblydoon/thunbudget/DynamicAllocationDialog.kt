@@ -147,7 +147,7 @@ internal fun DynamicAllocationDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = valid && regular.isNotEmpty(), onClick = {
+            Button(enabled = valid && regular.isNotEmpty(), onClick = {
                 val updated = regular.map { category ->
                     category.copy(percent = resultingShares[category.name] ?: category.percent)
                 }
