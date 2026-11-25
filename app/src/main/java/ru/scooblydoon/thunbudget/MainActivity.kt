@@ -3000,7 +3000,7 @@ private fun SettingsDialog(
     var inc by remember { mutableStateOf(income.toString()) }
     var sav by remember { mutableStateOf(savings.toString()) }
     var cats by remember { mutableStateOf(categories) }
-    var categoryPercentTexts by remember(categories) { mutableStateOf(categories.map { it.percent.toString() }) }
+    var categoryPercentTexts by remember { mutableStateOf(categories.map { it.percent.toString() }) }
     var sourceNames by remember { mutableStateOf(categories.map { it.name }) }
     var from by remember { mutableStateOf(runCatching { LocalDate.parse(start).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
     var to by remember { mutableStateOf(runCatching { LocalDate.parse(end).format(DateTimeFormatter.ofPattern("ddMMyyyy")) }.getOrDefault("")) }
