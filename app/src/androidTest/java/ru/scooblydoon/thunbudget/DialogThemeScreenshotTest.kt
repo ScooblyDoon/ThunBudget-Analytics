@@ -51,7 +51,7 @@ class DialogThemeScreenshotTest {
             val scheme = if (dark) {
                 darkColorScheme(background = Color(0xFF090A10), surface = Color(0xFF171821))
             } else {
-                lightColorScheme(background = Color(0xFF101010), surface = Color.White)
+                lightColorScheme(background = Color.White, surface = Color.White)
             }
             ThunBudgetTheme(colorScheme = scheme, shapes = Shapes()) {
                 Box(Modifier.fillMaxSize().background(Color(0xFF101010)))
