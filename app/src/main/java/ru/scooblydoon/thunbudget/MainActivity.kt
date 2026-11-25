@@ -1200,8 +1200,7 @@ private fun ThunBudgetApp() {
                 }
             },
             bottomBar = {
-                if (tab == 0) {
-                    NavigationBar(
+                NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         tonalElevation = 0.dp
@@ -1251,7 +1250,6 @@ private fun ThunBudgetApp() {
                             )
                         }
                     }
-                }
             }
         ) { padding ->
             when(tab) {
