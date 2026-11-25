@@ -1,4 +1,5 @@
 # Full verification branch for the 2026-11-25 user feedback corrections.
+# Includes carryover accounting, partial-period forecasting, and payment reminder rescheduling.
 name: Android APK
 
 on:
