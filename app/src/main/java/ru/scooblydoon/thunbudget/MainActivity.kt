@@ -2462,6 +2462,15 @@ private fun ChartsScreen(
                     }
                     val dayTicks=listOf(1,5,10,15,20,25,month.lengthOfMonth()).distinct().filter { it<=month.lengthOfMonth() }
                     ScaledBarChart(values=dailyValues,xLabels=dayTicks.map { it.toString() },color=Color(0xFF6556D9),height=112.dp)
+                    val category = categories.firstOrNull { it.name == categoryName }
+                    val categoryPlan = category?.let { plannedForPeriod(monthIncome, it.percent, from, to) } ?: 0.0
+                    val categoryMetrics = AnalyticsBudgetCalculator.metrics(categoryPlan, dailyValues.sum())
+                    Text("План: ${money(categoryPlan)} · Факт: ${money(dailyValues.sum())}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Свободный остаток: ${categoryMetrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${categoryMetrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if ((categoryMetrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -2478,6 +2487,12 @@ private fun ChartsScreen(
                         LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.weight(1f),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
                     }
                     Text("${if(fact>plan) "Превышение" else "Остаток"}: ${money(kotlin.math.abs(plan-fact))}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
+                    val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
+                    Text(
+                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 } }
             }
         }
