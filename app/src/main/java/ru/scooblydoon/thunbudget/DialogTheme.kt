@@ -64,7 +64,8 @@ internal fun AppAlertDialog(
 ) {
     val base = MaterialTheme.colorScheme
     val isDark = LocalThunBudgetDarkTheme.current
-    val surfaceColor = if (isDark) Color(0xFF21222D) else Color(0xFFFFFFFF)
+    // One source of truth for the container color used by every modal surface.
+    val surfaceColor = themedDialogContainerColor()
     val foreground = if (isDark) Color(0xFFF3F2F8) else Color(0xFF1F2937)
     val secondary = if (isDark) Color(0xFFB4B7C2) else Color(0xFF6B7280)
     val rowSurface = if (isDark) Color(0xFF343440) else Color(0xFFF0F2F5)
@@ -98,10 +99,14 @@ internal fun AppAlertDialog(
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)
         ) {
             val dialogView = LocalView.current
-            // DialogWindowProvider is implemented by the dialog root view. Depending on the
-            // Compose host/version, LocalView may be that root or a child hosted below it.
-            val dialogWindowProvider = (dialogView as? DialogWindowProvider)
-                ?: (dialogView.parent as? DialogWindowProvider)
+            // The provider can be the dialog root itself or an ancestor of the ComposeView.
+            // Walk the actual view-parent chain instead of assuming exactly one parent level.
+            var currentParent: android.view.ViewParent? = dialogView
+            var dialogWindowProvider: DialogWindowProvider? = null
+            while (currentParent != null && dialogWindowProvider == null) {
+                dialogWindowProvider = currentParent as? DialogWindowProvider
+                currentParent = (currentParent as? android.view.View)?.parent
+            }
             val dialogWindow = dialogWindowProvider?.window
             SideEffect {
                 // Emit runtime evidence before changing the platform window background.
