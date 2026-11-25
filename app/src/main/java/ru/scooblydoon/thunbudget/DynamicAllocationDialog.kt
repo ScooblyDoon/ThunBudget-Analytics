@@ -54,12 +54,11 @@ internal fun DynamicAllocationDialog(
                 spent / income * 100.0
             }
             val categoryForecast = forecast.categories.firstOrNull { it.category == category.name }
-            val averagePercent = when {
-                categoryForecast?.hasHistory != true -> null
+            val averagePercent = if (categoryForecast == null || !categoryForecast.hasHistory) {
+                null
+            } else when {
                 ratios.isNotEmpty() -> ratios.average()
-                fallbackPeriodIncome > 0.0 -> {
-                    (categoryForecast.averagePeriodSpend / fallbackPeriodIncome) * 100.0
-                }
+                fallbackPeriodIncome > 0.0 -> (categoryForecast.averagePeriodSpend / fallbackPeriodIncome) * 100.0
                 else -> null
             }
             category.name to averagePercent
