@@ -738,8 +738,8 @@ private fun ThunBudgetApp() {
     var analyticsMonth by remember { mutableStateOf(YearMonth.now()) }
     var annualChartYear by rememberSaveable { mutableIntStateOf(LocalDate.now().year) }
     var selectedAnnualChartCategoryNames by rememberSaveable { mutableStateOf("") }
-    var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth <= 8) YearMonth.now().minusMonths(1) else YearMonth.now()) }
-    var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
+    var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth < firstPeriodStartDay) YearMonth.now().minusMonths(1) else YearMonth.now()) }
+    var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth in firstPeriodStartDay..firstPeriodEndDay) 0 else 1) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val periodIncomeRow = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }
     val periodIncome = periodIncomeRow?.amount ?: 0.0
