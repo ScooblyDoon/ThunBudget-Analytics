@@ -165,7 +165,7 @@ internal class BudgetStore(context: Context) {
         require(amount.isFinite() && amount >= 0.0)
         val currentEntries = incomeLedger.load()
         val carryoverEntries = currentEntries.filter { it.periodStart == start && it.periodEnd == end && it.isCarryover }
-        val retained = currentEntries.filterNot { it.periodStart == start && it.periodEnd == end && !it.isCarryover }
+        val retained = currentEntries.filterNot { it.periodStart == start && it.periodEnd == end }
         val earnedEntry = if (amount > 0.0) listOf(IncomeEntry(
             id = "manual-$start-$end", title = "Доход за период", amount = amount,
             date = end, periodStart = start, periodEnd = end
