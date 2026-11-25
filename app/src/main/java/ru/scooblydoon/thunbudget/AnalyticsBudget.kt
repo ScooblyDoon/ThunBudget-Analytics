@@ -23,7 +23,7 @@ internal object AnalyticsBudgetCalculator {
         if (!useReportingPeriods) return fixedMonthlyIncome.coerceAtLeast(0.0)
         val selected = periodIncomes.filter { row ->
             runCatching { java.time.YearMonth.from(java.time.LocalDate.parse(row.end)) == month }.getOrDefault(false)
-        }.sumOf { it.amount.coerceAtLeast(0.0) }
+        }.sumOf { it.earnedAmount.coerceAtLeast(0.0) }
         return selected
     }
 
