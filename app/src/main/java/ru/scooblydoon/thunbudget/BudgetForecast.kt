@@ -63,32 +63,47 @@ object BudgetForecastCalculator {
             reportingPeriodFor(it.date, firstStartDay, firstEndDay)
         }.minByOrNull { it.start }
 
-        val historyPeriods = if (earliestPeriod == null) emptyList() else {
+        val completedPeriods = if (earliestPeriod == null) emptyList() else {
             completedPeriodsBetween(earliestPeriod, asOf, firstStartDay, firstEndDay)
         }
-        val historyStart = historyPeriods.firstOrNull()?.start
-        val historyEnd = historyPeriods.lastOrNull()?.end
-        val historyDays = historyPeriods.sumOf {
+        val activePeriod = reportingPeriodFor(asOf, firstStartDay, firstEndDay)
+            ?.takeIf { it.end.isAfter(asOf) }
+        val activeExpenses = if (activePeriod == null) emptyList() else validExpenses.filter { row ->
+            !row.date.isBefore(activePeriod.start) && !row.date.isAfter(asOf)
+        }
+        val hasActivePeriodData = activeExpenses.isNotEmpty()
+        val observedPeriodCount = completedPeriods.size + if (hasActivePeriodData) 1 else 0
+        val historyStart = completedPeriods.firstOrNull()?.start ?: activePeriod?.start
+        val historyEnd = if (hasActivePeriodData) asOf else completedPeriods.lastOrNull()?.end
+        val completedDays = completedPeriods.sumOf {
             ChronoUnit.DAYS.between(it.start, it.end) + 1L
         }
-        val periodCount = historyPeriods.size
-        val averagePeriodDays = if (periodCount > 0) historyDays.toDouble() / periodCount else 0.0
+        val activeElapsedDays = if (hasActivePeriodData && activePeriod != null) {
+            ChronoUnit.DAYS.between(activePeriod.start, asOf) + 1L
+        } else 0L
+        val observedDays = completedDays + activeElapsedDays
+        val averagePeriodDays = when {
+            completedPeriods.isNotEmpty() -> completedDays.toDouble() / completedPeriods.size
+            activePeriod != null -> (ChronoUnit.DAYS.between(activePeriod.start, activePeriod.end) + 1L).toDouble()
+            else -> 0.0
+        }
         val averageMonthDays = 365.2425 / 12.0
 
-        val expensesInHistory = validExpenses.filter { row ->
+        val completedExpenses = validExpenses.filter { row ->
             val range = reportingPeriodFor(row.date, firstStartDay, firstEndDay)
-            range != null && historyPeriods.any { it.start == range.start && it.end == range.end }
+            range != null && completedPeriods.any { it.start == range.start && it.end == range.end }
         }
+        val expensesInHistory = completedExpenses + activeExpenses
 
         val forecasts = categories.distinct().map { category ->
             val categoryTotal = expensesInHistory
                 .filter { it.category.equals(category, ignoreCase = true) }
                 .sumOf { it.amount }
-            val averagePerPeriod = if (periodCount > 0) categoryTotal / periodCount else 0.0
-            val averagePerDay = if (historyDays > 0L) categoryTotal / historyDays.toDouble() else 0.0
+            val averagePerDay = if (observedDays > 0L) categoryTotal / observedDays.toDouble() else 0.0
+            val averagePerPeriod = averagePerDay * averagePeriodDays
             val averagePerMonth = averagePerDay * averageMonthDays
             val targetDays = nextPeriodDays?.coerceAtLeast(0) ?: averagePeriodDays.toInt()
-            val periodForecast = if (historyDays > 0L) averagePerDay * targetDays else 0.0
+            val periodForecast = if (observedDays > 0L) averagePerDay * targetDays else 0.0
             val hasHistory = expensesInHistory.any { it.category.equals(category, ignoreCase = true) }
 
             CategoryForecast(
@@ -96,7 +111,7 @@ object BudgetForecastCalculator {
                 averageMonthlySpend = averagePerMonth,
                 forecastForNextMonth = averagePerMonth,
                 forecastForPeriod = periodForecast,
-                historyPeriods = periodCount,
+                historyPeriods = observedPeriodCount,
                 hasHistory = hasHistory,
                 averagePeriodSpend = averagePerPeriod
             )
@@ -105,11 +120,11 @@ object BudgetForecastCalculator {
         return BudgetForecast(
             historyFrom = historyStart?.let { YearMonth.from(it) },
             historyTo = historyEnd?.let { YearMonth.from(it) },
-            historyPeriods = periodCount,
+            historyPeriods = observedPeriodCount,
             categories = forecasts,
             totalMonthlyForecast = forecasts.sumOf { it.forecastForNextMonth },
             totalPeriodForecast = forecasts.sumOf { it.forecastForPeriod },
-            reportingPeriods = historyPeriods
+            reportingPeriods = completedPeriods
         )
     }
 
