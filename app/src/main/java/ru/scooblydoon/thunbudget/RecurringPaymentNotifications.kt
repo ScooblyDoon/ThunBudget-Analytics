@@ -91,6 +91,10 @@ object RecurringPaymentNotifications {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Регулярные платежи", NotificationManager.IMPORTANCE_DEFAULT)
             )
+            if (manager.getNotificationChannel(CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) {
+                Log.w(TAG, "Notification skipped: recurring payment channel is disabled")
+                return false
+            }
         }
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: Intent(context, MainActivity::class.java)
