@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.Modifier
@@ -68,7 +68,7 @@ class DialogThemeScreenshotTest {
                     text = {
                         androidx.compose.foundation.layout.Column {
                             Text("Проверка фактического цвета поверхности")
-                            TextField(value = "Тестовое поле", onValueChange = {})
+                            OutlinedTextField(value = "Тестовое поле", onValueChange = {}, colors = themedDialogOutlinedTextFieldColors())
                         }
                     },
                     confirmButton = { Button(onClick = {}) { Text("OK") } }
