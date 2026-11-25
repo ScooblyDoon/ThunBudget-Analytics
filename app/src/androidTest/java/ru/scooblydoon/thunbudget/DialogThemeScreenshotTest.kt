@@ -53,8 +53,12 @@ class DialogThemeScreenshotTest {
             } else {
                 lightColorScheme(background = Color.White, surface = Color.White)
             }
+            // Mirror MainActivity: the screen's theme scope ends before modal overlays
+            // are emitted, so the overlay host must explicitly re-enter the app theme.
             ThunBudgetTheme(colorScheme = scheme, shapes = Shapes()) {
                 Box(Modifier.fillMaxSize().background(Color(0xFF101010)))
+            }
+            ThunBudgetTheme(colorScheme = scheme, shapes = Shapes()) {
                 AppAlertDialog(
                     onDismissRequest = {},
                     title = { Text("Проверка темы окна") },
