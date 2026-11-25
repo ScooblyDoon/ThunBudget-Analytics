@@ -166,6 +166,7 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
         entries.forEach {
             require(it.id.isNotBlank() && it.title.isNotBlank())
             require(it.amount.isFinite() && it.amount > 0.0)
+            require(it.linkedExpenseId == null || (it.isCarryover && it.linkedExpenseId > 0L))
             val date = LocalDate.parse(it.date)
             val start = LocalDate.parse(it.periodStart)
             val end = LocalDate.parse(it.periodEnd)
