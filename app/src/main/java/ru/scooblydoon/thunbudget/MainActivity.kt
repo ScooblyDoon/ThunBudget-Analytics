@@ -611,6 +611,8 @@ private fun ThunBudgetApp() {
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
+    var showCarryoverConfirmation by remember { mutableStateOf(false) }
+    var carryoverAmount by remember { mutableDoubleStateOf(0.0) }
     var showCategoryManager by remember { mutableStateOf(false) }
     var showAllocationDialog by remember { mutableStateOf(false) }
     var showDynamicAllocationDialog by remember { mutableStateOf(false) }
@@ -1201,6 +1203,15 @@ private fun ThunBudgetApp() {
                                     }
                                     TextButton(onClick={showPeriodEditor=true},modifier=Modifier.fillMaxWidth()) { Text("Изменить отчётный период вручную") }
                                     Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (selectedPeriod == 0 && !today.isBefore(LocalDate.parse(periodEnd)) && remaining > 0.0) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                carryoverAmount = remaining.coerceAtLeast(0.0)
+                                                showCarryoverConfirmation = carryoverAmount > 0.0
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("Перенести остаток ${money(remaining)} во второй период") }
+                                    }
                                 }
                             }
                             "budget" -> Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -1974,6 +1985,52 @@ private fun ThunBudgetApp() {
         incomeEntries = store.loadIncomeEntries()
         showPeriodIncomeEditor=false
     })
+    if (showCarryoverConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showCarryoverConfirmation = false },
+            title = { Text("Перенести остаток дохода?") },
+            text = {
+                Text("Сумма ${money(carryoverAmount)} будет учтена как расход «Перенос средств» в первом периоде и как дополнительный доход во втором периоде. В первом периоде доступный остаток станет 0 ₽. Перенос не будет повторно учитываться как заработанный месячный доход.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val amount = carryoverAmount
+                    if (amount > 0.0 && selectedPeriod == 0) {
+                        store.prepareUndoSnapshot()
+                        canUndo = true
+                        val transferCategory = "Перенос средств"
+                        if (categories.none { it.name.equals(transferCategory, true) }) {
+                            categories = categories + BudgetCategory(transferCategory, 0.0)
+                            store.saveCategories(categories)
+                        }
+                        val transferExpense = Expense(
+                            id = System.currentTimeMillis(),
+                            title = "Перенос остатка во второй отчётный период",
+                            category = transferCategory,
+                            amount = amount,
+                            date = periodEnd
+                        )
+                        expenses = (expenses + transferExpense).sortedByDescending { it.date }
+                        store.saveExpenses(expenses)
+                        val nextStart = secondPeriodStart.toString()
+                        val nextEnd = secondPeriodEnd.toString()
+                        store.addIncomeEntry(
+                            title = "Перенос средств из ${periodStart} — ${periodEnd}",
+                            amount = amount,
+                            date = nextStart,
+                            start = nextStart,
+                            end = nextEnd,
+                            isCarryover = true
+                        )
+                        incomeEntries = store.loadIncomeEntries()
+                        periodIncomes = store.loadPeriodIncomes()
+                    }
+                    showCarryoverConfirmation = false
+                }) { Text("Перенести") }
+            },
+            dismissButton = { TextButton(onClick = { showCarryoverConfirmation = false }) { Text("Отмена") } }
+        )
+    }
     if(showPeriodEditor) PeriodEditorDialog(periodStart,periodEnd,onDismiss={showPeriodEditor=false},onSave={from,to->
         periodStart=from; periodEnd=to; store.savePeriod(from,to); selectedPeriod=-1; showPeriodEditor=false
     })
