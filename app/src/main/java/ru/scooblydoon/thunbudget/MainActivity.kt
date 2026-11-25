@@ -552,7 +552,7 @@ private fun ThunBudgetApp() {
         ) {
             val notificationPrefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
             if (!notificationPrefs.getBoolean("payment_notification_permission_requested", false)) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                paymentNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         } else {
             RecurringPaymentNotifications.checkAndReschedule(context)
