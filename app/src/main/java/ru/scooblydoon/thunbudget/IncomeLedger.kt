@@ -25,7 +25,9 @@ data class IncomeEntry(
 data class LegacyPeriodIncome(
     val start: String,
     val end: String,
-    val amount: Double
+    val amount: Double,
+    val earnedAmount: Double = amount,
+    val carryoverAmount: Double = 0.0
 )
 
 object IncomeLedgerMigration {
@@ -41,15 +43,28 @@ object IncomeLedgerMigration {
             require(!end.isBefore(start)) { "Некорректный отчётный период." }
             require(row.amount.isFinite() && row.amount >= 0.0) { "Некорректная сумма дохода." }
             val id = "legacy-${row.start}-${row.end}-${index}"
-            if (row.amount > 0.0 && knownIds.add(id)) {
+            if (row.earnedAmount > 0.0 && knownIds.add(id)) {
                 result += IncomeEntry(
                     id = id,
                     title = "Перенесённый доход за период",
-                    amount = row.amount,
+                    amount = row.earnedAmount,
                     date = row.end,
                     periodStart = row.start,
                     periodEnd = row.end,
                     isLegacyAggregate = true
+                )
+            }
+            val carryoverId = "legacy-carryover-${row.start}-${row.end}-$index"
+            if (row.carryoverAmount > 0.0 && knownIds.add(carryoverId)) {
+                result += IncomeEntry(
+                    id = carryoverId,
+                    title = "Перенос средств за период",
+                    amount = row.carryoverAmount,
+                    date = row.end,
+                    periodStart = row.start,
+                    periodEnd = row.end,
+                    isLegacyAggregate = true,
+                    isCarryover = true
                 )
             }
         }
@@ -80,7 +95,9 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 LegacyPeriodIncome(
                     start = item.getString("start"),
                     end = item.getString("end"),
-                    amount = item.getDouble("amount")
+                    amount = item.getDouble("amount"),
+                    earnedAmount = item.optDouble("earnedAmount", item.getDouble("amount")),
+                    carryoverAmount = item.optDouble("carryoverAmount", 0.0)
                 )
             }
             val currentRaw = preferences.getString(ENTRIES_KEY, "[]") ?: "[]"
