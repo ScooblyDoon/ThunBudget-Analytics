@@ -2,10 +2,12 @@ package ru.scooblydoon.thunbudget
 
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.temporal.ChronoUnit
 
 /**
- * Forecasts based on every available completed reporting period.
- * The current unfinished reporting month is excluded; older partial history is retained.
+ * Forecasts are based on completed reporting periods, not calendar months.
+ * The current unfinished period is excluded; all older completed periods
+ * between the first observed expense and today are included.
  */
 data class ForecastExpense(
     val category: String,
@@ -18,25 +20,33 @@ data class CategoryForecast(
     val averageMonthlySpend: Double,
     val forecastForNextMonth: Double,
     val forecastForPeriod: Double,
-    val historyMonths: Int,
-    val hasHistory: Boolean
-)
+    val historyPeriods: Int,
+    val hasHistory: Boolean,
+    val averagePeriodSpend: Double
+) {
+    // Kept as a compatibility alias for older UI/tests.
+    val historyMonths: Int get() = historyPeriods
+}
 
 data class BudgetForecast(
     val historyFrom: YearMonth?,
     val historyTo: YearMonth?,
-    val historyMonths: Int,
+    val historyPeriods: Int,
     val categories: List<CategoryForecast>,
     val totalMonthlyForecast: Double,
-    val totalPeriodForecast: Double
-)
+    val totalPeriodForecast: Double,
+    val reportingPeriods: List<ReportingDateRange>
+) {
+    // Kept as a compatibility alias for older UI/tests.
+    val historyMonths: Int get() = historyPeriods
+}
 
 object BudgetForecastCalculator {
     /**
-     * Uses a rolling window of up to [monthsToAnalyze] completed reporting months.
-     * Months between the first and last observed expense month are retained even
-     * when a category (or the whole month) has no expenses, so averages are not inflated.
+     * [monthsToAnalyze] is retained for source compatibility. Forecasting now
+     * uses the full available history of completed reporting periods.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun calculate(
         categories: List<String>,
         expenses: List<ForecastExpense>,
@@ -48,84 +58,93 @@ object BudgetForecastCalculator {
     ): BudgetForecast {
         require(firstStartDay in 1..31 && firstEndDay in firstStartDay..31)
 
-        val datedExpenses = expenses.filter { it.amount.isFinite() && it.amount > 0.0 }
-        val observedMonths = datedExpenses.mapNotNull { reportingMonthFor(it.date, firstStartDay, firstEndDay) }.distinct().sorted()
-        val earliestObserved = observedMonths.firstOrNull()
-        val completed = completedReportingMonths(asOf, firstStartDay, firstEndDay, earliestObserved)
-        val latestCompleted = completed.lastOrNull()
-        val historyEnd = latestCompleted?.takeIf { earliestObserved != null && !it.isBefore(earliestObserved) }
-        val historyStart = historyEnd?.let { end ->
-            earliestObserved!!
-        }
-        val history = if (historyStart != null && historyEnd != null) {
-            generateSequence(historyEnd) { current ->
-                if (current.isAfter(historyStart)) current.minusMonths(1) else null
-            }.toList().asReversed()
-        } else emptyList()
+        val validExpenses = expenses.filter { it.amount.isFinite() && it.amount > 0.0 }
+        val earliestPeriod = validExpenses.mapNotNull {
+            reportingPeriodFor(it.date, firstStartDay, firstEndDay)
+        }.minByOrNull { it.start }
 
-        val inHistory = datedExpenses.filter { row ->
-            val month = reportingMonthFor(row.date, firstStartDay, firstEndDay)
-            historyStart != null && historyEnd != null && month != null &&
-                !month.isBefore(historyStart) && !month.isAfter(historyEnd)
+        val historyPeriods = if (earliestPeriod == null) emptyList() else {
+            completedPeriodsBetween(earliestPeriod, asOf, firstStartDay, firstEndDay)
         }
-        val monthCount = history.size
-        val categoryForecasts = categories.distinct().map { category ->
-            val total = inHistory.filter { it.category.equals(category, ignoreCase = true) }.sumOf { it.amount }
-            val average = if (monthCount > 0) total / monthCount else 0.0
-            val hasHistory = inHistory.any { it.category.equals(category, ignoreCase = true) }
-            val periodForecast = if (monthCount > 0 && nextPeriodDays != null) {
-                // A reporting period may cross two calendar months (e.g. 24th–8th).
-                // Scale the monthly average by the exact number of days in the next
-                // configured reporting period, using the observed average cycle length.
-                val nextCycle = ReportingPeriodCalculator.propose(
-                    latestCompleted!!.plusMonths(1), firstStartDay, firstEndDay
-                )
-                val fullTargetDays = (java.time.temporal.ChronoUnit.DAYS.between(
-                    nextCycle.first.start, nextCycle.second.end
-                ) + 1L).toInt()
-                val targetDays = nextPeriodDays.coerceAtLeast(0).coerceAtMost(fullTargetDays)
-                val historyDays = history.sumOf { month ->
-                    val cycle = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
-                    java.time.temporal.ChronoUnit.DAYS.between(cycle.first.start, cycle.second.end) + 1
-                }
-                val averageCycleDays = if (history.isNotEmpty()) historyDays.toDouble() / history.size else targetDays.toDouble()
-                if (averageCycleDays > 0.0) average / averageCycleDays * targetDays else 0.0
-            } else average
-            CategoryForecast(category, average, average, periodForecast, monthCount, hasHistory)
+        val historyStart = historyPeriods.firstOrNull()?.start
+        val historyEnd = historyPeriods.lastOrNull()?.end
+        val historyDays = historyPeriods.sumOf {
+            ChronoUnit.DAYS.between(it.start, it.end) + 1L
         }
+        val periodCount = historyPeriods.size
+        val averagePeriodDays = if (periodCount > 0) historyDays.toDouble() / periodCount else 0.0
+        val averageMonthDays = 365.2425 / 12.0
+
+        val expensesInHistory = validExpenses.filter { row ->
+            val range = reportingPeriodFor(row.date, firstStartDay, firstEndDay)
+            range != null && historyPeriods.any { it.start == range.start && it.end == range.end }
+        }
+
+        val forecasts = categories.distinct().map { category ->
+            val categoryTotal = expensesInHistory
+                .filter { it.category.equals(category, ignoreCase = true) }
+                .sumOf { it.amount }
+            val averagePerPeriod = if (periodCount > 0) categoryTotal / periodCount else 0.0
+            val averagePerDay = if (historyDays > 0L) categoryTotal / historyDays.toDouble() else 0.0
+            val averagePerMonth = averagePerDay * averageMonthDays
+            val targetDays = nextPeriodDays?.coerceAtLeast(0) ?: averagePeriodDays.toInt()
+            val periodForecast = if (historyDays > 0L) averagePerDay * targetDays else 0.0
+            val hasHistory = expensesInHistory.any { it.category.equals(category, ignoreCase = true) }
+
+            CategoryForecast(
+                category = category,
+                averageMonthlySpend = averagePerMonth,
+                forecastForNextMonth = averagePerMonth,
+                forecastForPeriod = periodForecast,
+                historyPeriods = periodCount,
+                hasHistory = hasHistory,
+                averagePeriodSpend = averagePerPeriod
+            )
+        }
+
         return BudgetForecast(
-            historyFrom = historyStart,
-            historyTo = historyEnd,
-            historyMonths = monthCount,
-            categories = categoryForecasts,
-            totalMonthlyForecast = categoryForecasts.sumOf { it.forecastForNextMonth },
-            totalPeriodForecast = categoryForecasts.sumOf { it.forecastForPeriod }
+            historyFrom = historyStart?.let { YearMonth.from(it) },
+            historyTo = historyEnd?.let { YearMonth.from(it) },
+            historyPeriods = periodCount,
+            categories = forecasts,
+            totalMonthlyForecast = forecasts.sumOf { it.forecastForNextMonth },
+            totalPeriodForecast = forecasts.sumOf { it.forecastForPeriod },
+            reportingPeriods = historyPeriods
         )
     }
 
-
-    private fun reportingMonthFor(date: LocalDate, firstStartDay: Int, firstEndDay: Int): YearMonth? {
-        val candidates = listOf(YearMonth.from(date), YearMonth.from(date).minusMonths(1))
-        return candidates.firstOrNull { month ->
-            val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
-            !date.isBefore(proposal.first.start) && !date.isAfter(proposal.second.end)
-        }
+    private fun reportingPeriodFor(
+        date: LocalDate,
+        firstStartDay: Int,
+        firstEndDay: Int
+    ): ReportingDateRange? {
+        val candidateMonths = listOf(YearMonth.from(date), YearMonth.from(date).minusMonths(1))
+        return candidateMonths.asSequence().mapNotNull { month ->
+            runCatching { ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay) }.getOrNull()
+        }.flatMap { proposal -> sequenceOf(proposal.first, proposal.second) }
+            .firstOrNull { !date.isBefore(it.start) && !date.isAfter(it.end) }
     }
 
-    private fun completedReportingMonths(
+    private fun completedPeriodsBetween(
+        earliest: ReportingDateRange,
         asOf: LocalDate,
         firstStartDay: Int,
-        firstEndDay: Int,
-        earliestObserved: YearMonth?
-    ): List<YearMonth> {
-        val current = YearMonth.from(asOf)
-        val start = earliestObserved ?: return emptyList()
-        if (start.isAfter(current)) return emptyList()
-        return generateSequence(start) { month ->
-            if (month.isBefore(current)) month.plusMonths(1) else null
-        }.filter { month ->
-            val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
-            !asOf.isBefore(proposal.second.end)
-        }.toList()
+        firstEndDay: Int
+    ): List<ReportingDateRange> {
+        if (asOf.isBefore(earliest.end)) return emptyList()
+        val firstMonth = YearMonth.from(earliest.start)
+        val lastMonth = YearMonth.from(asOf)
+        val monthCount = ChronoUnit.MONTHS.between(firstMonth, lastMonth).coerceAtLeast(0L)
+        return (0L..monthCount).flatMap { offset ->
+            val month = firstMonth.plusMonths(offset)
+            runCatching { ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay) }
+                .getOrNull()
+                ?.let { listOf(it.first, it.second) }
+                .orEmpty()
+        }.asSequence()
+            .filter { it.start >= earliest.start && !it.end.isAfter(asOf) }
+            .distinctBy { it.start to it.end }
+            .sortedBy { it.start }
+            .toList()
     }
 }
