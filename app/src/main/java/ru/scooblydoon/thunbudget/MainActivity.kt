@@ -18,6 +18,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
@@ -1433,7 +1435,7 @@ private fun ThunBudgetApp() {
                                 }
                                 if (showExpenseForecast) {
                                     Text(
-                                        "Оценка по исторической средней дневной трате. Прогноз расходов не ограничивается доходом: он показывает, сколько может быть потрачено при сохранении текущего темпа.",
+                                        "Прогноз основан на средней дневной трате по истории. Он не ограничивается доходом: показывает ожидаемые расходы при сохранении текущего темпа.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1444,7 +1446,7 @@ private fun ThunBudgetApp() {
                                             Text(money(forecast.totalMonthlyForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                         }
                                         Column(Modifier.weight(1f)) {
-                                            Text("Ожидаемые расходы до ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
+                                            Text("Ожидаемые расходы всего до ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
                                             Text(money(forecastExpectedSpend), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                         }
                                     }
@@ -1464,7 +1466,7 @@ private fun ThunBudgetApp() {
                                         }
                                     }
                                     Text(
-                                        "Факт на сегодня: ${money(forecastActualToDate)} · Оценка оставшихся расходов: ${money(forecast.totalPeriodForecast)}",
+                                        "Уже потрачено: ${money(forecastActualToDate)} · Ожидается дополнительно: ${money(forecast.totalPeriodForecast)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -3126,13 +3128,16 @@ private fun ReportingPeriodSettingsSection(startDay: Int, endDay: Int, onSave: (
     val valid = start != null && end != null && start in 1..31 && end in start..31
     val preview = if (valid) runCatching { ReportingPeriodCalculator.propose(YearMonth.now(), start!!, end!!) }.getOrNull() else null
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Первое отчётное окно", fontWeight = FontWeight.Bold)
+        Text("Два отчётных периода", fontWeight = FontWeight.Bold)
         OutlinedTextField(value=startText,onValueChange={startText=it.filter(Char::isDigit).take(2)},label={Text("Начало первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
         OutlinedTextField(value=endText,onValueChange={endText=it.filter(Char::isDigit).take(2)},label={Text("Окончание первого окна (день месяца)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true,modifier=Modifier.fillMaxWidth())
         if (preview != null) {
-            Text("Предлагаемое второе окно: ${preview.second.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.second.end.format(DateTimeFormatter.ofPattern("dd.MM"))}.")
-            Text("Расчёт учитывает фактическое число дней месяца, включая февраль и високосный год.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        } else Text("Укажи корректные дни: окончание не может быть раньше начала.",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+            val firstDays = java.time.temporal.ChronoUnit.DAYS.between(preview.first.start, preview.first.end) + 1
+            val secondDays = java.time.temporal.ChronoUnit.DAYS.between(preview.second.start, preview.second.end) + 1
+            Text("Первый период: ${preview.first.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.first.end.format(DateTimeFormatter.ofPattern("dd.MM"))} · $firstDays дн.")
+            Text("Второй период: ${preview.second.start.format(DateTimeFormatter.ofPattern("dd.MM"))} — ${preview.second.end.format(DateTimeFormatter.ofPattern("dd.MM"))} · $secondDays дн.")
+            Text("Второй период автоматически занимает все оставшиеся дни до начала следующего первого периода. Периоды не пересекаются и не оставляют пропусков; длительность рассчитывается по календарю, включая февраль и високосный год.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        } else Text("Укажи корректные дни: окончание первого периода не может быть раньше начала.",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
         Button(onClick={if(valid) showConfirmation=true},enabled=valid,modifier=Modifier.fillMaxWidth()) { Text("Проверить второе окно") }
     }
     if (showConfirmation && preview != null && start != null && end != null) {
@@ -3184,7 +3189,7 @@ private fun CategoryManagerDialog(categories:List<BudgetCategory>,onDismiss:()->
     AlertDialog(
         containerColor = themedDialogContainerColor(),
         onDismissRequest=onDismiss,title={Text("Категории бюджета")},text={
-        Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=480.dp)) {
+        Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=480.dp).verticalScroll(rememberScrollState())) {
             Text("Удаление категории не удаляет старые операции — они останутся в истории.")
             categories.forEach { cat ->
                 Row(verticalAlignment=Alignment.CenterVertically) {
