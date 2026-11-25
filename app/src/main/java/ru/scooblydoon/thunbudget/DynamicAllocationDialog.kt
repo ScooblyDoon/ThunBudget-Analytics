@@ -28,8 +28,8 @@ internal fun DynamicAllocationDialog(
     val regular = categories.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
     val forecast = remember(expenses, categories, firstPeriodStartDay, firstPeriodEndDay) {
         BudgetForecastCalculator.calculate(
-            categories = regular.map { it.name },
-            expenses = expenses.mapNotNull { row ->
+            categories = regular.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+            expenses = expenses.filterNot { it.category.equals("Перенос средств", true) }.mapNotNull { row ->
                 runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
             },
             asOf = LocalDate.now(),
