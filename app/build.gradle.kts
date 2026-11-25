@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21")
+    implementation("io.appwrite:sdk-for-android:31.3.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
 }
