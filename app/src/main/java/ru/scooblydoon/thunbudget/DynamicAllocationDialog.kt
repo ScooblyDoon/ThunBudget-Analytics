@@ -98,9 +98,8 @@ internal fun DynamicAllocationDialog(
     }
     val valid = inputsValid && resultingShares.values.all { it.isFinite() && it in 0.0..100.0 } && sum <= 100.0001
 
-    AlertDialog(
-        containerColor = themedDialogContainerColor(),
-        onDismissRequest = onDismiss,
+    AppAlertDialog(
+                onDismissRequest = onDismiss,
         title = { Text("Динамический прогноз долей") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 560.dp)) {
