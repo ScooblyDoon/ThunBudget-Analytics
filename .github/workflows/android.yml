@@ -72,4 +72,4 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-# [final-apk] Rebuild after neutralizing Android platform dialog theme.
+# [final-apk] Trigger release build from the dialog design branch.
