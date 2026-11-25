@@ -66,7 +66,10 @@ class BudgetForecastCalculatorTest {
     @Test fun currentPaceIsUsedWhenThereIsNoCompletedHistory() {
         val result = BudgetForecastCalculator.calculate(
             categories = listOf("Транспорт"),
-            expenses = listOf(ForecastExpense("Транспорт", 3000.0, LocalDate.parse("2026-11-25"))),
+            expenses = listOf(
+                ForecastExpense("Транспорт", 1500.0, LocalDate.parse("2026-11-25")),
+                ForecastExpense("Транспорт", 1500.0, LocalDate.parse("2026-11-26"))
+            ),
             asOf = LocalDate.parse("2026-11-26"),
             firstStartDay = startDay,
             firstEndDay = endDay,
