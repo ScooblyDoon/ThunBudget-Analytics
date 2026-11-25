@@ -61,6 +61,18 @@ class AnalyticsBudgetTest {
         assertEquals(30000.0, result, 0.001)
     }
 
+    @Test fun carryoverSubtractsExpensesFromPeriodsWithoutIncomeEntries() {
+        val result = AnalyticsBudgetCalculator.carryoverBefore(
+            "2026-12-09",
+            listOf(PeriodIncome("2026-11-09", "2026-11-23", 100000.0)),
+            listOf(
+                Expense(1L, "Покупки", "Продукты", 20000.0, "2026-11-20"),
+                Expense(2L, "Покупки", "Продукты", 30000.0, "2026-12-02")
+            )
+        )
+        assertEquals(50000.0, result, 0.001)
+    }
+
     @Test fun explicitTransferExpenseConsumesPriorPeriodCarryover() {
         val result = AnalyticsBudgetCalculator.carryoverBefore(
             "2026-11-24",
