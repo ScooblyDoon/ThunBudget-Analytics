@@ -1147,58 +1147,57 @@ private fun ThunBudgetApp() {
                     }
                 } }
             ) },
-            floatingActionButton = {},
-            bottomBar = {
-                Column(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
-                    // Keep quick actions in one consistent dock on every phone size.
-                    if (tab != 2 && tab != 5) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (quickActionsExpanded) {
-                                SmallFloatingActionButton(
-                                    onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                ) {
-                                    Icon(Icons.Filled.Mic, contentDescription = "Голосовой ввод")
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                SmallFloatingActionButton(
-                                    onClick = { showPeriodIncomeEditor = true },
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                                ) {
-                                    Text("₽+", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                SmallFloatingActionButton(
-                                    onClick = { showAdd = true },
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                ) {
-                                    Text("+", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                }
-                                Spacer(Modifier.width(8.dp))
-                            }
+            floatingActionButton = {
+                // Quick actions float over the current screen; they do not reserve an opaque
+                // strip above the navigation bar or push the page content upward.
+                if (tab != 2 && tab != 5) {
+                    Row(
+                        modifier = Modifier.padding(end = 8.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (quickActionsExpanded) {
                             SmallFloatingActionButton(
-                                onClick = {
-                                    quickActionsExpanded = !quickActionsExpanded
-                                    persistUiExpanded(context, "quick_actions_panel", quickActionsExpanded)
-                                },
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
                             ) {
-                                Text(
-                                    if (quickActionsExpanded) "›" else "‹",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Icon(Icons.Filled.Mic, contentDescription = "Голосовой ввод")
                             }
+                            Spacer(Modifier.width(8.dp))
+                            SmallFloatingActionButton(
+                                onClick = { showPeriodIncomeEditor = true },
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            ) {
+                                Text("₽+", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            SmallFloatingActionButton(
+                                onClick = { showAdd = true },
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ) {
+                                Text("+", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        SmallFloatingActionButton(
+                            onClick = {
+                                quickActionsExpanded = !quickActionsExpanded
+                                persistUiExpanded(context, "quick_actions_panel", quickActionsExpanded)
+                            },
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Text(
+                                if (quickActionsExpanded) "›" else "‹",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
-                    // Keep NavigationBar last so its system navigation insets are at the
-                    // bottom edge. The theme switch above it must not draw under system buttons.
+                }
+            },
+            bottomBar = {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -1249,7 +1248,6 @@ private fun ThunBudgetApp() {
                             )
                         }
                     }
-                }
             }
         ) { padding ->
             when(tab) {
