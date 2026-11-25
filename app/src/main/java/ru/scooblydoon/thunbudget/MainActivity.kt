@@ -1399,8 +1399,9 @@ private fun ThunBudgetApp() {
                             ?: ReportingPeriodCalculator.propose(
                                 YearMonth.from(today).plusMonths(1), firstPeriodStartDay, firstPeriodEndDay
                             ).first
-                        val forecastFrom = maxOf(today, nextForecastRange.start)
-                        val forecastDays = if (nextForecastRange.end.isBefore(forecastFrom)) 0 else
+                        // Actuals include today, so forecast only starts tomorrow.
+                        val forecastFrom = maxOf(today.plusDays(1), nextForecastRange.start)
+                        val forecastDays = if (forecastFrom.isAfter(nextForecastRange.end)) 0 else
                             (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, nextForecastRange.end) + 1L).toInt()
                         // Known recurring payments are deterministic commitments, not part of the
                         // variable-spend baseline. Remove their historical transactions from the
@@ -1660,8 +1661,9 @@ private fun ThunBudgetApp() {
                         }
                         val selectedStart = LocalDate.parse(periodStart)
                         val selectedEnd = LocalDate.parse(periodEnd)
-                        val forecastFrom = maxOf(today, selectedStart)
-                        val forecastDays = if (today.isAfter(selectedEnd)) 0 else
+                        // periodFacts already contains expenses dated today.
+                        val forecastFrom = maxOf(today.plusDays(1), selectedStart)
+                        val forecastDays = if (forecastFrom.isAfter(selectedEnd)) 0 else
                             (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, selectedEnd) + 1L).toInt()
                         val periodForecast = BudgetForecastCalculator.calculate(
                             categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
