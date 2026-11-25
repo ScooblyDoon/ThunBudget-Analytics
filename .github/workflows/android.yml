@@ -60,7 +60,18 @@ jobs:
           profile: pixel_2
           emulator-boot-timeout: 1200
           disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest
+          script: gradle :app:connectedDebugAndroidTest --stacktrace
+      - name: Upload Compose dialog test diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-dialog-test-diagnostics
+          path: |
+            app/build/reports/androidTests/connected/debug/**
+            app/build/outputs/androidTest-results/connected/**
+            app/build/outputs/logs/**
+          if-no-files-found: warn
+          retention-days: 7
       - name: Decode persistent release keystore
         if: ${{ (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]')) && env.THUNBUDGET_SIGNING_KEY != '' }}
         env:
