@@ -50,6 +50,8 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+internal data class SavedAnalyticsPeriod(val name: String, val start: String, val end: String)
+
 internal data class PeriodIncome(
     val start: String,
     val end: String,
@@ -219,6 +221,33 @@ internal class BudgetStore(context: Context) {
         check(prefs.edit().putInt("selected_reporting_period", period).commit())
     }
     fun savePeriod(start:String,end:String) { prefs.edit().putString("period_start",start).putString("period_end",end).commit(); saveAutomaticBackup() }
+    fun loadSavedAnalyticsPeriods(): List<SavedAnalyticsPeriod> = runCatching {
+        val array = JSONArray(prefs.getString("saved_analytics_periods", "[]") ?: "[]")
+        (0 until array.length()).mapNotNull { index ->
+            val item = array.getJSONObject(index)
+            val name = item.optString("name").trim()
+            val start = item.optString("start")
+            val end = item.optString("end")
+            val valid = runCatching { !LocalDate.parse(end).isBefore(LocalDate.parse(start)) }.getOrDefault(false)
+            if (name.isNotBlank() && valid) SavedAnalyticsPeriod(name, start, end) else null
+        }.distinctBy { it.name.lowercase(Locale.ROOT) }
+    }.getOrDefault(emptyList())
+    fun saveAnalyticsPeriod(period: SavedAnalyticsPeriod) {
+        require(period.name.isNotBlank() && !LocalDate.parse(period.end).isBefore(LocalDate.parse(period.start)))
+        val items = loadSavedAnalyticsPeriods().filterNot { it.name.equals(period.name, true) } + period
+        val array = JSONArray()
+        items.forEach { array.put(JSONObject().put("name", it.name).put("start", it.start).put("end", it.end)) }
+        check(prefs.edit().putString("saved_analytics_periods", array.toString()).commit())
+        saveAutomaticBackup()
+    }
+    fun deleteAnalyticsPeriod(name: String) {
+        val array = JSONArray()
+        loadSavedAnalyticsPeriods().filterNot { it.name.equals(name, true) }.forEach {
+            array.put(JSONObject().put("name", it.name).put("start", it.start).put("end", it.end))
+        }
+        check(prefs.edit().putString("saved_analytics_periods", array.toString()).commit())
+        saveAutomaticBackup()
+    }
     fun loadFirstPeriodStartDay(): Int = (prefs.getString("reporting_first_start_day", "9")?.toIntOrNull() ?: 9).coerceIn(1, 31)
     fun loadFirstPeriodEndDay(): Int = (prefs.getString("reporting_first_end_day", "23")?.toIntOrNull() ?: 23).coerceIn(1, 31)
     fun saveReportingPeriodDays(startDay: Int, endDay: Int) {
@@ -738,6 +767,12 @@ private fun ThunBudgetApp() {
     var historyToDate by remember { mutableStateOf("") }
     var amountLimit by remember { mutableFloatStateOf(100000f) }
     var analyticsMonth by remember { mutableStateOf(YearMonth.now()) }
+    var savedAnalyticsPeriods by remember { mutableStateOf(store.loadSavedAnalyticsPeriods()) }
+    var analyticsRangeStart by remember { mutableStateOf(YearMonth.now().atDay(1).toString()) }
+    var analyticsRangeEnd by remember { mutableStateOf(LocalDate.now().toString()) }
+    var selectedSavedAnalyticsPeriod by remember { mutableStateOf<String?>(null) }
+    var showAnalyticsRangeEditor by remember { mutableStateOf(false) }
+    var showSaveAnalyticsPeriod by remember { mutableStateOf(false) }
     var annualChartYear by rememberSaveable { mutableIntStateOf(LocalDate.now().year) }
     var selectedAnnualChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth < firstPeriodStartDay) YearMonth.now().minusMonths(1) else YearMonth.now()) }
@@ -1538,17 +1573,32 @@ private fun ThunBudgetApp() {
                         MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
                     }
                     item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(analyticsMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(analyticsMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item { Text("Анализ за выбранный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item {
-                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick={analyticsMonth=analyticsMonth.minusMonths(1)}) { Text("‹") }
-                            Text(analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU")).withLocale(Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                            TextButton(onClick={if(analyticsMonth<YearMonth.now()) analyticsMonth=analyticsMonth.plusMonths(1)}) { Text("›") }
+                        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                FilterChip(selected=selectedSavedAnalyticsPeriod==null && analyticsRangeStart==today.minusDays(6).toString(),onClick={analyticsRangeStart=today.minusDays(6).toString();analyticsRangeEnd=today.toString();selectedSavedAnalyticsPeriod=null},label={Text("7 дней")})
+                                FilterChip(selected=selectedSavedAnalyticsPeriod==null && analyticsRangeStart==today.minusDays(29).toString(),onClick={analyticsRangeStart=today.minusDays(29).toString();analyticsRangeEnd=today.toString();selectedSavedAnalyticsPeriod=null},label={Text("30 дней")})
+                                FilterChip(selected=selectedSavedAnalyticsPeriod==null && analyticsRangeStart==YearMonth.from(today).atDay(1).toString(),onClick={analyticsRangeStart=YearMonth.from(today).atDay(1).toString();analyticsRangeEnd=today.toString();selectedSavedAnalyticsPeriod=null},label={Text("Месяц")})
+                            }
+                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+                                OutlinedButton(onClick={showAnalyticsRangeEditor=true},modifier=Modifier.weight(1f)) { Text("Выбрать даты") }
+                                OutlinedButton(onClick={showSaveAnalyticsPeriod=true}) { Text("Сохранить период") }
+                            }
+                            if(savedAnalyticsPeriods.isNotEmpty()) {
+                                Text("Сохранённые периоды",fontWeight=FontWeight.SemiBold)
+                                savedAnalyticsPeriods.forEach { saved ->
+                                    Row(verticalAlignment=Alignment.CenterVertically) {
+                                        FilterChip(selected=selectedSavedAnalyticsPeriod==saved.name,onClick={analyticsRangeStart=saved.start;analyticsRangeEnd=saved.end;selectedSavedAnalyticsPeriod=saved.name},label={Text(saved.name,maxLines=1)})
+                                        Spacer(Modifier.weight(1f))
+                                        TextButton(onClick={savedAnalyticsPeriods=savedAnalyticsPeriods.filterNot{it.name==saved.name};store.deleteAnalyticsPeriod(saved.name);if(selectedSavedAnalyticsPeriod==saved.name)selectedSavedAnalyticsPeriod=null}) { Text("Удалить") }
+                                    }
+                                }
+                            }
+                            Text(analyticsRangeStart + " — " + analyticsRangeEnd,style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            val rangeTotal=expenses.filter { it.date>=analyticsRangeStart && it.date<=minOf(analyticsRangeEnd,today.toString()) }.sumOf { it.amount }
+                            MetricCard("Фактические расходы за период",money(rangeTotal),Modifier.fillMaxWidth())
                         }
-                        val from=analyticsMonth.atDay(1).toString()
-                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
-                        val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
-                        MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
                     }
                     item {
                         val previousMonth = analyticsMonth.minusMonths(1)
