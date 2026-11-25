@@ -1094,6 +1094,7 @@ private fun ThunBudgetApp() {
                 periodStart = store.loadPeriodStart() ?: periodStart
                 periodEnd = store.loadPeriodEnd() ?: periodEnd
                 selectedPeriod = -1
+                store.saveSelectedPeriod(-1)
                 "Данные успешно восстановлены из резервной копии."
             }.getOrElse { "Не удалось восстановить данные: ${it.message ?: "ошибка чтения"}" }
         }
@@ -2266,10 +2267,11 @@ private fun ThunBudgetApp() {
                     expenses=store.loadExpenses()
                     periodIncomes=store.loadPeriodIncomes()
                     incomeEntries=store.loadIncomeEntries()
-                    periodStart=store.loadPeriodStart() ?: (if(today.dayOfMonth<=8 || today.dayOfMonth>=24) baseMonth.atDay(24) else baseMonth.atDay(9)).toString()
-                    periodEnd=store.loadPeriodEnd() ?: (if(today.dayOfMonth<=8) today.withDayOfMonth(8) else if(today.dayOfMonth>=24) today.plusMonths(1).withDayOfMonth(8) else baseMonth.atDay(23)).toString()
-                    selectedPeriod=if(today.dayOfMonth>=24 || today.dayOfMonth<=8) 1 else 0
+                    selectedPeriod=if(isSecondPeriodToday) 1 else 0
                     store.saveSelectedPeriod(selectedPeriod)
+                    periodStart=if(selectedPeriod==1) secondPeriodStart.toString() else firstPeriodStart.toString()
+                    periodEnd=if(selectedPeriod==1) secondPeriodEnd.toString() else firstPeriodEnd.toString()
+                    store.savePeriod(periodStart,periodEnd)
                     selectedExpense=null
                     selectedCategory=null
                     historyQuery=""
