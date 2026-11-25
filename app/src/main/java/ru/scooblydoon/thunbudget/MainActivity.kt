@@ -1103,24 +1103,28 @@ private fun ThunBudgetApp() {
             }.getOrElse { "Не удалось восстановить данные: ${it.message ?: "ошибка чтения"}" }
         }
     }
+    // Unified ThunBudget palette: graphite/sage light theme and near-black/violet dark theme.
     val appColors = if (darkTheme) {
         darkColorScheme(
-            primary = Color(0xFFB7A6FF), onPrimary = Color(0xFF21164A),
-            secondary = Color(0xFF75D9CF), tertiary = Color(0xFFFFC979),
-            background = Color(0xFF111321), surface = Color(0xFF1B1D31),
-            surfaceVariant = Color(0xFF292B43), onSurface = Color(0xFFF4F2FF),
-            onSurfaceVariant = Color(0xFFB8B6CC), onBackground = Color(0xFFF4F2FF)
+            primary = Color(0xFFB59AFF), onPrimary = Color(0xFF171321),
+            primaryContainer = Color(0xFF39334D), onPrimaryContainer = Color(0xFFE9DFFF),
+            secondary = Color(0xFF6BA88E), onSecondary = Color(0xFF10251D),
+            secondaryContainer = Color(0xFF263D34), onSecondaryContainer = Color(0xFFC4E4D4),
+            tertiary = Color(0xFF9AA3B2), background = Color(0xFF090A10),
+            surface = Color(0xFF171821), surfaceVariant = Color(0xFF242631),
+            onSurface = Color(0xFFF3F2F8), onSurfaceVariant = Color(0xFFB4B7C2),
+            onBackground = Color(0xFFF3F2F8), error = Color(0xFFFF817A)
         )
     } else {
         lightColorScheme(
-            primary = Color(0xFF6556D9), onPrimary = Color.White,
-            primaryContainer = Color(0xFFE8E4FF), onPrimaryContainer = Color(0xFF30266F),
-            secondary = Color(0xFF36AFA8), onSecondary = Color.White,
-            secondaryContainer = Color(0xFFE0F6F2), onSecondaryContainer = Color(0xFF174F4B),
-            tertiary = Color(0xFF8B7AE8), background = Color(0xFFF6F5FC),
-            surface = Color(0xFFFFFEFF), surfaceVariant = Color(0xFFF0EEFA),
-            onSurface = Color(0xFF22213A), onSurfaceVariant = Color(0xFF77758F),
-            onBackground = Color(0xFF22213A), error = Color(0xFFD95770)
+            primary = Color(0xFF445264), onPrimary = Color.White,
+            primaryContainer = Color(0xFFE1E7ED), onPrimaryContainer = Color(0xFF263342),
+            secondary = Color(0xFF6BA88E), onSecondary = Color.White,
+            secondaryContainer = Color(0xFFDCEBE3), onSecondaryContainer = Color(0xFF234B39),
+            tertiary = Color(0xFF6B7280), background = Color(0xFFF4F6F8),
+            surface = Color(0xFFFFFFFF), surfaceVariant = Color(0xFFF0F2F5),
+            onSurface = Color(0xFF1F2937), onSurfaceVariant = Color(0xFF6B7280),
+            onBackground = Color(0xFF1F2937), error = Color(0xFFD77A72)
         )
     }
     MaterialTheme(
