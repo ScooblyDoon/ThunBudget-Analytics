@@ -1281,17 +1281,22 @@ private fun ThunBudgetApp() {
                                     val cap=if(periodIncome>0.0) periodIncome*cat.percent/100.0 else plannedForPeriod(income,cat.percent,periodStart,periodEnd)
                                     Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) {
                                         Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                                            Row(verticalAlignment=Alignment.CenterVertically) {
-                                                Column(Modifier.weight(1f)) {
-                                                    Text(cat.name,fontWeight=FontWeight.SemiBold)
-                                                    val free=BudgetAllocationCalculator.freePercent(cap,spent)
-                                                    Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                            if (cat.name.equals("Перенос средств", ignoreCase = true)) {
+                                                Text(cat.name, fontWeight = FontWeight.SemiBold)
+                                                Text("Перенесено в следующий отчётный период: ${money(spent)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            } else {
+                                                Row(verticalAlignment=Alignment.CenterVertically) {
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(cat.name,fontWeight=FontWeight.SemiBold)
+                                                        val free=BudgetAllocationCalculator.freePercent(cap,spent)
+                                                        Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    }
+                                                    IconButton(onClick={editingCategory=cat}) { Text("✎",color=MaterialTheme.colorScheme.primary) }
+                                                    Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
-                                                IconButton(onClick={editingCategory=cat}) { Text("✎",color=MaterialTheme.colorScheme.primary) }
-                                                Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
+                                                Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72)) }
                                             }
-                                            LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
-                                            Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72)) }
                                         }
                                     }
                                 }
