@@ -134,13 +134,13 @@ internal class BudgetStore(context: Context) {
         }
         return runCatching {
             val a = JSONArray(prefs.getString("period_incomes", "[]") ?: "[]")
-            (0 until a.length()).map { val o=a.getJSONObject(it); PeriodIncome(o.getString("start"),o.getString("end"),o.getDouble("amount")) }
+            (0 until a.length()).map { val o=a.getJSONObject(it); val amount=o.getDouble("amount"); PeriodIncome(o.getString("start"),o.getString("end"),amount,o.optDouble("earnedAmount",amount),o.optDouble("carryoverAmount",0.0)) }
         }.getOrDefault(emptyList())
     }
 
     private fun writeLegacyIncomeMirror() {
         val a = JSONArray()
-        loadPeriodIncomes().forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount)) }
+        loadPeriodIncomes().forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount).put("earnedAmount",it.earnedAmount).put("carryoverAmount",it.carryoverAmount)) }
         prefs.edit().putString("period_incomes",a.toString()).commit()
     }
 
@@ -201,7 +201,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun savePeriodIncomes(items: List<PeriodIncome>) {
-        val a=JSONArray(); items.forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount)) }
+        val a=JSONArray(); items.forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount).put("earnedAmount",it.earnedAmount).put("carryoverAmount",it.carryoverAmount)) }
         prefs.edit().putString("period_incomes",a.toString()).commit()
         saveAutomaticBackup()
     }
