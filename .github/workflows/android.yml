@@ -75,3 +75,5 @@ jobs:
 # [final-apk] Trigger release build from the dialog design branch.
 
 # [final-apk] Rebuild after forcing transparent dialog window background and explicit app theme propagation.
+
+# [final-apk] Rebuild soft-violet mic action and selected navigation indicator.
