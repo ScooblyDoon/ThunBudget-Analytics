@@ -1534,16 +1534,18 @@ private fun ThunBudgetApp() {
                         }
                     }
                     item {
-                        val pStart=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(9) else analyticsPeriodMonth.atDay(24)
-                        val pEnd=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(23) else analyticsPeriodMonth.plusMonths(1).atDay(8)
+                        val periodProposal = ReportingPeriodCalculator.propose(analyticsPeriodMonth, firstPeriodStartDay, firstPeriodEndDay)
+                        val pStart=if(analyticsPeriodType==0) periodProposal.first.start else periodProposal.second.start
+                        val pEnd=if(analyticsPeriodType==0) periodProposal.first.end else periodProposal.second.end
                         val visibleEnd=minOf(pEnd,today)
                         val periodTotal=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
                         MetricCard("${pStart.format(formatter)} — ${pEnd.format(formatter)} · потрачено",money(periodTotal),Modifier.fillMaxWidth())
                     }
                     item { TextButton(onClick={showPeriodCategories=!showPeriodCategories; persistUiExpanded(context,"period_categories",showPeriodCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showPeriodCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showPeriodCategories) items(categories,key={ "period-"+it.name }) { cat ->
-                        val pStart=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(9) else analyticsPeriodMonth.atDay(24)
-                        val pEnd=if(analyticsPeriodType==0) analyticsPeriodMonth.atDay(23) else analyticsPeriodMonth.plusMonths(1).atDay(8)
+                        val periodProposal = ReportingPeriodCalculator.propose(analyticsPeriodMonth, firstPeriodStartDay, firstPeriodEndDay)
+                        val pStart=if(analyticsPeriodType==0) periodProposal.first.start else periodProposal.second.start
+                        val pEnd=if(analyticsPeriodType==0) periodProposal.first.end else periodProposal.second.end
                         val visibleEnd=minOf(pEnd,today)
                         val fact=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.category==cat.name && it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
                         val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
