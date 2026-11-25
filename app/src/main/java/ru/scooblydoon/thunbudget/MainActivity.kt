@@ -744,7 +744,7 @@ private fun ThunBudgetApp() {
     val periodIncomeRow = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }
     val periodIncome = periodIncomeRow?.amount ?: 0.0
     val periodEarnedIncome = periodIncomeRow?.earnedAmount ?: periodIncome
-    val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses)
+    val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
     val effectivePeriodIncome = periodIncome + carryoverIncome
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, overviewMonth, true)
@@ -1547,7 +1547,7 @@ private fun ThunBudgetApp() {
                         val visibleEnd=minOf(pEnd,today)
                         val fact=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.category==cat.name && it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
                         val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
-                        val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses)
+                        val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
                         val pEffectiveIncome=pIncome+pCarryover
                         val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*cat.percent/100.0 else plannedForPeriod(analyticsMonthIncome,cat.percent,pStart.toString(),pEnd.toString())
                         Card { Column(Modifier.padding(14.dp)) {
@@ -1993,7 +1993,7 @@ private fun ThunBudgetApp() {
             periodEnd = periodEnd,
             firstPeriodStartDay = firstPeriodStartDay,
             firstPeriodEndDay = firstPeriodEndDay,
-            periodIncomeByRange = periodIncomes.associate { (it.start to it.end) to (it.amount + AnalyticsBudgetCalculator.carryoverBefore(it.start, periodIncomes, expenses)) },
+            periodIncomeByRange = periodIncomes.associate { (it.start to it.end) to (it.amount + AnalyticsBudgetCalculator.carryoverBefore(it.start, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)) },
             fallbackPeriodIncome = if (effectivePeriodIncome > 0.0) effectivePeriodIncome else income / 2.0,
             onDismiss = { showDynamicAllocationDialog = false },
             onSave = { updated ->
