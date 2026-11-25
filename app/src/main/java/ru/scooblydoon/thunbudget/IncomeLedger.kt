@@ -17,7 +17,8 @@ data class IncomeEntry(
     val date: String,
     val periodStart: String,
     val periodEnd: String,
-    val isLegacyAggregate: Boolean = false
+    val isLegacyAggregate: Boolean = false,
+    val isCarryover: Boolean = false
 )
 
 data class LegacyPeriodIncome(
@@ -102,7 +103,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
         amount: Double,
         date: LocalDate,
         periodStart: LocalDate,
-        periodEnd: LocalDate
+        periodEnd: LocalDate,
+        isCarryover: Boolean = false
     ): IncomeEntry {
         require(title.isNotBlank())
         require(amount.isFinite() && amount > 0.0)
@@ -114,7 +116,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
             amount = amount,
             date = date.toString(),
             periodStart = periodStart.toString(),
-            periodEnd = periodEnd.toString()
+            periodEnd = periodEnd.toString(),
+            isCarryover = isCarryover
         )
         check(save(load() + entry)) { "Не удалось сохранить доход." }
         return entry
@@ -158,7 +161,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 date = item.getString("date"),
                 periodStart = item.getString("periodStart"),
                 periodEnd = item.getString("periodEnd"),
-                isLegacyAggregate = item.optBoolean("isLegacyAggregate", false)
+                isLegacyAggregate = item.optBoolean("isLegacyAggregate", false),
+                isCarryover = item.optBoolean("isCarryover", false)
             )
         }.also(::validate)
     }
@@ -174,7 +178,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 .put("date", entry.date)
                 .put("periodStart", entry.periodStart)
                 .put("periodEnd", entry.periodEnd)
-                .put("isLegacyAggregate", entry.isLegacyAggregate))
+                .put("isLegacyAggregate", entry.isLegacyAggregate)
+                .put("isCarryover", entry.isCarryover))
         }
         return array.toString()
     }
