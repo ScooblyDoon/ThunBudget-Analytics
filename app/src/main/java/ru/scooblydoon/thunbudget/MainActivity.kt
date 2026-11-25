@@ -3237,11 +3237,7 @@ private fun CategoryManagerDialog(
     onDelete: (BudgetCategory) -> Unit,
     onEdit: (BudgetCategory) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var percent by remember { mutableStateOf("0") }
-    var validationMessage by remember { mutableStateOf<String?>(null) }
-    val parsedPercent = percent.replace(',', '.').toDoubleOrNull()
-    val validPercent = parsedPercent != null && parsedPercent.isFinite() && parsedPercent in 0.0..100.0
+    var showAddDialog by remember { mutableStateOf(false) }
 
     AlertDialog(
         containerColor = themedDialogContainerColor(),
@@ -3250,9 +3246,79 @@ private fun CategoryManagerDialog(
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())
             ) {
-                Text("Добавить категорию", fontWeight = FontWeight.SemiBold)
+                Text("Существующие категории", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Удаление категории не удаляет старые операции — они останутся в истории.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                categories.forEach { cat ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(cat.name, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { onEdit(cat) }) { Text("✎") }
+                        IconButton(onClick = { onDelete(cat) }) {
+                            Text("×", color = Color(0xFFC74444))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showAddDialog = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("+ Добавить категорию", maxLines = 1)
+                }
+                TextButton(onClick = onDismiss) { Text("Готово") }
+            }
+        },
+        dismissButton = {}
+    )
+
+    if (showAddDialog) {
+        CategoryAddDialog(
+            categories = categories,
+            onDismiss = { showAddDialog = false },
+            onAdd = { name, percent ->
+                val added = onAdd(name, percent)
+                if (added) showAddDialog = false
+                added
+            }
+        )
+    }
+}
+
+@Composable
+private fun CategoryAddDialog(
+    categories: List<BudgetCategory>,
+    onDismiss: () -> Unit,
+    onAdd: (String, Double) -> Boolean
+) {
+    var name by remember { mutableStateOf("") }
+    var percent by remember { mutableStateOf("0") }
+    var validationMessage by remember { mutableStateOf<String?>(null) }
+    val parsedPercent = percent.replace(',', '.').toDoubleOrNull()
+    val validPercent = parsedPercent != null && parsedPercent.isFinite() && parsedPercent in 0.0..100.0
+    val cleanName = name.trim()
+    val duplicate = cleanName.isNotBlank() && categories.any { it.name.equals(cleanName, true) }
+
+    AlertDialog(
+        containerColor = themedDialogContainerColor(),
+        onDismissRequest = onDismiss,
+        title = { Text("Добавить категорию") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = {
@@ -3276,46 +3342,31 @@ private fun CategoryManagerDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (validationMessage != null) {
-                    Text(validationMessage!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-                Button(
-                    onClick = {
-                        val cleanName = name.trim()
-                        when {
-                            cleanName.isBlank() -> validationMessage = "Введи название категории."
-                            categories.any { it.name.equals(cleanName, true) } -> validationMessage = "Такая категория уже существует."
-                            !validPercent -> validationMessage = "Укажи долю от 0 до 100%."
-                            onAdd(cleanName, parsedPercent!!) -> {
-                                name = ""
-                                percent = "0"
-                                validationMessage = "Категория добавлена."
-                            }
-                            else -> validationMessage = "Не удалось добавить категорию. Проверь название."
-                        }
-                    },
-                    enabled = name.isNotBlank() && validPercent,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Добавить категорию")
-                }
-                Divider()
-                Text("Существующие категории", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Удаление категории не удаляет старые операции — они останутся в истории.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                categories.forEach { cat ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(cat.name, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { onEdit(cat) }) { Text("✎") }
-                        IconButton(onClick = { onDelete(cat) }) { Text("×", color = Color(0xFFC74444)) }
-                    }
+                    Text(
+                        validationMessage!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Готово") } },
-        dismissButton = {}
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    when {
+                        cleanName.isBlank() -> validationMessage = "Введи название категории."
+                        duplicate -> validationMessage = "Такая категория уже существует."
+                        !validPercent -> validationMessage = "Укажи долю от 0 до 100%."
+                        !onAdd(cleanName, parsedPercent!!) ->
+                            validationMessage = "Не удалось добавить категорию. Проверь название."
+                    }
+                },
+                enabled = cleanName.isNotBlank() && !duplicate && validPercent
+            ) { Text("Добавить") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Отмена") }
+        }
     )
 }
 @Composable
