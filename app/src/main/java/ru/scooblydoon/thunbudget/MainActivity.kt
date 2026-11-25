@@ -1127,7 +1127,7 @@ private fun ThunBudgetApp() {
             onBackground = Color(0xFF1F2937), error = Color(0xFFD77A72)
         )
     }
-    MaterialTheme(
+    ThunBudgetTheme(
         colorScheme = appColors,
         shapes = Shapes(
             extraSmall = RoundedCornerShape(10.dp), small = RoundedCornerShape(14.dp),
