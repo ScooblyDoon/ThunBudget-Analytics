@@ -67,7 +67,7 @@ class BudgetAllocationTest {
                 AllocationExpense("Транспорт", 400.0, LocalDate.of(2026, 11, 11)),
                 AllocationExpense("Перенос средств", 10000.0, LocalDate.of(2026, 11, 12))
             ),
-            LocalDate.of(2026, 11, 25)
+            LocalDate.of(2026, 12, 1)
         )
         assertEquals(setOf("Кафе", "Транспорт"), suggestions.map { it.category }.toSet())
         assertEquals(60.0, suggestions.first { it.category == "Кафе" }.suggestedPercent!!, 0.001)
