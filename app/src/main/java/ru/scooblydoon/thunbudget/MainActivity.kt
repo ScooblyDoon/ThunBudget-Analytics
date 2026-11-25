@@ -560,8 +560,8 @@ private fun ThunBudgetApp() {
     }
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
-    // Use a compact layout on narrow, short, or enlarged-text screens.
-    // A standard-width Pixel keeps the existing floating-action layout.
+    // Compact spacing is selected from the available window constraints.
+    // Quick actions use the same bottom dock on every phone size.
     val compactLayout = configuration.screenWidthDp < 400 ||
         configuration.screenHeightDp < 700 || density.fontScale >= 1.12f
     val store= remember { BudgetStore(context) }
