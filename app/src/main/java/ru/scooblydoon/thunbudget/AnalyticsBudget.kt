@@ -23,8 +23,45 @@ internal object AnalyticsBudgetCalculator {
         if (!useReportingPeriods) return fixedMonthlyIncome.coerceAtLeast(0.0)
         val selected = periodIncomes.filter { row ->
             runCatching { java.time.YearMonth.from(java.time.LocalDate.parse(row.end)) == month }.getOrDefault(false)
-        }.sumOf { it.earnedAmount.coerceAtLeast(0.0) }
-        return selected
+        }
+        val totalIncome = selected.sumOf { it.earnedAmount.coerceAtLeast(0.0) }
+        val coveredDays = selected.sumOf { row ->
+            runCatching {
+                val start = java.time.LocalDate.parse(row.start)
+                val end = java.time.LocalDate.parse(row.end)
+                if (end.isBefore(start)) 0L else java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
+            }.getOrDefault(0L)
+        }
+        if (totalIncome <= 0.0 || coveredDays <= 0L) return 0.0
+        return totalIncome / coveredDays.toDouble() * month.lengthOfMonth().toDouble()
+    }
+
+    fun carryoverBefore(
+        currentPeriodStart: String,
+        periodIncomes: List<PeriodIncome>,
+        expenses: List<Expense>
+    ): Double {
+        val cutoff = java.time.LocalDate.parse(currentPeriodStart)
+        val completed = periodIncomes.mapNotNull { row ->
+            runCatching {
+                val start = java.time.LocalDate.parse(row.start)
+                val end = java.time.LocalDate.parse(row.end)
+                if (end.isBefore(cutoff) && !end.isBefore(start)) {
+                    Triple(start, end, row.amount.coerceAtLeast(0.0))
+                } else null
+            }.getOrNull()
+        }.sortedBy { it.first }
+        var balance = 0.0
+        completed.forEach { (start, end, amount) ->
+            val spent = expenses.asSequence().filter { expense ->
+                runCatching {
+                    val date = java.time.LocalDate.parse(expense.date)
+                    !date.isBefore(start) && !date.isAfter(end)
+                }.getOrDefault(false)
+            }.sumOf { it.amount.coerceAtLeast(0.0) }
+            balance = (balance + amount - spent).coerceAtLeast(0.0)
+        }
+        return balance
     }
 
     fun metrics(plannedBudget: Double, actualSpent: Double): CategoryBudgetMetrics {
