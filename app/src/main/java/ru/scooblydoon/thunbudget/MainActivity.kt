@@ -1868,6 +1868,16 @@ private fun ThunBudgetApp() {
             }
         }
     }
+    // Modal overlays are emitted after Scaffold's theme scope. Re-enter the app theme
+    // so LocalThunBudgetDarkTheme and MaterialTheme colors are available inside Dialog windows.
+    ThunBudgetTheme(
+        colorScheme = appColors,
+        shapes = Shapes(
+            extraSmall = RoundedCornerShape(10.dp), small = RoundedCornerShape(14.dp),
+            medium = RoundedCornerShape(20.dp), large = RoundedCornerShape(26.dp),
+            extraLarge = RoundedCornerShape(30.dp)
+        )
+    ) {
     voiceDraft?.let { draft ->
         var voiceDate by remember(draft.date) { mutableStateOf(voiceDateDigits(draft.date)) }
         AppAlertDialog(
@@ -2446,6 +2456,7 @@ private fun ThunBudgetApp() {
             confirmButton={Button(onClick={showDashboardArrangeDialog=false}) { Text("Готово") }},
             dismissButton={TextButton(onClick={val defaults=listOf("period","budget","income","categories");dashboardOrder=defaults;store.saveDashboardOrder(defaults)}) { Text("Сбросить") }}
         )
+    }
     }
 }
 
