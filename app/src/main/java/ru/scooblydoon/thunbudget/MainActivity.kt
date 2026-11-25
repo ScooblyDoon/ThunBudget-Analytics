@@ -152,12 +152,14 @@ internal class BudgetStore(context: Context) {
 
     fun setPeriodIncomeTotal(start: String, end: String, amount: Double) {
         require(amount.isFinite() && amount >= 0.0)
-        val retained = incomeLedger.load().filterNot { it.periodStart == start && it.periodEnd == end }
-        val replacement = if (amount > 0.0) retained + IncomeEntry(
+        val currentEntries = incomeLedger.load()
+        val carryoverEntries = currentEntries.filter { it.periodStart == start && it.periodEnd == end && it.isCarryover }
+        val retained = currentEntries.filterNot { it.periodStart == start && it.periodEnd == end && !it.isCarryover }
+        val earnedEntry = if (amount > 0.0) listOf(IncomeEntry(
             id = "manual-$start-$end", title = "Доход за период", amount = amount,
             date = end, periodStart = start, periodEnd = end
-        ) else retained
-        check(incomeLedger.save(replacement)) { "Не удалось обновить доход за период." }
+        )) else emptyList()
+        check(incomeLedger.save(retained + carryoverEntries + earnedEntry)) { "Не удалось обновить доход за период." }
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
@@ -715,7 +717,9 @@ private fun ThunBudgetApp() {
     var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth <= 8) YearMonth.now().minusMonths(1) else YearMonth.now()) }
     var analyticsPeriodType by remember { mutableIntStateOf(if (today.dayOfMonth >= 24 || today.dayOfMonth <= 8) 1 else 0) }
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
-    val periodIncome = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
+    val periodIncomeRow = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }
+    val periodIncome = periodIncomeRow?.amount ?: 0.0
+    val periodEarnedIncome = periodIncomeRow?.earnedAmount ?: periodIncome
     val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses)
     val effectivePeriodIncome = periodIncome + carryoverIncome
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
@@ -2031,7 +2035,7 @@ private fun ThunBudgetApp() {
             dismissButton = { TextButton(onClick = { showAssistantDialog = false }) { Text("Закрыть") } }
         )
     }
-    if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,periodIncome,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
+    if(showPeriodIncomeEditor) PeriodIncomeDialog(periodStart,periodEnd,periodEarnedIncome,onDismiss={showPeriodIncomeEditor=false},onSave={amount->
         store.prepareUndoSnapshot(); canUndo=true
         store.setPeriodIncomeTotal(periodStart, periodEnd, amount)
         periodIncomes = store.loadPeriodIncomes()
