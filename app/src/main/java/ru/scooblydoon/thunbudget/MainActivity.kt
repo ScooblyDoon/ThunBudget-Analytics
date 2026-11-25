@@ -48,7 +48,13 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-internal data class PeriodIncome(val start: String, val end: String, val amount: Double)
+internal data class PeriodIncome(
+    val start: String,
+    val end: String,
+    val amount: Double,
+    val earnedAmount: Double = amount,
+    val carryoverAmount: Double = 0.0
+)
 
 internal class BudgetStore(context: Context) {
     private val appContext = context.applicationContext
@@ -115,7 +121,15 @@ internal class BudgetStore(context: Context) {
         if (incomeLedger.migrateLegacyIfNeeded()) {
             val entries = runCatching { incomeLedger.load() }.getOrNull()
             if (entries != null) return entries.groupBy { it.periodStart to it.periodEnd }
-                .map { (period, rows) -> PeriodIncome(period.first, period.second, rows.sumOf { it.amount }) }
+                .map { (period, rows) ->
+                    PeriodIncome(
+                        start = period.first,
+                        end = period.second,
+                        amount = rows.sumOf { it.amount },
+                        earnedAmount = rows.filterNot { it.isCarryover }.sumOf { it.amount },
+                        carryoverAmount = rows.filter { it.isCarryover }.sumOf { it.amount }
+                    )
+                }
                 .sortedBy { it.start }
         }
         return runCatching {
@@ -130,8 +144,8 @@ internal class BudgetStore(context: Context) {
         prefs.edit().putString("period_incomes",a.toString()).commit()
     }
 
-    fun addIncomeEntry(title: String, amount: Double, date: String, start: String, end: String) {
-        incomeLedger.add(title, amount, LocalDate.parse(date), LocalDate.parse(start), LocalDate.parse(end))
+    fun addIncomeEntry(title: String, amount: Double, date: String, start: String, end: String, isCarryover: Boolean = false) {
+        incomeLedger.add(title, amount, LocalDate.parse(date), LocalDate.parse(start), LocalDate.parse(end), isCarryover)
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
@@ -668,7 +682,7 @@ private fun ThunBudgetApp() {
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val periodIncome = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }?.amount ?: 0.0
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
-    val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.amount }
+    val monthPeriodIncome = periodIncomes.filter { runCatching { YearMonth.from(LocalDate.parse(it.end))==overviewMonth }.getOrDefault(false) }.sumOf { it.earnedAmount }
     val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
     val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, analyticsIncomeMode == 1)
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
