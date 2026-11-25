@@ -531,6 +531,7 @@ private fun RecurringPaymentEditorDialog(
 
     AlertDialog(
         containerColor = themedDialogContainerColor(),
+        tonalElevation = 0.dp,
         onDismissRequest = onDismiss,
         title = { Text(if (payment == null) "Новый регулярный платёж" else "Изменить платёж") },
         text = {
