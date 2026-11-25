@@ -37,6 +37,15 @@ jobs:
           gradle-version: "8.9"
       - name: Run unit tests and compile debug APK
         run: gradle :app:testDebugUnitTest :app:assembleDebug
+      - name: Run Compose dialog screenshot tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: gradle :app:connectedDebugAndroidTest
       - name: Decode persistent release keystore
         if: ${{ (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]')) && env.THUNBUDGET_SIGNING_KEY != '' }}
         env:
