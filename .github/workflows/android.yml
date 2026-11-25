@@ -138,3 +138,5 @@ jobs:
 # [final-apk] Match dark dialog graphite surface to user screenshot reference.
 
 # [final-apk] Verify modal overlays inherit the selected light/dark app theme.
+
+# [final-apk] Build and verify signed release after analytics calculation audit.
