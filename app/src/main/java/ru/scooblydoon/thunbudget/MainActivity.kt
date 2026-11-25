@@ -1471,11 +1471,11 @@ private fun ThunBudgetApp() {
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    Text("Учтено периодов в истории: ${forecast.historyPeriods}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Учтено периодов (завершённые + текущий неполный): ${forecast.historyPeriods}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecast.totalMonthlyForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                            Text(money(forecast.totalMonthlyForecast + recurringPayments.filter { it.active }.sumOf { it.amount }), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                         }
                                         Column(Modifier.weight(1f)) {
                                             Text("Ожидаемые расходы всего до ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
@@ -1517,7 +1517,7 @@ private fun ThunBudgetApp() {
                                                 }
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
-                                                Text(money(categoryForecast.forecastForNextMonth), fontWeight = FontWeight.SemiBold)
+                                                Text(money(categoryForecast.forecastForNextMonth + recurringPayments.filter { it.active && it.category.equals(categoryForecast.category, true) }.sumOf { it.amount }), fontWeight = FontWeight.SemiBold)
                                                 Text("До конца периода: ${money(categoryActual + categoryForecast.forecastForPeriod + (recurringForecastByCategory[categoryForecast.category] ?: 0.0))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
