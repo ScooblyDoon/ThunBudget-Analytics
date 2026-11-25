@@ -1939,7 +1939,7 @@ private fun ThunBudgetApp() {
                         }
                     }
                     draft.isIncomeEdit -> {
-                        val amount = confirmedAmount ?: return@TextButton
+                        val amount = confirmedAmount ?: return@Button
                         store.prepareUndoSnapshot(); canUndo=true
                         val latestEntry = incomeEntries.filter { it.periodStart == periodStart && it.periodEnd == periodEnd }
                             .maxByOrNull { it.date }
@@ -1954,18 +1954,18 @@ private fun ThunBudgetApp() {
                         incomeEntries = store.loadIncomeEntries()
                     }
                     draft.isDelete -> {
-                        val targetId = voiceSelectedExpenseId ?: return@TextButton
-                        val target = expenses.firstOrNull { it.id == targetId } ?: return@TextButton
+                        val targetId = voiceSelectedExpenseId ?: return@Button
+                        val target = expenses.firstOrNull { it.id == targetId } ?: return@Button
                         store.prepareUndoSnapshot(); canUndo=true
                         expenses = expenses.filterNot { it.id == targetId }
                         store.saveExpenses(expenses)
                         voiceMessage = "Операция «${target.title}» от ${target.date} на ${money(target.amount)} удалена."
                     }
                     draft.isEdit -> {
-                        val amount = confirmedAmount ?: return@TextButton
+                        val amount = confirmedAmount ?: return@Button
                         store.prepareUndoSnapshot(); canUndo=true
-                        val targetId = voiceSelectedExpenseId ?: return@TextButton
-                        val target = expenses.firstOrNull { it.id == targetId } ?: return@TextButton
+                        val targetId = voiceSelectedExpenseId ?: return@Button
+                        val target = expenses.firstOrNull { it.id == targetId } ?: return@Button
                         expenses = expenses.map { if (it.id == targetId) it.copy(amount = amount, date = confirmedDate) else it }.sortedByDescending { it.date }
                         store.saveExpenses(expenses)
                         voiceMessage = "Операция «${target.title}» от ${target.date} изменена: ${money(target.amount)} → ${money(amount)}."
@@ -1990,7 +1990,7 @@ private fun ThunBudgetApp() {
                         }
                     }
                     draft.isIncome -> {
-                        val amount = confirmedAmount ?: return@TextButton
+                        val amount = confirmedAmount ?: return@Button
                         store.prepareUndoSnapshot(); canUndo=true
                         val incomeDate = LocalDate.parse(confirmedDate)
                         val incomePeriod = when {
@@ -2004,7 +2004,7 @@ private fun ThunBudgetApp() {
                         voiceMessage = "Доход ${money(amount)} сохранён отдельной операцией за отчётный период. Общий доход за период: ${money(effectivePeriodIncome + amount)}."
                     }
                     else -> {
-                        val amount = confirmedAmount ?: return@TextButton
+                        val amount = confirmedAmount ?: return@Button
                         store.prepareUndoSnapshot(); canUndo=true
                         val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,amount,confirmedDate))+expenses).sortedByDescending { it.date }
                         expenses=updated; store.saveExpenses(expenses)
