@@ -80,6 +80,19 @@ class BudgetForecastCalculatorTest {
         assertEquals(12000.0, result.categories.single().forecastForPeriod, 0.001)
     }
 
+    @Test fun oneLargeExpenseInNewCategoryIsNotExtrapolatedWithoutEvidence() {
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Ремонт"),
+            expenses = listOf(ForecastExpense("Ремонт", 7000.0, LocalDate.parse("2026-11-25"))),
+            asOf = LocalDate.parse("2026-11-26"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 12
+        )
+        assertEquals(0.0, result.totalPeriodForecast, 0.001)
+    }
+
     @Test fun completedPeriodEndingOnAsOfDateIsIncluded() {
         val result = BudgetForecastCalculator.calculate(
             categories = listOf("Продукты"),
