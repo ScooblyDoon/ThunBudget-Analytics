@@ -131,15 +131,13 @@ object BudgetForecastCalculator {
             val historicalRateRaw = if (completedPeriods.isEmpty()) 0.0 else {
                 weightedAverage(capHighOutliers(periodRates))
             }
-            val typicalPositiveRate = median(positiveRates)
             var profile = when {
                 periodRates.isEmpty() || positiveRates.size < 2 -> "Недостаточно данных"
                 positiveFrequency <= 0.35 -> "Редкие расходы"
                 positiveFrequency >= 0.70 -> "Регулярные расходы"
                 else -> "Переменные расходы"
             }
-            // For intermittent categories, estimate expected spend as
-            // typical event size multiplied by the probability of an event.
+            // Intermittent categories use a Croston-style smoothed event size / interval model.
             val historicalRate = if (
                 profile == "Редкие расходы" && positiveRates.size >= 2 && averagePeriodDays > 0.0
             ) {
