@@ -59,7 +59,9 @@ internal object ReportingPeriodCategoryPlanCalculator {
         firstStart: java.time.LocalDate,
         firstEnd: java.time.LocalDate,
         secondStart: java.time.LocalDate,
-        secondEnd: java.time.LocalDate
+        secondEnd: java.time.LocalDate,
+        firstIncome: Double,
+        secondIncome: Double
     ): ReportingCycleCategoryPlan {
         fun readPlan(start: java.time.LocalDate, end: java.time.LocalDate): Map<String, Double> {
             val stored = savedPlans[start.toString() to end.toString()].orEmpty()
@@ -71,11 +73,19 @@ internal object ReportingPeriodCategoryPlanCalculator {
         }
         val first = readPlan(firstStart, firstEnd)
         val second = readPlan(secondStart, secondEnd)
+        val firstIncomeSafe = firstIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val secondIncomeSafe = secondIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val totalIncome = firstIncomeSafe + secondIncomeSafe
         val average = currentShares.associate { (name, current) ->
             val firstValue = first[name] ?: current
             val secondValue = second[name] ?: current
+            val weightedPercent = if (totalIncome > 0.0) {
+                (firstIncomeSafe * firstValue + secondIncomeSafe * secondValue) / totalIncome
+            } else {
+                (firstValue + secondValue) / 2.0
+            }
             name to if (name.equals(TRANSFER_CATEGORY, true)) 0.0
-                else ((firstValue + secondValue) / 2.0).coerceIn(0.0, 100.0)
+                else weightedPercent.coerceIn(0.0, 100.0)
         }
         return ReportingCycleCategoryPlan(
             averagePercentages = average,
