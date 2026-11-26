@@ -835,7 +835,11 @@ private fun ThunBudgetApp() {
     val periodEarnedIncome = periodIncomeRow?.earnedAmount ?: periodIncome
     val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
     val effectivePeriodIncome = periodIncome + carryoverIncome
-    val analyticsMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(periodIncomes, analyticsMonth, today)
+    val analyticsMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(
+        periodIncomes, analyticsMonth, today,
+        firstStartDay = firstPeriodStartDay,
+        firstEndDay = firstPeriodEndDay
+    )
     val analyticsCycleIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
         periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
     )
@@ -867,7 +871,9 @@ private fun ThunBudgetApp() {
             periodIncomes = periodIncomes,
             savedPlans = reportingPeriodCategoryPlans,
             month = analyticsMonth,
-            forecastIncome = analyticsMonthIncomeEstimate.forecastIncome
+            forecastIncome = analyticsMonthIncomeEstimate.forecastIncome,
+            firstStartDay = firstPeriodStartDay,
+            firstEndDay = firstPeriodEndDay
         )
     } else {
         currentCategoryShares.associate { (name, percent) ->
@@ -915,7 +921,11 @@ private fun ThunBudgetApp() {
                 } else {
                     val targetMonth = runCatching { YearMonth.from(LocalDate.parse(to)) }.getOrNull()
                     targetMonth?.let { month ->
-                        AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, month, true)
+                        AnalyticsBudgetCalculator.monthlyIncome(
+                            income, periodIncomes, month, true,
+                            firstStartDay = firstPeriodStartDay,
+                            firstEndDay = firstPeriodEndDay
+                        )
                     }?.takeIf { it > 0.0 } ?: income
                 }
                 val plannedRange = if (from == periodStart && to == periodEnd) planned
