@@ -82,11 +82,11 @@ class FlexiblePeriodsTest {
         assertEquals(29L, FlexiblePeriodRules.totalDays(listOf(leap)))
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun februaryCannotContainThirtySequentialDaysWithoutTouchingMarch() {
-        FlexiblePeriodRules.validateSequence(
-            listOf(period("february", "Февраль", "2026-02-01", "2026-03-02"))
-        )
+    @Test
+    fun crossingFromFebruaryIntoMarchUsesTheLongerMonthsThirtyOneDayLimit() {
+        val februaryAndMarch = period("february-march", "Февраль–март", "2026-02-01", "2026-03-02")
+        assertEquals(30L, FlexiblePeriodRules.totalDays(listOf(februaryAndMarch)))
+        assertEquals(31L, FlexiblePeriodRules.maximumAllowedDays(februaryAndMarch.start, februaryAndMarch.end))
     }
 
     @Test
