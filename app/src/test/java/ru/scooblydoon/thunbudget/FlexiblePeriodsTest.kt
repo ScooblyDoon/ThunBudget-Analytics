@@ -12,6 +12,29 @@ class FlexiblePeriodsTest {
     private fun period(id: String, name: String, start: String, end: String) =
         FlexiblePeriodDefinition(id, name, LocalDate.parse(start), LocalDate.parse(end))
 
+
+    @Test
+    fun twoReportingPeriodsAreSummedOnceForTheirCalendarMonth() {
+        val total = ReportingPeriodIncomeCalculator.sumForMonth(
+            listOf(
+                PeriodIncome("2026-10-24", "2026-11-08", 36881.0),
+                PeriodIncome("2026-11-09", "2026-11-23", 60854.0),
+                PeriodIncome("2026-11-24", "2026-12-08", 99999.0)
+            ),
+            java.time.YearMonth.of(2026, 11)
+        )
+
+        assertEquals(97735.0, total, 0.001)
+    }
+
+    @Test
+    fun flexibleDateInputParsesTheEightDigitDateStrictly() {
+        assertEquals(LocalDate.parse("2026-12-19"), parseFlexibleDate("19122026"))
+        assertEquals(LocalDate.parse("2024-02-29"), parseFlexibleDate("29022024"))
+        assertNull(parseFlexibleDate("31022026"))
+        assertNull(parseFlexibleDate("1912202"))
+    }
+
     @Test
     fun fifteenPlusSixteenDaysIsAllowedWhenOneTouchedMonthHasThirtyOneDays() {
         val first = period("one", "Первая половина", "2026-11-16", "2026-11-30")
