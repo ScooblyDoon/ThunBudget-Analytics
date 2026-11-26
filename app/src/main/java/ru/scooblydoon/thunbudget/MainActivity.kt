@@ -769,14 +769,12 @@ private fun ThunBudgetApp() {
     val periodEarnedIncome = periodIncomeRow?.earnedAmount ?: periodIncome
     val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
     val effectivePeriodIncome = periodIncome + carryoverIncome
-    val overviewMonth = YearMonth.from(today)
-    val overviewMonthIncome = AnalyticsBudgetCalculator.calendarMonthIncome(periodIncomes, overviewMonth, today).totalIncome
-    val displayedMonthlyIncome = if(overviewMonthIncome>0.0) overviewMonthIncome else income
     val analyticsMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(periodIncomes, analyticsMonth, today)
     val analyticsCycleIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
         periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
     )
     val analyticsMonthIncome = if (analyticsIncomeMode == 0) income else analyticsMonthIncomeEstimate.totalIncome
+    val displayedMonthlyIncome = analyticsMonthIncome
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
@@ -1684,6 +1682,13 @@ private fun ThunBudgetApp() {
                                 if (analyticsMonthIncomeEstimate.forecastDays > 0) {
                                     Text(
                                         "Прогноз на ${analyticsMonthIncomeEstimate.forecastDays} будущих дней: ${money(analyticsMonthIncomeEstimate.forecastIncome)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                analyticsMonthIncomeEstimate.medianDailyIncome?.let { dailyMedian ->
+                                    Text(
+                                        "Основа прогноза: медиана ${money(dailyMedian)} в день по завершённым периодам.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
