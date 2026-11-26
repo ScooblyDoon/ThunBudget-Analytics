@@ -455,3 +455,55 @@ object BudgetForecastCalculator {
             .toList()
     }
 }
+
+/**
+ * Transparent sum of already-known spend and future-only projections.
+ * Each amount has one owner: posted actuals, dated future entries, variable
+ * forecast for dates after today, or unpaid recurring commitments.
+ */
+data class BudgetForecastProjection(
+    val actualToDate: Double,
+    val futureEnteredExpenses: Double,
+    val variableForecast: Double,
+    val recurringPayments: Double,
+    val availableIncome: Double,
+    val expectedSpend: Double,
+    val balance: Double
+) {
+    val deficit: Double get() = (-balance).coerceAtLeast(0.0)
+    val surplus: Double get() = balance.coerceAtLeast(0.0)
+}
+
+object BudgetForecastProjectionCalculator {
+    fun calculate(
+        actualToDate: Double,
+        futureEnteredExpenses: Double,
+        variableForecast: Double,
+        recurringPayments: Double,
+        availableIncome: Double
+    ): BudgetForecastProjection {
+        val components = listOf(
+            actualToDate,
+            futureEnteredExpenses,
+            variableForecast,
+            recurringPayments,
+            availableIncome
+        )
+        require(components.all { it.isFinite() && it >= 0.0 }) {
+            "Суммы прогноза должны быть конечными и неотрицательными."
+        }
+        val expectedSpend = actualToDate + futureEnteredExpenses +
+            variableForecast + recurringPayments
+        val balance = availableIncome - expectedSpend
+        return BudgetForecastProjection(
+            actualToDate = actualToDate,
+            futureEnteredExpenses = futureEnteredExpenses,
+            variableForecast = variableForecast,
+            recurringPayments = recurringPayments,
+            availableIncome = availableIncome,
+            expectedSpend = expectedSpend,
+            balance = balance
+        )
+    }
+}
+
