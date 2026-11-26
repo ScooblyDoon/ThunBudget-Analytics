@@ -874,6 +874,25 @@ private fun ThunBudgetApp() {
     }
     val reportingPeriodCategoryPlans = store.loadReportingPeriodCategoryPlans()
     val plansForAnalytics = if (autoAllocationEnabled) reportingPeriodCategoryPlans else emptyMap()
+    val selectedOverviewPeriodCategoryPlan = ReportingPeriodCategoryPlanCalculator.periodPlan(
+        currentShares = currentCategoryShares,
+        savedPlans = plansForAnalytics,
+        start = LocalDate.parse(periodStart),
+        end = LocalDate.parse(periodEnd)
+    )
+    fun overviewCategoryPercent(categoryName: String): Double =
+        selectedOverviewPeriodCategoryPlan.entries.firstOrNull {
+            it.key.equals(categoryName, ignoreCase = true)
+        }?.value ?: 0.0
+    
+    fun overviewCategoryBudget(categoryName: String): Double =
+        AnalyticsBudgetCalculator.periodCategoryBudget(
+            periodIncome = effectivePeriodIncome,
+            monthlyIncomeFallback = calculatedMonthlyIncome,
+            categoryPercent = overviewCategoryPercent(categoryName),
+            start = LocalDate.parse(periodStart),
+            end = LocalDate.parse(periodEnd)
+        )
     val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
         currentShares = currentCategoryShares,
         savedPlans = plansForAnalytics,
@@ -910,7 +929,13 @@ private fun ThunBudgetApp() {
         }
     }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
-    val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
+    val planned = AnalyticsBudgetCalculator.periodCategoryBudget(
+        periodIncome = effectivePeriodIncome,
+        monthlyIncomeFallback = calculatedMonthlyIncome,
+        categoryPercent = selectedOverviewPeriodCategoryPlan.values.sum(),
+        start = LocalDate.parse(periodStart),
+        end = LocalDate.parse(periodEnd)
+    )
     val remaining=planned-totalSpent
     val dailyLimit = calculateDailyLimit(remaining, LocalDate.parse(periodStart), LocalDate.parse(periodEnd), today)
     val dailyDaysRemaining = dailyLimit.daysRemaining
@@ -1497,7 +1522,8 @@ private fun ThunBudgetApp() {
                                 }
                                 categories.forEach { cat ->
                                     val spent=expenses.filter{it.category==cat.name&&it.date>=periodStart&&it.date<=periodEnd}.sumOf{it.amount}
-                                    val cap=if(effectivePeriodIncome>0.0) effectivePeriodIncome*cat.percent/100.0 else plannedForPeriod(income,cat.percent,periodStart,periodEnd)
+                                    val planPercent = overviewCategoryPercent(cat.name)
+                                    val cap = overviewCategoryBudget(cat.name)
                                     Card(onClick={selectedCategory=cat.name},shape=RoundedCornerShape(16.dp)) {
                                         Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                             if (cat.name.equals("Перенос средств", ignoreCase = true)) {
@@ -1511,7 +1537,7 @@ private fun ThunBudgetApp() {
                                                         Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant)
                                                     }
                                                     IconButton(onClick={editingCategory=cat}) { Text("✎",color=MaterialTheme.colorScheme.primary) }
-                                                    Text("${cat.percent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text("${planPercent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                                 LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72))
                                                 Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) Color(0xFFC74444) else Color(0xFF168A72)) }
@@ -1932,11 +1958,22 @@ private fun ThunBudgetApp() {
                         val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
                         val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
                         val pEffectiveIncome=pIncome+pCarryover
-                        val savedPeriodPlan = plansForAnalytics[pStart.toString() to pEnd.toString()].orEmpty()
-                        val pPlanPercent = savedPeriodPlan.entries.firstOrNull { it.key.equals(cat.name, true) }?.value
-                            ?: currentCategoryShares.firstOrNull { it.first.equals(cat.name, true) }?.second
-                            ?: cat.percent
-                        val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*pPlanPercent/100.0 else plannedForPeriod(calculatedMonthlyIncome,pPlanPercent,pStart.toString(),pEnd.toString())
+                        val selectedPeriodCategoryPlan = ReportingPeriodCategoryPlanCalculator.periodPlan(
+                            currentShares = currentCategoryShares,
+                            savedPlans = plansForAnalytics,
+                            start = pStart,
+                            end = pEnd
+                        )
+                        val pPlanPercent = selectedPeriodCategoryPlan.entries.firstOrNull {
+                            it.key.equals(cat.name, ignoreCase = true)
+                        }?.value ?: cat.percent
+                        val plan = AnalyticsBudgetCalculator.periodCategoryBudget(
+                            periodIncome = pEffectiveIncome,
+                            monthlyIncomeFallback = calculatedMonthlyIncome,
+                            categoryPercent = pPlanPercent,
+                            start = pStart,
+                            end = pEnd
+                        )
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
@@ -2402,7 +2439,7 @@ private fun ThunBudgetApp() {
                         store.prepareUndoSnapshot(); canUndo=true
                         val updated=(listOf(Expense(System.currentTimeMillis(),draft.title,draft.category,amount,confirmedDate))+expenses).sortedByDescending { it.date }
                         expenses=updated; store.saveExpenses(expenses)
-                        val cap=categories.firstOrNull { it.name==draft.category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
+                        val cap = overviewCategoryBudget(draft.category)
                         val spent=updated.filter { it.category==draft.category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
                         voiceMessage = "Расход ${money(amount)} в категории «${draft.category}» сохранён."
                         if(spent>cap) OverspendNotifier.notify(context,"Превышение бюджета","Категория «${draft.category}»: превышение ${money(spent-cap)} за выбранный период.")
@@ -2635,7 +2672,7 @@ private fun ThunBudgetApp() {
             Column(verticalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.heightIn(max=500.dp)) {
                 Text("Операции за отчётный период",fontWeight=FontWeight.SemiBold)
                 Text("${LocalDate.parse(periodStart).format(formatter)} — ${LocalDate.parse(periodEnd).format(formatter)}",style=MaterialTheme.typography.bodySmall)
-                val categoryBudget = cat?.let { if(effectivePeriodIncome>0) effectivePeriodIncome*it.percent/100.0 else plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
+                val categoryBudget = cat?.let { overviewCategoryBudget(it.name) } ?: 0.0
                 val categoryFact = inPeriod.sumOf { it.amount }
                 if (categoryName.equals("Перенос средств", true)) {
                     Text("Перенесено в следующий отчётный период: ${money(categoryFact)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2680,7 +2717,7 @@ private fun ThunBudgetApp() {
         store.prepareUndoSnapshot(); canUndo=true
         val updated=(listOf(Expense(System.currentTimeMillis(),title,category,amount,date))+expenses).sortedByDescending { it.date }
         val spentAfter=updated.filter { it.category==category && it.date>=periodStart && it.date<=periodEnd }.sumOf { it.amount }
-        val cap=categories.firstOrNull { it.name==category }?.let { plannedForPeriod(income,it.percent,periodStart,periodEnd) } ?: 0.0
+        val cap = overviewCategoryBudget(category)
         expenses=updated; store.saveExpenses(expenses); showAdd=false; addFromCategory=null
         if(spentAfter>cap) OverspendNotifier.notify(context, "Превышение бюджета", "Категория «$category»: превышение ${money(spentAfter-cap)} за выбранный период.")
     })
@@ -3863,18 +3900,13 @@ private fun CategoryEditDialog(category:BudgetCategory,onDismiss:()->Unit,onSave
     },confirmButton={Button(onClick={if(name.isNotBlank()&&value!=null&&value>=0) onSave(name.trim(),value)},enabled=name.isNotBlank()&&value!=null&&value>=0){Text("Сохранить")}},dismissButton={TextButton(onClick=onDismiss){Text("Отмена")}})
 }
 
-private fun plannedForPeriod(income: Double, percent: Double, start: String, end: String): Double {
-    val from = LocalDate.parse(start)
-    val to = LocalDate.parse(end)
-    if (to.isBefore(from)) return 0.0
-    var day = from
-    var total = 0.0
-    while (!day.isAfter(to)) {
-        total += income * percent / 100.0 / day.lengthOfMonth()
-        day = day.plusDays(1)
-    }
-    return total
-}
+private fun plannedForPeriod(income: Double, percent: Double, start: String, end: String): Double =
+    AnalyticsBudgetCalculator.proratedPeriodBudget(
+        monthlyIncome = income,
+        categoryPercent = percent,
+        start = LocalDate.parse(start),
+        end = LocalDate.parse(end)
+    )
 
 private fun money(value:Double):String = String.format(Locale("ru","RU"),"%,.0f ₽",value)
 

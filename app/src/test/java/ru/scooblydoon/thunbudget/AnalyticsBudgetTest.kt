@@ -135,7 +135,50 @@ class AnalyticsBudgetTest {
         assertEquals(14, result.uncoveredPastDays)
     }
 
-    @Test fun cyclePlanAveragesSavedPlannedSharesAndDoesNotUseActualSpendRatios() {
+    @Test fun overviewAndAnalyticsUseTheSameSavedPlanForAnExactReportingPeriod() {
+        val start = java.time.LocalDate.parse("2026-11-24")
+        val end = java.time.LocalDate.parse("2026-12-08")
+        val currentShares = listOf(
+            "Продукты" to 20.0,
+            "Транспорт" to 13.0,
+            "Резервные средства" to 67.0
+        )
+        val savedPlans = mapOf(
+            ("2026-11-24" to "2026-12-08") to mapOf("тРАНСпОРТ" to 7.0)
+        )
+    
+        val exactPeriodPlan = ReportingPeriodCategoryPlanCalculator.periodPlan(
+            currentShares = currentShares,
+            savedPlans = savedPlans,
+            start = start,
+            end = end
+        )
+    
+        // The saved snapshot wins for this period; categories without a
+        // snapshot use the supplied baseline shares.
+        assertEquals(7.0, exactPeriodPlan["Транспорт"]!!, 0.001)
+        assertEquals(20.0, exactPeriodPlan["Продукты"]!!, 0.001)
+    
+        val overviewBudget = AnalyticsBudgetCalculator.periodCategoryBudget(
+            periodIncome = 36885.0,
+            monthlyIncomeFallback = 40000.0,
+            categoryPercent = exactPeriodPlan["Транспорт"]!!,
+            start = start,
+            end = end
+        )
+        val analyticsBudget = AnalyticsBudgetCalculator.periodCategoryBudget(
+            periodIncome = 36885.0,
+            monthlyIncomeFallback = 40000.0,
+            categoryPercent = exactPeriodPlan["Транспорт"]!!,
+            start = start,
+            end = end
+        )
+    
+        assertEquals(2581.95, overviewBudget, 0.001)
+        assertEquals(overviewBudget, analyticsBudget, 0.001)
+        assertEquals(-32.9, AnalyticsBudgetCalculator.metrics(overviewBudget, 3432.0).remainingPercent!!, 0.1)
+    }
+    
         val result = ReportingPeriodCategoryPlanCalculator.cyclePlan(
             currentShares = listOf(
                 "Продукты" to 20.0,

@@ -53,6 +53,25 @@ internal data class ReportingCycleCategoryPlan(
 internal object ReportingPeriodCategoryPlanCalculator {
     private const val TRANSFER_CATEGORY = "Перенос средств"
 
+    /**
+     * Returns the percentages assigned to one exact reporting period.
+     * A saved period snapshot takes precedence; missing category entries use
+     * the supplied baseline shares.
+     */
+    fun periodPlan(
+        currentShares: List<Pair<String, Double>>,
+        savedPlans: Map<Pair<String, String>, Map<String, Double>>,
+        start: java.time.LocalDate,
+        end: java.time.LocalDate
+    ): Map<String, Double> {
+        val stored = savedPlans[start.toString() to end.toString()].orEmpty()
+        return currentShares.associate { (name, current) ->
+            val storedValue = stored.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+            val value = storedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current
+            name to if (name.equals(TRANSFER_CATEGORY, ignoreCase = true)) 0.0 else value
+        }
+    }
+
     fun cyclePlan(
         currentShares: List<Pair<String, Double>>,
         savedPlans: Map<Pair<String, String>, Map<String, Double>>,
@@ -63,16 +82,8 @@ internal object ReportingPeriodCategoryPlanCalculator {
         firstIncome: Double,
         secondIncome: Double
     ): ReportingCycleCategoryPlan {
-        fun readPlan(start: java.time.LocalDate, end: java.time.LocalDate): Map<String, Double> {
-            val stored = savedPlans[start.toString() to end.toString()].orEmpty()
-            return currentShares.associate { (name, current) ->
-                val storedValue = stored.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
-                val value = storedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current
-                name to if (name.equals(TRANSFER_CATEGORY, true)) 0.0 else value
-            }
-        }
-        val first = readPlan(firstStart, firstEnd)
-        val second = readPlan(secondStart, secondEnd)
+        val first = periodPlan(currentShares, savedPlans, firstStart, firstEnd)
+        val second = periodPlan(currentShares, savedPlans, secondStart, secondEnd)
         val firstIncomeSafe = firstIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
         val secondIncomeSafe = secondIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
         val totalIncome = firstIncomeSafe + secondIncomeSafe
@@ -372,6 +383,51 @@ internal object AnalyticsBudgetCalculator {
             balance = (balance + amount - spent).coerceAtLeast(0.0)
         }
         return balance
+    }
+
+    /**
+     * Calculates a category budget for an exact reporting period. Overview
+     * and Analytics call this same function so their income and proration
+     * formulas cannot drift apart.
+     */
+    fun periodCategoryBudget(
+        periodIncome: Double,
+        monthlyIncomeFallback: Double,
+        categoryPercent: Double,
+        start: java.time.LocalDate,
+        end: java.time.LocalDate
+    ): Double {
+        if (!categoryPercent.isFinite() || categoryPercent < 0.0 || end.isBefore(start)) return 0.0
+        val validPeriodIncome = periodIncome.takeIf { it.isFinite() && it > 0.0 }
+        return if (validPeriodIncome != null) {
+            validPeriodIncome * categoryPercent / 100.0
+        } else {
+            proratedPeriodBudget(monthlyIncomeFallback, categoryPercent, start, end)
+        }
+    }
+
+    /**
+     * Applies monthly income to each inclusive calendar day, respecting the
+     * length of each month when a reporting period crosses a month boundary.
+     */
+    fun proratedPeriodBudget(
+        monthlyIncome: Double,
+        categoryPercent: Double,
+        start: java.time.LocalDate,
+        end: java.time.LocalDate
+    ): Double {
+        if (!monthlyIncome.isFinite() || monthlyIncome <= 0.0 ||
+            !categoryPercent.isFinite() || categoryPercent < 0.0 || end.isBefore(start)
+        ) return 0.0
+
+        val monthlyCategoryBudget = monthlyIncome * categoryPercent / 100.0
+        var day = start
+        var total = 0.0
+        while (!day.isAfter(end)) {
+            total += monthlyCategoryBudget / day.lengthOfMonth().toDouble()
+            day = day.plusDays(1)
+        }
+        return total
     }
 
     fun metrics(plannedBudget: Double, actualSpent: Double): CategoryBudgetMetrics {
