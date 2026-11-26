@@ -144,7 +144,7 @@ object BudgetForecastCalculator {
                 // Croston-style estimate: smooth event size and the interval
                 // between events separately, then divide to get expected spend
                 // per reporting period and convert it to a daily rate.
-                crostonPeriodForecast(periodAmounts.takeLast(12)) / averagePeriodDays
+                crostonPeriodForecast(periodAmounts) / averagePeriodDays
             } else historicalRateRaw
             val trendFactor = dampedTrendFactor(periodRates)
             val trendAdjustedRate = historicalRate * trendFactor
