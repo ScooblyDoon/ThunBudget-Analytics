@@ -313,10 +313,16 @@ internal object AnalyticsBudgetCalculator {
         periodIncomes: List<PeriodIncome>,
         month: java.time.YearMonth,
         useReportingPeriods: Boolean,
-        asOf: java.time.LocalDate = java.time.LocalDate.now()
+        asOf: java.time.LocalDate = java.time.LocalDate.now(),
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
     ): Double {
         if (!useReportingPeriods) return fixedMonthlyIncome.coerceAtLeast(0.0)
-        return calendarMonthIncome(periodIncomes, month, asOf).totalIncome
+        return calendarMonthIncome(
+            periodIncomes, month, asOf,
+            firstStartDay = firstStartDay,
+            firstEndDay = firstEndDay
+        ).totalIncome
     }
 
     fun carryoverBefore(
