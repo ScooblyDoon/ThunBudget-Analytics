@@ -163,6 +163,27 @@ class BudgetAllocationTest {
         assertEquals(1, BudgetAllocationCalculator.withReserve(listOf("Еда" to 100.0)).size)
         assertEquals(2, BudgetAllocationCalculator.withReserve(listOf("Еда" to 85.0)).size)
     }
+
+    @Test fun overAllocatedCategorySharesAreNormalizedWithoutIncreasingTheIncomeBase() {
+        val normalized = BudgetAllocationCalculator.withReserve(
+            listOf("Продукты" to 90.0, "Транспорт" to 20.0)
+        ).toMap()
+
+        assertEquals(100.0, normalized.values.sum(), 0.001)
+        assertEquals(900.0 / 1100.0 * 100.0, normalized["Продукты"]!!, 0.001)
+        assertEquals(200.0 / 1100.0 * 100.0, normalized["Транспорт"]!!, 0.001)
+    }
+
+    @Test fun transferCategoryDoesNotConsumeAnAdditionalBudgetShare() {
+        val normalized = BudgetAllocationCalculator.withReserve(
+            listOf("Продукты" to 90.0, "Перенос средств" to 10.0)
+        ).toMap()
+
+        assertEquals(100.0, normalized.values.sum(), 0.001)
+        assertEquals(90.0, normalized["Продукты"]!!, 0.001)
+        assertEquals(10.0, normalized["Резервные средства"]!!, 0.001)
+        assertEquals(0.0, normalized["Перенос средств"]!!, 0.001)
+    }
 }
 
 class RecurringPaymentTest {

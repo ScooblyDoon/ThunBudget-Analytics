@@ -58,6 +58,20 @@ internal object ReportingPeriodCategoryPlanCalculator {
      * A saved period snapshot takes precedence; missing category entries use
      * the supplied baseline shares.
      */
+    private fun resolvePlan(
+        currentShares: List<Pair<String, Double>>,
+        stored: Map<String, Double>
+    ): Map<String, Double> {
+        val resolved = currentShares.map { (name, current) ->
+            val storedValue = stored.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+            val value = storedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current
+            name to value
+        }
+        return BudgetAllocationCalculator.withReserve(resolved).associate { (name, percent) ->
+            name to if (name.equals(TRANSFER_CATEGORY, ignoreCase = true)) 0.0 else percent
+        }
+    }
+
     fun periodPlan(
         currentShares: List<Pair<String, Double>>,
         savedPlans: Map<Pair<String, String>, Map<String, Double>>,
@@ -65,11 +79,7 @@ internal object ReportingPeriodCategoryPlanCalculator {
         end: java.time.LocalDate
     ): Map<String, Double> {
         val stored = savedPlans[start.toString() to end.toString()].orEmpty()
-        return currentShares.associate { (name, current) ->
-            val storedValue = stored.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
-            val value = storedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current
-            name to if (name.equals(TRANSFER_CATEGORY, ignoreCase = true)) 0.0 else value
-        }
+        return resolvePlan(currentShares, stored)
     }
 
     fun cyclePlan(
@@ -87,16 +97,18 @@ internal object ReportingPeriodCategoryPlanCalculator {
         val firstIncomeSafe = firstIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
         val secondIncomeSafe = secondIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
         val totalIncome = firstIncomeSafe + secondIncomeSafe
-        val average = currentShares.associate { (name, current) ->
-            val firstValue = first[name] ?: current
-            val secondValue = second[name] ?: current
+        val planNames = (first.keys + second.keys).distinct()
+        val average = planNames.associateWith { name ->
+            val fallback = currentShares.firstOrNull { it.first.equals(name, ignoreCase = true) }?.second ?: 0.0
+            val firstValue = first[name] ?: fallback
+            val secondValue = second[name] ?: fallback
             val weightedPercent = if (totalIncome > 0.0) {
                 (firstIncomeSafe * firstValue + secondIncomeSafe * secondValue) / totalIncome
             } else {
                 (firstValue + secondValue) / 2.0
             }
-            name to if (name.equals(TRANSFER_CATEGORY, true)) 0.0
-                else weightedPercent.coerceIn(0.0, 100.0)
+            if (name.equals(TRANSFER_CATEGORY, true)) 0.0
+            else weightedPercent.coerceIn(0.0, 100.0)
         }
         return ReportingCycleCategoryPlan(
             averagePercentages = average,
@@ -121,7 +133,8 @@ internal object ReportingPeriodCategoryPlanCalculator {
         firstStartDay: Int = 9,
         firstEndDay: Int = 23
     ): Map<String, Double> {
-        val result = currentShares.associate { it.first to 0.0 }.toMutableMap()
+        val basePlan = resolvePlan(currentShares, emptyMap())
+        val result = basePlan.keys.associateWith { 0.0 }.toMutableMap()
         val monthStart = month.atDay(1)
         val monthEnd = month.atEndOfMonth()
         val coveredDates = mutableSetOf<java.time.LocalDate>()
@@ -152,17 +165,14 @@ internal object ReportingPeriodCategoryPlanCalculator {
             if (dayCount <= 0L) return@forEach
             val dailyIncome = earnedAmount / dayCount.toDouble()
             val saved = savedPlans[start.toString() to end.toString()].orEmpty()
-            val planForPeriod = currentShares.associate { (name, current) ->
-                val savedValue = saved.entries.firstOrNull { it.key.equals(name, true) }?.value
-                name to (savedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current)
-            }
+            val planForPeriod = resolvePlan(currentShares, saved)
             var date = overlapStart
             while (!date.isAfter(overlapEnd)) {
                 if (coveredDates.add(date)) {
-                    currentShares.forEach { (name, _) ->
+                    planForPeriod.forEach { (name, percent) ->
                         if (!name.equals(TRANSFER_CATEGORY, true)) {
                             result[name] = (result[name] ?: 0.0) +
-                                dailyIncome * (planForPeriod[name] ?: 0.0) / 100.0
+                                dailyIncome * percent / 100.0
                         }
                     }
                 }
@@ -178,18 +188,19 @@ internal object ReportingPeriodCategoryPlanCalculator {
                 !end.isBefore(monthStart) && !start.isAfter(monthEnd)
             }.map { (start, end, _) ->
                 val saved = savedPlans[start.toString() to end.toString()].orEmpty()
-                currentShares.associate { (name, current) ->
-                    val storedValue = saved.entries.firstOrNull { it.key.equals(name, true) }?.value
-                    name to (storedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current)
+                resolvePlan(currentShares, saved)
+            }
+            val forecastShares = basePlan.keys.associateWith { name ->
+                if (relevantPlans.isNotEmpty()) {
+                    relevantPlans.map { it[name] ?: basePlan[name] ?: 0.0 }.average()
+                } else {
+                    basePlan[name] ?: 0.0
                 }
             }
-            val forecastShares = currentShares.associate { (name, current) ->
-                name to if (relevantPlans.isNotEmpty()) relevantPlans.map { it[name] ?: current }.average() else current
-            }
-            currentShares.forEach { (name, _) ->
+            forecastShares.forEach { (name, percent) ->
                 if (!name.equals(TRANSFER_CATEGORY, true)) {
                     result[name] = (result[name] ?: 0.0) +
-                        forecastIncome * (forecastShares[name] ?: 0.0) / 100.0
+                        forecastIncome * percent / 100.0
                 }
             }
         }

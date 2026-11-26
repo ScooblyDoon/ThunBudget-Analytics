@@ -179,6 +179,34 @@ class AnalyticsBudgetTest {
         assertEquals(-32.9, AnalyticsBudgetCalculator.metrics(overviewBudget, 3432.0).remainingPercent!!, 0.1)
     }
 
+    @Test fun legacyOverallocatedPeriodSnapshotCannotIncreasePlannedIncome() {
+        val start = java.time.LocalDate.parse("2026-11-24")
+        val end = java.time.LocalDate.parse("2026-12-08")
+        val plan = ReportingPeriodCategoryPlanCalculator.periodPlan(
+            currentShares = listOf("Продукты" to 90.0, "Транспорт" to 20.0),
+            savedPlans = mapOf(
+                ("2026-11-24" to "2026-12-08") to mapOf(
+                    "Продукты" to 90.0,
+                    "Транспорт" to 20.0
+                )
+            ),
+            start = start,
+            end = end
+        )
+
+        assertEquals(100.0, plan.values.sum(), 0.001)
+        val totalBudget = AnalyticsBudgetCalculator.periodCategoryBudget(
+            periodIncome = 36881.0,
+            monthlyIncomeFallback = 40000.0,
+            categoryPercent = plan.values.sum(),
+            start = start,
+            end = end
+        )
+        assertEquals(36881.0, totalBudget, 0.001)
+        assertEquals(900.0 / 1100.0 * 100.0, plan["Продукты"]!!, 0.001)
+        assertEquals(200.0 / 1100.0 * 100.0, plan["Транспорт"]!!, 0.001)
+    }
+
     @Test fun cyclePlanAveragesSavedPlannedSharesAndDoesNotUseActualSpendRatios() {
         val result = ReportingPeriodCategoryPlanCalculator.cyclePlan(
             currentShares = listOf(

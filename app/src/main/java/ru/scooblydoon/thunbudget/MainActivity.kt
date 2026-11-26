@@ -932,7 +932,7 @@ private fun ThunBudgetApp() {
     val planned = AnalyticsBudgetCalculator.periodCategoryBudget(
         periodIncome = effectivePeriodIncome,
         monthlyIncomeFallback = calculatedMonthlyIncome,
-        categoryPercent = selectedOverviewPeriodCategoryPlan.values.sum(),
+        categoryPercent = 100.0,
         start = LocalDate.parse(periodStart),
         end = LocalDate.parse(periodEnd)
     )
