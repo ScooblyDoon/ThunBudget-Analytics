@@ -97,19 +97,30 @@ internal object ReportingPeriodCategoryPlanCalculator {
         periodIncomes: List<PeriodIncome>,
         savedPlans: Map<Pair<String, String>, Map<String, Double>>,
         month: java.time.YearMonth,
-        forecastIncome: Double = 0.0
+        forecastIncome: Double = 0.0,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
     ): Map<String, Double> {
         val result = currentShares.associate { it.first to 0.0 }.toMutableMap()
         val monthStart = month.atDay(1)
         val monthEnd = month.atEndOfMonth()
         val coveredDates = mutableSetOf<java.time.LocalDate>()
-        val validPeriods = periodIncomes.mapNotNull { row ->
+        val expectedRanges = (-1L..1L).flatMap { offset ->
+            val period = ReportingPeriodCalculator.propose(month.plusMonths(offset), firstStartDay, firstEndDay)
+            listOf(period.first, period.second)
+        }.mapTo(mutableSetOf()) { it.start.toString() to it.end.toString() }
+        val parsedPeriods = periodIncomes.mapNotNull { row ->
             val start = runCatching { java.time.LocalDate.parse(row.start) }.getOrNull() ?: return@mapNotNull null
             val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
             val earned = row.earnedAmount
             if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
             Triple(start, end, earned)
-        }.groupBy { it.first to it.second }
+        }
+        val hasCanonicalRows = parsedPeriods.any { (start, end, _) -> (start.toString() to end.toString()) in expectedRanges }
+        val validPeriods = (if (hasCanonicalRows) {
+            parsedPeriods.filter { (start, end, _) -> (start.toString() to end.toString()) in expectedRanges }
+        } else parsedPeriods)
+            .groupBy { it.first to it.second }
             .map { (range, rows) -> Triple(range.first, range.second, rows.sumOf { it.third }) }
             .sortedBy { it.first }
 
@@ -188,16 +199,30 @@ internal object AnalyticsBudgetCalculator {
         periodIncomes: List<PeriodIncome>,
         month: java.time.YearMonth,
         asOf: java.time.LocalDate,
-        forecastLookbackPeriods: Int = 6
+        forecastLookbackPeriods: Int = 6,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
     ): CalendarMonthIncomeEstimate {
         require(forecastLookbackPeriods >= 1)
-        val normalized = periodIncomes.mapNotNull { row ->
+        val expectedRanges = (-1L..1L).flatMap { offset ->
+            val period = ReportingPeriodCalculator.propose(month.plusMonths(offset), firstStartDay, firstEndDay)
+            listOf(period.first, period.second)
+        }.mapTo(mutableSetOf()) { it.start.toString() to it.end.toString() }
+        val parsedPeriods = periodIncomes.mapNotNull { row ->
             val start = runCatching { java.time.LocalDate.parse(row.start) }.getOrNull() ?: return@mapNotNull null
             val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
             val earned = row.earnedAmount
             if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
             IncomePeriod(start, end, earned)
-        }.groupBy { it.start to it.end }
+        }
+        // Prefer periods matching the configured reporting cycle. This prevents
+        // an old overlapping monthly/legacy aggregate from filling days that
+        // have no income entry in the current reporting-period model.
+        val hasCanonicalRows = parsedPeriods.any { (it.start.toString() to it.end.toString()) in expectedRanges }
+        val normalized = (if (hasCanonicalRows) {
+            parsedPeriods.filter { (it.start.toString() to it.end.toString()) in expectedRanges }
+        } else parsedPeriods)
+            .groupBy { it.start to it.end }
             .map { (range, rows) -> IncomePeriod(range.first, range.second, rows.sumOf { it.earnedAmount }) }
             .sortedWith(compareBy<IncomePeriod> { it.start }.thenBy { it.end })
 
