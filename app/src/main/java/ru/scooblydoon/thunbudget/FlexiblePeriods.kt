@@ -138,21 +138,6 @@ object FlexiblePeriodRules {
     ): FlexiblePeriodDefinition? =
         validateSequence(periods).singleOrNull { !date.isBefore(it.start) && !date.isAfter(it.end) }
 }
-/**
- * For a calendar month, the two fixed reporting periods are the intervals
- * whose end dates fall inside that month (for example, Oct 24–Nov 8 and
- * Nov 9–Nov 23). Add their saved period totals once; do not prorate or
- * supplement the total with another month's income.
- */
-internal object ReportingPeriodIncomeCalculator {
-    fun sumForMonth(periods: List<PeriodIncome>, month: YearMonth): Double =
-        periods.asSequence()
-            .filter { row ->
-                runCatching { YearMonth.from(LocalDate.parse(row.end)) == month }.getOrDefault(false)
-            }
-            .sumOf { it.amount }
-}
-
 class FlexiblePeriodRepository(private val preferences: SharedPreferences) {
     companion object {
         const val KEY = "flexible_periods_v1"
