@@ -845,7 +845,11 @@ private fun ThunBudgetApp() {
     )
     val calculatedMonthlyIncome = analyticsMonthIncomeEstimate.totalIncome.takeIf { it > 0.0 } ?: income
     val displayedMonthlyIncome = calculatedMonthlyIncome
-    val currentCategoryShares = categories.map { it.name to it.percent }
+    // When auto-allocation has rewritten the live category shares, the
+    // manual snapshot remains the plan baseline for periods without their own
+    // historical snapshot. Exact per-period plans always take precedence.
+    val currentCategoryShares = (if (autoAllocationEnabled) manualAllocationSnapshot else categories)
+        .map { it.name to it.percent }
     val reportingPeriodCategoryPlans = store.loadReportingPeriodCategoryPlans()
     val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
         currentShares = currentCategoryShares,
@@ -1798,7 +1802,7 @@ private fun ThunBudgetApp() {
                         }
                     }
                     if (showPlanChart) {
-                        items(categories, key = { "analysis-plan-" + it.name }) { category ->
+                        items(categories.filterNot { it.name.equals("Перенос средств", ignoreCase = true) }, key = { "analysis-plan-" + it.name }) { category ->
                             val monthlyMode = analyticsIncomeMode == 0
                             val monthStart = analyticsMonth.atDay(1)
                             val monthEnd = analyticsMonth.atEndOfMonth()
@@ -1891,7 +1895,7 @@ private fun ThunBudgetApp() {
                         MetricCard("${pStart.format(formatter)} — ${pEnd.format(formatter)} · потрачено",money(periodTotal),Modifier.fillMaxWidth())
                     }
                     item { TextButton(onClick={showPeriodCategories=!showPeriodCategories; persistUiExpanded(context,"period_categories",showPeriodCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showPeriodCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
-                    if(showPeriodCategories) items(categories,key={ "period-"+it.name }) { cat ->
+                    if(showPeriodCategories) items(categories.filterNot { it.name.equals("Перенос средств", true) },key={ "period-"+it.name }) { cat ->
                         val periodProposal = ReportingPeriodCalculator.propose(analyticsPeriodMonth, firstPeriodStartDay, firstPeriodEndDay)
                         val pStart=if(analyticsPeriodType==0) periodProposal.first.start else periodProposal.second.start
                         val pEnd=if(analyticsPeriodType==0) periodProposal.first.end else periodProposal.second.end
@@ -1901,7 +1905,9 @@ private fun ThunBudgetApp() {
                         val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
                         val pEffectiveIncome=pIncome+pCarryover
                         val savedPeriodPlan = reportingPeriodCategoryPlans[pStart.toString() to pEnd.toString()].orEmpty()
-                        val pPlanPercent = savedPeriodPlan.entries.firstOrNull { it.key.equals(cat.name, true) }?.value ?: cat.percent
+                        val pPlanPercent = savedPeriodPlan.entries.firstOrNull { it.key.equals(cat.name, true) }?.value
+                            ?: currentCategoryShares.entries.firstOrNull { it.first.equals(cat.name, true) }?.second
+                            ?: cat.percent
                         val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*pPlanPercent/100.0 else plannedForPeriod(calculatedMonthlyIncome,pPlanPercent,pStart.toString(),pEnd.toString())
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
@@ -1957,7 +1963,7 @@ private fun ThunBudgetApp() {
                         }
                     }
                     item { TextButton(onClick={showMonthCategories=!showMonthCategories; persistUiExpanded(context,"month_categories",showMonthCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
-                    if(showMonthCategories) items(categories,key={ "month-"+it.name }) { cat ->
+                    if(showMonthCategories) items(categories.filterNot { it.name.equals("Перенос средств", true) },key={ "month-"+it.name }) { cat ->
                         val from=analyticsMonth.atDay(1).toString()
                         val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
@@ -1973,7 +1979,7 @@ private fun ThunBudgetApp() {
                     item { Divider(); Text("Расходы за год",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
                     item { MetricCard("Всего с начала года",money(expenses.filter { it.date>=LocalDate.of(today.year,1,1).toString() && it.date<=today.toString() }.sumOf { it.amount }),Modifier.fillMaxWidth()) }
                     item { TextButton(onClick={showYearCategories=!showYearCategories; persistUiExpanded(context,"year_categories",showYearCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showYearCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
-                    if(showYearCategories) items(categories,key={ "year-"+it.name }) { cat ->
+                    if(showYearCategories) items(categories.filterNot { it.name.equals("Перенос средств", true) },key={ "year-"+it.name }) { cat ->
                         val yearStart=LocalDate.of(today.year,1,1).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=yearStart && it.date<=today.toString() }.sumOf { it.amount }
                         val plan=plannedForPeriod(income,cat.percent,yearStart,today.toString())
