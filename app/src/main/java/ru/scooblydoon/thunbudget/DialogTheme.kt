@@ -144,16 +144,11 @@ internal fun AppAlertDialog(
     )
 
     MaterialTheme(colorScheme = dialogColors, shapes = dialogShapes, typography = MaterialTheme.typography) {
+        CompositionLocalProvider(LocalThunBudgetDialogFields provides true) {
         Dialog(
             onDismissRequest = onDismissRequest,
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = true)
         ) {
-            // Dialog content uses a separate window composition. Re-provide the
-            // modal theme locals inside it so text fields receive the intended palette.
-            CompositionLocalProvider(
-                LocalThunBudgetDarkTheme provides isDark,
-                LocalThunBudgetDialogFields provides true
-            ) {
             val dialogView = LocalView.current
             // The provider can be the dialog root itself or an ancestor of the ComposeView.
             // Walk the actual view-parent chain instead of assuming exactly one parent level.
@@ -214,7 +209,7 @@ internal fun AppAlertDialog(
                     }
                 }
             }
-            }
+        }
         }
     }
 }
