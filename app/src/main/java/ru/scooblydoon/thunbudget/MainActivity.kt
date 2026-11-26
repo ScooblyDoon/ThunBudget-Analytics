@@ -1906,7 +1906,7 @@ private fun ThunBudgetApp() {
                         val pEffectiveIncome=pIncome+pCarryover
                         val savedPeriodPlan = reportingPeriodCategoryPlans[pStart.toString() to pEnd.toString()].orEmpty()
                         val pPlanPercent = savedPeriodPlan.entries.firstOrNull { it.key.equals(cat.name, true) }?.value
-                            ?: currentCategoryShares.entries.firstOrNull { it.first.equals(cat.name, true) }?.second
+                            ?: currentCategoryShares.firstOrNull { it.first.equals(cat.name, true) }?.second
                             ?: cat.percent
                         val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*pPlanPercent/100.0 else plannedForPeriod(calculatedMonthlyIncome,pPlanPercent,pStart.toString(),pEnd.toString())
                         Card { Column(Modifier.padding(14.dp)) {
