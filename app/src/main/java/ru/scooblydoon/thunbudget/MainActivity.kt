@@ -1168,7 +1168,11 @@ private fun ThunBudgetApp() {
         if (uri != null) {
             backupMessage = runCatching {
                 XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, effectivePeriodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (monthKey, entries) ->
-                            runCatching { AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, YearMonth.parse(monthKey), true) }
+                            runCatching { AnalyticsBudgetCalculator.monthlyIncome(
+                                income, periodIncomes, YearMonth.parse(monthKey), true,
+                                firstStartDay = firstPeriodStartDay,
+                                firstEndDay = firstPeriodEndDay
+                            ) }
                                 .getOrDefault(entries.sumOf { it.earnedAmount })
                         })
                 "Excel-отчёт успешно сохранён."
@@ -2073,6 +2077,7 @@ private fun ThunBudgetApp() {
                         selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
                         showCategoryCharts=showCategoryCharts,onShowCategoryChartsChange={showCategoryCharts=it; persistUiExpanded(context,"chart_categories",it)},
                         fallbackIncome=income,periodIncomes=periodIncomes,
+                        firstPeriodStartDay=firstPeriodStartDay,firstPeriodEndDay=firstPeriodEndDay,
                         annualYear=annualChartYear,onAnnualYearChange={annualChartYear=it},
                         selectedAnnualCategoryNames=selectedAnnualChartCategoryNames,
                         onSelectedAnnualCategoryNamesChange={selectedAnnualChartCategoryNames=it},
@@ -3038,6 +3043,7 @@ private fun ChartsScreen(
     selectedChartCategoryNames:String,onSelectedChartCategoryNamesChange:(String)->Unit,
     showCategoryCharts:Boolean,onShowCategoryChartsChange:(Boolean)->Unit,
     fallbackIncome:Double,periodIncomes:List<PeriodIncome>,
+    firstPeriodStartDay:Int,firstPeriodEndDay:Int,
     annualYear:Int,onAnnualYearChange:(Int)->Unit,
     selectedAnnualCategoryNames:String,onSelectedAnnualCategoryNamesChange:(String)->Unit,
     showAnnualCategoryCharts:Boolean,onShowAnnualCategoryChartsChange:(Boolean)->Unit
@@ -3046,7 +3052,11 @@ private fun ChartsScreen(
     val from=month.atDay(1).toString(); val to=month.atEndOfMonth().toString()
     val monthExpenses=expenses.filter { it.date>=from && it.date<=to }
     val total=monthExpenses.sumOf { it.amount }
-    val monthIncome=AnalyticsBudgetCalculator.monthlyIncome(fallbackIncome, periodIncomes, month, true).let { if(it>0) it else fallbackIncome }
+    val monthIncome=AnalyticsBudgetCalculator.monthlyIncome(
+        fallbackIncome, periodIncomes, month, true,
+        firstStartDay = firstPeriodStartDay,
+        firstEndDay = firstPeriodEndDay
+    ).let { if(it>0) it else fallbackIncome }
     val palette=listOf(Color(0xFF315CBA),Color(0xFF168A72),Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
     LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
         item { Text("Графики",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
