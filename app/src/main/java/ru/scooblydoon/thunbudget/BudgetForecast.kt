@@ -211,10 +211,12 @@ object BudgetForecastCalculator {
             if (profile == "Редкие расходы") {
                 uncertainty = maxOf(uncertainty, (1.0 - positiveFrequency) * 0.65)
             }
+            val nextCalendarMonth = YearMonth.from(asOf).plusMonths(1)
             val nextCalendarMonthEstimate = CalendarSeasonalityModel.estimate(
-                category, validExpenses, asOf, YearMonth.from(asOf).plusMonths(1)
+                category, validExpenses, asOf, nextCalendarMonth
             )
-            val monthlyForecast = dailyRate * monthDays * nextCalendarMonthEstimate.factor
+            val monthlyForecast = dailyRate * nextCalendarMonth.lengthOfMonth().toDouble() *
+                nextCalendarMonthEstimate.factor
             val periodProjection = when {
                 targetDays <= 0.0 -> SeasonallyAdjustedForecast(0.0, 1.0, 0, false)
                 targetRange != null -> CalendarSeasonalityModel.project(

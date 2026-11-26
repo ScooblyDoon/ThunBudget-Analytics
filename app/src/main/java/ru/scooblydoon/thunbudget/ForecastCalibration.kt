@@ -2,13 +2,13 @@ package ru.scooblydoon.thunbudget
 
 import kotlin.math.ceil
 
-internal data class ForecastCalibrationBand(
+data class ForecastCalibrationBand(
     val radius: Double?,
     val observations: Int,
     val empiricalCoveragePercent: Double?
 )
 
-internal data class ForecastCalibration(
+data class ForecastCalibration(
     val byCategory: Map<String, ForecastCalibrationBand> = emptyMap()
 ) {
     fun forCategory(category: String): ForecastCalibrationBand? =
