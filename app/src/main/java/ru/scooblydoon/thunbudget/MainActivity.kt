@@ -769,10 +769,14 @@ private fun ThunBudgetApp() {
     val periodEarnedIncome = periodIncomeRow?.earnedAmount ?: periodIncome
     val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
     val effectivePeriodIncome = periodIncome + carryoverIncome
-    val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
-    val monthPeriodIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, overviewMonth, true)
-    val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
-    val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, analyticsIncomeMode == 1)
+    val overviewMonth = YearMonth.from(today)
+    val overviewMonthIncome = AnalyticsBudgetCalculator.calendarMonthIncome(periodIncomes, overviewMonth, today).totalIncome
+    val displayedMonthlyIncome = if(overviewMonthIncome>0.0) overviewMonthIncome else income
+    val analyticsMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(periodIncomes, analyticsMonth, today)
+    val analyticsCycleIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
+        periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
+    )
+    val analyticsMonthIncome = if (analyticsIncomeMode == 0) income else analyticsMonthIncomeEstimate.totalIncome
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
@@ -1649,7 +1653,73 @@ private fun ThunBudgetApp() {
                             }
                         }
                     }
-                    item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(analyticsMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(analyticsMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text("Источник месячного дохода для расчёта бюджета", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                SegmentedButton(selected = analyticsIncomeMode == 0, onClick = { analyticsIncomeMode = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
+                                    Text("Вручную")
+                                }
+                                SegmentedButton(selected = analyticsIncomeMode == 1, onClick = { analyticsIncomeMode = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) {
+                                    Text("Автоматически")
+                                }
+                            }
+                            if (analyticsIncomeMode == 0) {
+                                Text(
+                                    "Месячный доход из настроек: ${money(income)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Text(
+                                    "Доход по введённым периодам: ${money(analyticsMonthIncomeEstimate.enteredIncome)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    "Покрытие месяца: ${analyticsMonthIncomeEstimate.coveredDays} из ${analyticsMonthIncomeEstimate.monthDays} дней.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (analyticsMonthIncomeEstimate.forecastDays > 0) {
+                                    Text(
+                                        "Прогноз на ${analyticsMonthIncomeEstimate.forecastDays} будущих дней: ${money(analyticsMonthIncomeEstimate.forecastIncome)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (analyticsMonthIncomeEstimate.uncoveredFutureDays > analyticsMonthIncomeEstimate.forecastDays) {
+                                    Text(
+                                        "Для прогноза оставшихся будущих дней пока недостаточно истории доходов.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (analyticsMonthIncomeEstimate.uncoveredPastDays > 0) {
+                                    Text(
+                                        "${analyticsMonthIncomeEstimate.uncoveredPastDays} прошедших дней без данных не учитываются.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    "Ожидаемый доход за месяц: ${money(analyticsMonthIncome)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Text(
+                                "Доход за два отчётных периода: ${money(analyticsCycleIncome.totalIncome)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "${analyticsCycleIncome.firstStart.format(formatter)}–${analyticsCycleIncome.firstEnd.format(formatter)}: ${money(analyticsCycleIncome.firstIncome)} + ${analyticsCycleIncome.secondStart.format(formatter)}–${analyticsCycleIncome.secondEnd.format(formatter)}: ${money(analyticsCycleIncome.secondIncome)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     item { Text("Выбранный месяц: " + analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1675,7 +1745,7 @@ private fun ThunBudgetApp() {
                             val actual = expenses.filter {
                                 it.category == category.name && it.date >= startDate && it.date <= endDate
                             }.sumOf { it.amount }
-                            val plannedIncome = analyticsMonthIncome.takeIf { it > 0.0 } ?: income
+                            val plannedIncome = analyticsMonthIncome
                             val planned = plannedForPeriod(
                                 plannedIncome,
                                 category.percent,
