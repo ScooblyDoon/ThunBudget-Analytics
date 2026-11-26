@@ -1409,7 +1409,7 @@ private fun ThunBudgetApp() {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text("Автоматическое распределение", fontWeight = FontWeight.SemiBold)
-                                        Text("Доли рассчитываются по всей истории расходов.", style = MaterialTheme.typography.bodySmall)
+                                        Text("Доли для плана/факта усредняются по первому и текущему отчётным периодам.", style = MaterialTheme.typography.bodySmall)
                                     }
                                     Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
                                         if (enabled) {
