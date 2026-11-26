@@ -8,15 +8,15 @@ android {
     namespace = "ru.scooblydoon.thunbudget"
     compileSdk = 35
     // Forecast Engine v2: category profiles, Croston, damped trend, ranges and rolling-origin backtest.
-    // Release artifact: ThunBudget Analytics 1.3.31 (versionCode 44) [final-apk].
+    // Release artifact: ThunBudget Analytics 1.3.32 (versionCode 45) [final-apk].
 // Includes list/calendar views, editable payment details and month-aware confirmation. Blended forecast, evidence-quality labels, outlier protection, recurring commitments, gray dialogs, tab background and cancellation-safe CI; final signed release. [final-apk]
 
     defaultConfig {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
         minSdk = 26
         targetSdk = 35
-        versionCode = 44
-        versionName = "1.3.31"
+        versionCode = 45
+        versionName = "1.3.32"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
