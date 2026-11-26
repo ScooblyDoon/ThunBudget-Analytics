@@ -255,17 +255,62 @@ internal class BudgetStore(context: Context) {
         items.forEach { array.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
         check(prefs.edit().putString("analytics_manual_allocation_snapshot", array.toString()).commit())
     }
-    fun saveCategories(items: List<BudgetCategory>) {
+    fun loadReportingPeriodCategoryPlans(): Map<Pair<String, String>, Map<String, Double>> = runCatching {
+        val raw = prefs.getString("reporting_period_category_plans_v1", "[]") ?: "[]"
+        val array = JSONArray(raw)
+        buildMap {
+            for (i in 0 until array.length()) {
+                val row = array.getJSONObject(i)
+                val start = row.getString("start")
+                val end = row.getString("end")
+                LocalDate.parse(start); LocalDate.parse(end)
+                require(!LocalDate.parse(end).isBefore(LocalDate.parse(start)))
+                val sharesArray = row.getJSONArray("shares")
+                val shares = buildMap {
+                    for (j in 0 until sharesArray.length()) {
+                        val share = sharesArray.getJSONObject(j)
+                        val name = share.getString("name")
+                        val percent = share.getDouble("percent")
+                        require(name.isNotBlank() && percent.isFinite() && percent in 0.0..100.0)
+                        put(name, percent)
+                    }
+                }
+                put(start to end, shares)
+            }
+        }
+    }.getOrDefault(emptyMap())
+
+    private fun saveReportingPeriodCategoryPlan(start: String, end: String, items: List<BudgetCategory>) {
+        val from = LocalDate.parse(start)
+        val to = LocalDate.parse(end)
+        require(!to.isBefore(from))
+        val plans = loadReportingPeriodCategoryPlans().toMutableMap()
+        plans[start to end] = items.associate { it.name to it.percent }
+        val array = JSONArray()
+        plans.entries.sortedBy { it.key.first }.forEach { (range, shares) ->
+            val shareArray = JSONArray()
+            shares.forEach { (name, percent) ->
+                shareArray.put(JSONObject().put("name", name).put("percent", percent))
+            }
+            array.put(JSONObject().put("start", range.first).put("end", range.second).put("shares", shareArray))
+        }
+        check(prefs.edit().putString("reporting_period_category_plans_v1", array.toString()).commit()) {
+            "Не удалось сохранить план категорий за отчётный период."
+        }
+    }
+
+    fun saveCategories(items: List<BudgetCategory>, planStart: String? = null, planEnd: String? = null) {
         val normalizedPairs = BudgetAllocationCalculator.withReserve(items.map { it.name to it.percent })
         val normalized = normalizedPairs.map { BudgetCategory(it.first, it.second) }
         persistCategories(normalized)
+        if (planStart != null && planEnd != null) saveReportingPeriodCategoryPlan(planStart, planEnd, normalized)
     }
 
     /**
      * Restores a previously saved manual allocation verbatim. Unlike saveCategories(),
      * this must not recalculate the reserve: the snapshot is the source of truth.
      */
-    fun restoreCategoriesExactly(items: List<BudgetCategory>) {
+    fun restoreCategoriesExactly(items: List<BudgetCategory>, planStart: String? = null, planEnd: String? = null) {
         require(items.map { it.name.lowercase(Locale.ROOT) }.distinct().size == items.size) {
             "В снимке ручных долей есть повторяющиеся категории."
         }
@@ -273,6 +318,7 @@ internal class BudgetStore(context: Context) {
             "Снимок ручных долей содержит некорректные значения."
         }
         persistCategories(items)
+        if (planStart != null && planEnd != null) saveReportingPeriodCategoryPlan(planStart, planEnd, items)
     }
 
     private fun persistCategories(items: List<BudgetCategory>) {
@@ -309,7 +355,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY)
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1")
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -437,7 +483,7 @@ internal class BudgetStore(context: Context) {
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY)) {
+            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1")) {
                 "В резервной копии обнаружено неизвестное поле."
             }
             val value = data.get(key)
@@ -507,6 +553,25 @@ internal class BudgetStore(context: Context) {
             val start = LocalDate.parse(row.getString("periodStart"))
             val end = LocalDate.parse(row.getString("periodEnd"))
             require(!end.isBefore(start) && !date.isBefore(start) && !date.isAfter(end))
+        }
+        val categoryPlans = JSONArray(data.optString("reporting_period_category_plans_v1", "[]"))
+        for (i in 0 until categoryPlans.length()) {
+            val row = categoryPlans.getJSONObject(i)
+            val start = LocalDate.parse(row.getString("start"))
+            val end = LocalDate.parse(row.getString("end"))
+            require(!end.isBefore(start))
+            val shares = row.getJSONArray("shares")
+            val names = mutableSetOf<String>()
+            var totalShare = 0.0
+            for (j in 0 until shares.length()) {
+                val share = shares.getJSONObject(j)
+                val name = share.getString("name")
+                val percent = share.getDouble("percent")
+                require(name.isNotBlank() && names.add(name.trim().lowercase(Locale.ROOT)))
+                require(percent.isFinite() && percent in 0.0..100.0)
+                totalShare += percent
+            }
+            require(totalShare <= 100.0001)
         }
         val flexiblePeriods = JSONArray(data.optString(FlexiblePeriodRepository.KEY, "[]"))
         val flexiblePeriodRows = (0 until flexiblePeriods.length()).map { index ->
