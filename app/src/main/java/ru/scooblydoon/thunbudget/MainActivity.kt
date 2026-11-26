@@ -774,7 +774,8 @@ private fun ThunBudgetApp() {
         periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
     )
     val calculatedMonthlyIncome = analyticsMonthIncomeEstimate.totalIncome.takeIf { it > 0.0 } ?: income
-    val analyticsMonthIncome = if (analyticsIncomeMode == 0) calculatedMonthlyIncome else analyticsCycleIncome.totalIncome
+    val analyticsMonthIncome = calculatedMonthlyIncome
+    val analyticsPlanFactIncome = if (analyticsIncomeMode == 0) calculatedMonthlyIncome else analyticsCycleIncome.totalIncome
     val displayedMonthlyIncome = calculatedMonthlyIncome
     val analyticsCycleAllocation = remember(
         categories, periodIncomes, expenses, analyticsMonth, firstPeriodStartDay,
@@ -1717,18 +1718,23 @@ private fun ThunBudgetApp() {
                                 it.category.equals(category.name, ignoreCase = true) &&
                                     it.date >= actualStart.toString() && it.date <= actualEnd.toString()
                             }.sumOf { it.amount }
-                            val plannedIncome = analyticsMonthIncome
+                            val plannedIncome = analyticsPlanFactIncome
                             val categoryPercent = analyticsCycleAllocation?.percentages?.get(category.name) ?: category.percent
                             val planned = plannedIncome.coerceAtLeast(0.0) * categoryPercent / 100.0
                             val periodShares = analyticsCycleAllocation?.periodPercentages?.get(category.name).orEmpty()
+                            val hasDynamicShare = autoAllocationEnabled &&
+                                !category.name.equals("Непредвиденные расходы", ignoreCase = true) &&
+                                !category.name.equals("Резервные средства", ignoreCase = true) &&
+                                !category.name.equals("Перенос средств", ignoreCase = true) &&
+                                periodShares.any { it > 0.0 }
                             val shareDescription = when {
-                                autoAllocationEnabled && periodShares.size >= 2 -> {
+                                hasDynamicShare && periodShares.size >= 2 -> {
                                     val formatted = periodShares.joinToString(" и ") {
-                                        String.format(Locale("ru", "RU"), "%.1f", it)
+                                        String.format(Locale("ru", "RU"), "%.1f%%", it)
                                     }
-                                    "Средняя доля: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}% ($formatted%)"
+                                    "Средняя доля: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}% ($formatted)"
                                 }
-                                autoAllocationEnabled && periodShares.size == 1 ->
+                                hasDynamicShare ->
                                     "Доля по периоду: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}%"
                                 else -> "Доля бюджета: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}%"
                             }
@@ -1815,7 +1821,7 @@ private fun ThunBudgetApp() {
                         val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
                         val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
                         val pEffectiveIncome=pIncome+pCarryover
-                        val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*cat.percent/100.0 else plannedForPeriod(analyticsMonthIncome,cat.percent,pStart.toString(),pEnd.toString())
+                        val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*cat.percent/100.0 else plannedForPeriod(calculatedMonthlyIncome,cat.percent,pStart.toString(),pEnd.toString())
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
@@ -1874,7 +1880,7 @@ private fun ThunBudgetApp() {
                         val from=analyticsMonth.atDay(1).toString()
                         val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
-                        val plan=plannedForPeriod(analyticsMonthIncome,cat.percent,from,to)
+                        val plan=plannedForPeriod(calculatedMonthlyIncome,cat.percent,from,to)
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
