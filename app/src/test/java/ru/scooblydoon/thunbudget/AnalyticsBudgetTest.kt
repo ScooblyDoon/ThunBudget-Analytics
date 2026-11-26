@@ -178,7 +178,8 @@ class AnalyticsBudgetTest {
         assertEquals(overviewBudget, analyticsBudget, 0.001)
         assertEquals(-32.9, AnalyticsBudgetCalculator.metrics(overviewBudget, 3432.0).remainingPercent!!, 0.1)
     }
-    
+
+    @Test fun cyclePlanAveragesSavedPlannedSharesAndDoesNotUseActualSpendRatios() {
         val result = ReportingPeriodCategoryPlanCalculator.cyclePlan(
             currentShares = listOf(
                 "Продукты" to 20.0,
