@@ -772,13 +772,7 @@ private fun ThunBudgetApp() {
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, overviewMonth, true)
     val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
-    val analyticsMonthIncome = if (analyticsIncomeMode == 1) {
-        val twoPeriodTotal = ReportingPeriodIncomeCalculator.sumForMonth(periodIncomes, analyticsMonth)
-        twoPeriodTotal.takeIf { it > 0.0 }
-            ?: AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, false)
-    } else {
-        AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, false)
-    }
+    val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, analyticsIncomeMode == 1)
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
