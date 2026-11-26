@@ -45,44 +45,8 @@ jobs:
             app/build/reports/tests/testDebugUnitTest/**
           if-no-files-found: warn
           retention-days: 7
-      - name: Enable KVM for Android emulator
-        run: |
-          if [ -e /dev/kvm ]; then
-            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-            sudo udevadm control --reload-rules
-            sudo udevadm trigger --name-match=kvm
-            sudo chmod 0666 /dev/kvm || true
-          fi
-          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
-            echo "KVM hardware acceleration is available."
-          else
-            echo "KVM unavailable; falling back to Android TCG software emulation."
-            echo "ANDROID_I_WANT_MY_TCG=yes" >> "$GITHUB_ENV"
-          fi
-      # Styling regression screenshots are opt-in for commits that change dialog/theme UI.
-      # Functional updates keep unit tests and release verification without being blocked by theme screenshots.
-      - name: Run Compose dialog screenshot tests on Android emulator
-        if: contains(github.event.head_commit.message, '[dialog-ui]')
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          emulator-boot-timeout: 1200
-          disable-animations: true
-          script: gradle :app:connectedDebugAndroidTest --stacktrace
-      - name: Upload Compose dialog test diagnostics
-        if: ${{ failure() && github.ref != 'refs/heads/restore/analytics-calculations-build-622' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: compose-dialog-test-diagnostics
-          path: |
-            app/build/reports/androidTests/connected/debug/**
-            app/build/outputs/androidTest-results/connected/**
-            app/build/outputs/logs/**
-          if-no-files-found: warn
-          retention-days: 7
+      # Functional CI only: business-logic unit tests and signed Release APK verification.
+      # Dialog/theme screenshot tests are intentionally not part of this workflow.
       - name: Require persistent release signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
