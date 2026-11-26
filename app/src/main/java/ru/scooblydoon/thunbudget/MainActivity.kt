@@ -773,8 +773,25 @@ private fun ThunBudgetApp() {
     val analyticsCycleIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
         periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
     )
-    val analyticsMonthIncome = if (analyticsIncomeMode == 0) income else analyticsMonthIncomeEstimate.totalIncome
-    val displayedMonthlyIncome = analyticsMonthIncome
+    val calculatedMonthlyIncome = analyticsMonthIncomeEstimate.totalIncome.takeIf { it > 0.0 } ?: income
+    val analyticsMonthIncome = if (analyticsIncomeMode == 0) calculatedMonthlyIncome else analyticsCycleIncome.totalIncome
+    val displayedMonthlyIncome = calculatedMonthlyIncome
+    val analyticsCycleAllocation = remember(
+        categories, periodIncomes, expenses, analyticsMonth, firstPeriodStartDay,
+        firstPeriodEndDay, today, autoAllocationEnabled
+    ) {
+        if (autoAllocationEnabled) {
+            ReportingCycleCategoryAllocationCalculator.calculate(
+                currentShares = categories.map { it.name to it.percent },
+                periodIncomes = periodIncomes,
+                expenses = expenses,
+                month = analyticsMonth,
+                firstStartDay = firstPeriodStartDay,
+                firstEndDay = firstPeriodEndDay,
+                asOf = today
+            )
+        } else null
+    }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
@@ -1653,75 +1670,20 @@ private fun ThunBudgetApp() {
                     }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text("Источник месячного дохода для расчёта бюджета", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Источник дохода для расчёта бюджета", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                                 SegmentedButton(selected = analyticsIncomeMode == 0, onClick = { analyticsIncomeMode = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
-                                    Text("Вручную")
+                                    Text("Месячный доход")
                                 }
                                 SegmentedButton(selected = analyticsIncomeMode == 1, onClick = { analyticsIncomeMode = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) {
-                                    Text("Автоматически")
+                                    Text("За 2 периода")
                                 }
-                            }
-                            if (analyticsIncomeMode == 0) {
-                                Text(
-                                    "Месячный доход из настроек: ${money(income)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Text(
-                                    "Доход по введённым периодам: ${money(analyticsMonthIncomeEstimate.enteredIncome)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    "Покрытие месяца: ${analyticsMonthIncomeEstimate.coveredDays} из ${analyticsMonthIncomeEstimate.monthDays} дней.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (analyticsMonthIncomeEstimate.forecastDays > 0) {
-                                    Text(
-                                        "Прогноз на ${analyticsMonthIncomeEstimate.forecastDays} будущих дней: ${money(analyticsMonthIncomeEstimate.forecastIncome)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                analyticsMonthIncomeEstimate.medianDailyIncome?.let { dailyMedian ->
-                                    Text(
-                                        "Основа прогноза: медиана ${money(dailyMedian)} в день по завершённым периодам.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                if (analyticsMonthIncomeEstimate.uncoveredFutureDays > analyticsMonthIncomeEstimate.forecastDays) {
-                                    Text(
-                                        "Для прогноза оставшихся будущих дней пока недостаточно истории доходов.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                if (analyticsMonthIncomeEstimate.uncoveredPastDays > 0) {
-                                    Text(
-                                        "${analyticsMonthIncomeEstimate.uncoveredPastDays} прошедших дней без данных не учитываются.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Text(
-                                    "Ожидаемый доход за месяц: ${money(analyticsMonthIncome)}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
                             }
                             Text(
-                                "Доход за два отчётных периода: ${money(analyticsCycleIncome.totalIncome)}",
-                                style = MaterialTheme.typography.bodySmall,
+                                if (analyticsIncomeMode == 0) "Доход за месяц: ${money(calculatedMonthlyIncome)}"
+                                else "Доход за 2 периода: ${money(analyticsCycleIncome.totalIncome)}",
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "${analyticsCycleIncome.firstStart.format(formatter)}–${analyticsCycleIncome.firstEnd.format(formatter)}: ${money(analyticsCycleIncome.firstIncome)} + ${analyticsCycleIncome.secondStart.format(formatter)}–${analyticsCycleIncome.secondEnd.format(formatter)}: ${money(analyticsCycleIncome.secondIncome)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -1745,18 +1707,31 @@ private fun ThunBudgetApp() {
                     }
                     if (showPlanChart) {
                         items(categories, key = { "analysis-plan-" + it.name }) { category ->
-                            val startDate = analyticsMonth.atDay(1).toString()
-                            val endDate = analyticsMonth.atEndOfMonth().toString()
-                            val actual = expenses.filter {
-                                it.category == category.name && it.date >= startDate && it.date <= endDate
+                            val monthlyMode = analyticsIncomeMode == 0
+                            val monthStart = analyticsMonth.atDay(1)
+                            val monthEnd = analyticsMonth.atEndOfMonth()
+                            val actualStart = if (monthlyMode) monthStart else analyticsCycleIncome.firstStart
+                            val fullActualEnd = if (monthlyMode) monthEnd else analyticsCycleIncome.secondEnd
+                            val actualEnd = minOf(fullActualEnd, today)
+                            val actual = if (actualEnd.isBefore(actualStart)) 0.0 else expenses.filter {
+                                it.category.equals(category.name, ignoreCase = true) &&
+                                    it.date >= actualStart.toString() && it.date <= actualEnd.toString()
                             }.sumOf { it.amount }
                             val plannedIncome = analyticsMonthIncome
-                            val planned = plannedForPeriod(
-                                plannedIncome,
-                                category.percent,
-                                startDate,
-                                endDate
-                            )
+                            val categoryPercent = analyticsCycleAllocation?.percentages?.get(category.name) ?: category.percent
+                            val planned = plannedIncome.coerceAtLeast(0.0) * categoryPercent / 100.0
+                            val periodShares = analyticsCycleAllocation?.periodPercentages?.get(category.name).orEmpty()
+                            val shareDescription = when {
+                                autoAllocationEnabled && periodShares.size >= 2 -> {
+                                    val formatted = periodShares.joinToString(" и ") {
+                                        String.format(Locale("ru", "RU"), "%.1f", it)
+                                    }
+                                    "Средняя доля: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}% ($formatted%)"
+                                }
+                                autoAllocationEnabled && periodShares.size == 1 ->
+                                    "Доля по периоду: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}%"
+                                else -> "Доля бюджета: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}%"
+                            }
                             Card {
                                 Column(
                                     Modifier.fillMaxWidth().padding(14.dp),
@@ -1800,6 +1775,11 @@ private fun ThunBudgetApp() {
                                         "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        shareDescription,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
