@@ -107,3 +107,24 @@
 - отдельный календарь будущих разовых обязательств (сейчас сохранены текущие recurring payments);
 - проверка реальных данных непосредственно на устройстве.
 
+
+
+## Ссылки на источники
+
+### Аналоги и продуктовые подходы
+- Wallet by BudgetBakers — прогнозируемые расходы как факт + плановые платежи + средняя оценка остальных расходов по предыдущим периодам; также сравнение тренда и ожидаемого остатка: https://support.budgetbakers.com/hc/en-us/articles/7076953735314-Setup-Budgets
+- Monarch Money — полный набор предположений, 12 завершённых месяцев для базового cashflow-прогноза, акцент на направленном прогнозе вместо ложной точности: https://help.monarch.com/hc/en-us/articles/48344305092244-Forecasting-in-Monarch
+- Spendee — отдельные шаблоны регулярных платежей и будущие разовые транзакции: https://help.spendee.com/article/229-scheduled-transactions
+- YNAB — отдельный анализ фактических расходов по категориям и периодам: https://support.ynab.com/en_us/spending-trends-H1inlhzAc
+
+### Пользовательские обсуждения
+- Monarch: просьба показывать средние за 12 месяцев, а не только 6 месяцев, поскольку поездки и подарки создают сезонность: https://www.reddit.com/r/MonarchMoney/comments/1nvokfl/way_to_see_average_monthly_spend_per_category/
+- Monarch: пользователи просят видеть среднемесячные значения по категориям на мобильном экране и за весь год: https://www.reddit.com/r/MonarchMoney/comments/1xbpzr3/why_is_an_average_monthly_expense_for_each/
+- Monarch: жалобы на то, что усреднение по транзакциям не распределяет расходы раз в 4 месяца на ежемесячный резерв: https://www.reddit.com/r/MonarchMoney/comments/1v22b1w/where_can_i_find_my_average_monthly_spending_on_a/
+- Firefly III: обсуждение того, как ежедневное усреднение искажает прогноз после единичной крупной покупки и зарплат с плавающей датой: https://github.com/firefly-iii/firefly-iii/issues/393
+
+### Методология
+- BBVA AI Factory / KDD 2019 — расходы пользователей могут быть нерегулярными, а оценка разброса помогает отличать необычную покупку от обычной волатильности: https://www.bbvaaifactory.com/publications/Anomaly_Detection_in_Finance.pdf
+- Croston method — интермиттирующие ряды с большим числом нулевых периодов: https://learn.microsoft.com/en-us/dynamics365/supply-chain/demand-planning/croston-method
+- Forecasting: Principles and Practice — модель следует подбирать по данным; тренд, сезонность, выбросы и backtesting должны проверяться, а не предполагаться: https://otexts.com/fpp3/intro.html
+- Forecasting: Principles and Practice — интервалы прогноза должны опираться на оценённый разброс ошибок: https://otexts.com/fpp3/toolbox.html
