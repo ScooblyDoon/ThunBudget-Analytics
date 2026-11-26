@@ -434,4 +434,32 @@ class BudgetForecastCalculatorTest {
         assertTrue(forecast.forecastHighForPeriod >= forecast.forecastForPeriod)
     }
 
+    @Test fun projectionIncludesFutureEnteredExpensesAndEachForecastComponentExactlyOnce() {
+        val projection = BudgetForecastProjectionCalculator.calculate(
+            actualToDate = 9514.0,
+            futureEnteredExpenses = 7000.0,
+            variableForecast = 41392.0,
+            recurringPayments = 1800.0,
+            availableIncome = 36881.0
+        )
+        assertEquals(59706.0, projection.expectedSpend, 0.001)
+        assertEquals(-22825.0, projection.balance, 0.001)
+        assertEquals(22825.0, projection.deficit, 0.001)
+        assertEquals(0.0, projection.surplus, 0.001)
+    }
+
+    @Test fun projectionSeparatesSurplusFromDeficit() {
+        val projection = BudgetForecastProjectionCalculator.calculate(
+            actualToDate = 1000.0,
+            futureEnteredExpenses = 500.0,
+            variableForecast = 1500.0,
+            recurringPayments = 500.0,
+            availableIncome = 5000.0
+        )
+        assertEquals(3500.0, projection.expectedSpend, 0.001)
+        assertEquals(1500.0, projection.balance, 0.001)
+        assertEquals(0.0, projection.deficit, 0.001)
+        assertEquals(1500.0, projection.surplus, 0.001)
+    }
+
 }
