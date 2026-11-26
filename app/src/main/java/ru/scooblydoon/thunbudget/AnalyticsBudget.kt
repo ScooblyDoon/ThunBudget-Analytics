@@ -21,7 +21,7 @@ internal data class CalendarMonthIncomeEstimate(
     val forecastDays: Int,
     val uncoveredFutureDays: Int,
     val monthDays: Int,
-    val averageDailyIncome: Double?
+    val medianDailyIncome: Double?
 ) {
     val totalIncome: Double get() = enteredIncome + forecastIncome
 }
@@ -99,7 +99,7 @@ internal object AnalyticsBudgetCalculator {
             .sorted()
         // Require at least two completed periods so a single unusual payment
         // does not become the forecast baseline.
-        val averageDailyIncome = if (recentDailyRates.size >= 2) {
+        val medianDailyIncome = if (recentDailyRates.size >= 2) {
             val middle = recentDailyRates.size / 2
             if (recentDailyRates.size % 2 == 0) {
                 (recentDailyRates[middle - 1] + recentDailyRates[middle]) / 2.0
@@ -115,8 +115,8 @@ internal object AnalyticsBudgetCalculator {
             }
             date = date.plusDays(1)
         }
-        val forecastDays = if (averageDailyIncome != null) uncoveredFutureDays else 0
-        val forecastIncome = (averageDailyIncome ?: 0.0) * forecastDays
+        val forecastDays = if (medianDailyIncome != null) uncoveredFutureDays else 0
+        val forecastIncome = (medianDailyIncome ?: 0.0) * forecastDays
         return CalendarMonthIncomeEstimate(
             enteredIncome = enteredIncome,
             forecastIncome = forecastIncome,
@@ -125,7 +125,7 @@ internal object AnalyticsBudgetCalculator {
             forecastDays = forecastDays,
             uncoveredFutureDays = uncoveredFutureDays,
             monthDays = month.lengthOfMonth(),
-            averageDailyIncome = averageDailyIncome
+            medianDailyIncome = medianDailyIncome
         )
     }
 
