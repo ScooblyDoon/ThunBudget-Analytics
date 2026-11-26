@@ -1467,6 +1467,18 @@ private fun ThunBudgetApp() {
                             row.date >= nextForecastRange.start.toString() && row.date <= minOf(today, nextForecastRange.end).toString() &&
                                 !row.category.equals("Перенос средств", true)
                         }.sumOf { it.amount }
+                        // Explicit future-dated one-off expenses are known commitments.
+                        // They are separate from actuals and from the statistical forecast.
+                        val forecastFutureEnteredByCategory = expenses.asSequence()
+                            .filter { row ->
+                                row.date >= nextForecastRange.start.toString() &&
+                                    row.date > today.toString() &&
+                                    row.date <= nextForecastRange.end.toString() &&
+                                    !row.category.equals("Перенос средств", true)
+                            }
+                            .groupBy { it.category }
+                            .mapValues { (_, rows) -> rows.sumOf { it.amount } }
+                        val forecastFutureEntered = forecastFutureEnteredByCategory.values.sum()
                         val recurringForecastByCategory = mutableMapOf<String, Double>()
                         recurringPayments.filter { it.active }.forEach { payment ->
                             var month = YearMonth.from(nextForecastRange.start)
@@ -1504,7 +1516,6 @@ private fun ThunBudgetApp() {
                             }
                         }
                         val recurringMonthlyForecast = recurringMonthlyForecastByCategory.values.sum()
-                        val forecastExpectedSpend = forecastActualToDate + forecast.totalPeriodForecast + upcomingRecurringSpend
                         val forecastIncomeRow = periodIncomes.firstOrNull {
                             it.start == nextForecastRange.start.toString() && it.end == nextForecastRange.end.toString()
                         }
@@ -1513,7 +1524,13 @@ private fun ThunBudgetApp() {
                         )
                         val forecastAvailableIncome = forecastIncomeRow?.earnedAmount?.plus(forecastCarryover)
                             ?: plannedForPeriod(income, 100.0, nextForecastRange.start.toString(), nextForecastRange.end.toString())
-                        val forecastBalance = forecastAvailableIncome - forecastExpectedSpend
+                        val forecastProjection = BudgetForecastProjectionCalculator.calculate(
+                            actualToDate = forecastActualToDate,
+                            futureEnteredExpenses = forecastFutureEntered,
+                            variableForecast = forecast.totalPeriodForecast,
+                            recurringPayments = upcomingRecurringSpend,
+                            availableIncome = forecastAvailableIncome
+                        )
                         Card(shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1536,9 +1553,48 @@ private fun ThunBudgetApp() {
                                                 style = MaterialTheme.typography.bodySmall
                                             )
                                             Text(
-                                                money(forecastExpectedSpend),
+                                                money(forecastProjection.expectedSpend),
                                                 fontWeight = FontWeight.Bold,
                                                 style = MaterialTheme.typography.titleLarge
+                                            )
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Уже потрачено", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.actualToDate), fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Внесённые будущие расходы", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.futureEnteredExpenses), fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Переменные расходы на остаток", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.variableForecast), fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Неоплаченные регулярные", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.recurringPayments), fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                    Divider()
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Доступный доход периода", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.availableIncome), fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                if (forecastProjection.deficit > 0.0) "Прогнозируемый дефицит" else "Прогнозируемый остаток",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                money(if (forecastProjection.deficit > 0.0) forecastProjection.deficit else forecastProjection.surplus),
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (forecastProjection.deficit > 0.0) Color(0xFFC74444) else Color(0xFF168A72)
                                             )
                                         }
                                     }
@@ -1554,7 +1610,9 @@ private fun ThunBudgetApp() {
                                                 categoryForecast.forecastForNextMonth +
                                                     (recurringMonthlyForecastByCategory[categoryForecast.category] ?: 0.0)
                                             val categoryPeriodForecast =
-                                                categoryActual + categoryForecast.forecastForPeriod +
+                                                categoryActual +
+                                                    (forecastFutureEnteredByCategory[categoryForecast.category] ?: 0.0) +
+                                                    categoryForecast.forecastForPeriod +
                                                     (recurringForecastByCategory[categoryForecast.category] ?: 0.0)
                                             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
