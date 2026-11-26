@@ -848,8 +848,12 @@ private fun ThunBudgetApp() {
     // When auto-allocation has rewritten the live category shares, the
     // manual snapshot remains the plan baseline for periods without their own
     // historical snapshot. Exact per-period plans always take precedence.
-    val currentCategoryShares = (if (autoAllocationEnabled) manualAllocationSnapshot else categories)
-        .map { it.name to it.percent }
+    val currentCategoryShares = categories.map { category ->
+        val manualShare = manualAllocationSnapshot.firstOrNull {
+            it.name.equals(category.name, ignoreCase = true)
+        }?.percent
+        category.name to if (autoAllocationEnabled && manualShare != null) manualShare else category.percent
+    }
     val reportingPeriodCategoryPlans = store.loadReportingPeriodCategoryPlans()
     val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
         currentShares = currentCategoryShares,
@@ -1516,7 +1520,6 @@ private fun ThunBudgetApp() {
                                             store.saveAutoAllocationEnabled(true)
                                             showAdvice = true
                                             persistUiExpanded(context, "analytics_advice", true)
-                                            showDynamicAllocationDialog = true
                                         } else {
                                             val restored = manualAllocationSnapshot.map { it.copy() }
                                             store.restoreCategoriesExactly(restored, periodStart, periodEnd)
