@@ -620,6 +620,7 @@ private fun ThunBudgetApp() {
     var recurringPayments by remember { mutableStateOf(store.loadRecurringPayments()) }
     var periodIncomes by remember { mutableStateOf(store.loadPeriodIncomes()) }
     var incomeEntries by remember { mutableStateOf(store.loadIncomeEntries()) }
+    var flexiblePeriods by remember { mutableStateOf(store.loadFlexiblePeriods()) }
     var selectedIncomeEntry by remember { mutableStateOf<IncomeEntry?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var voiceDraft by remember { mutableStateOf<VoiceExpenseDraft?>(null) }
@@ -1233,7 +1234,7 @@ private fun ThunBudgetApp() {
                             Triple(0, "⌂", "Обзор"),
                             Triple(1, "◒", "Анализ"),
                             Triple(2, "▥", "Графики"),
-                            Triple(3, "▤", "За год"),
+                            Triple(3, "▤", "Периоды"),
                             Triple(4, "≡", "История"),
                             Triple(5, "▣", "Платежи")
                         )
@@ -1923,11 +1924,26 @@ private fun ThunBudgetApp() {
                         showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
                         selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
                         showCategoryCharts=showCategoryCharts,onShowCategoryChartsChange={showCategoryCharts=it; persistUiExpanded(context,"chart_categories",it)},
-                        fallbackIncome=income,periodIncomes=periodIncomes
+                        fallbackIncome=income,periodIncomes=periodIncomes,
+                        annualYear=annualChartYear,onAnnualYearChange={annualChartYear=it},
+                        selectedAnnualCategoryNames=selectedAnnualChartCategoryNames,
+                        onSelectedAnnualCategoryNamesChange={selectedAnnualChartCategoryNames=it},
+                        showAnnualCategoryCharts=showAnnualCategoryCharts,
+                        onShowAnnualCategoryChartsChange={showAnnualCategoryCharts=it; persistUiExpanded(context,"annual_category_charts",it)}
                     )
                 }
                 3 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
-                    AnnualChartsScreen(expenses=expenses,categories=categories,year=annualChartYear,onYearChange={annualChartYear=it},selectedCategoryNames=selectedAnnualChartCategoryNames,onSelectedCategoryNamesChange={selectedAnnualChartCategoryNames=it},showCategoryCharts=showAnnualCategoryCharts,onShowCategoryChartsChange={showAnnualCategoryCharts=it; persistUiExpanded(context,"annual_category_charts",it)})
+                    FlexiblePeriodsScreen(
+                        periods=flexiblePeriods,
+                        onPeriodsChange={ updated -> flexiblePeriods=updated; store.saveFlexiblePeriods(updated) },
+                        expenses=expenses,
+                        incomeEntries=incomeEntries,
+                        categories=categories,
+                        monthlyIncome=income,
+                        recurringPayments=recurringPayments,
+                        firstPeriodStartDay=firstPeriodStartDay,
+                        firstPeriodEndDay=firstPeriodEndDay
+                    )
                 }
                 5 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     RecurringPaymentsScreen(
