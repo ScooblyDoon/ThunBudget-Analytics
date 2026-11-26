@@ -16,7 +16,7 @@ class AnalyticsBudgetTest {
         assertEquals(120000.0, result, 0.001)
     }
 
-    @Test fun monthlyIncomeCanSumBothReportingPeriodsByEndMonth() {
+    @Test fun monthlyIncomeAllocatesPeriodIncomeAcrossCalendarMonthBoundaries() {
         val result = AnalyticsBudgetCalculator.monthlyIncome(
             120000.0,
             listOf(
@@ -27,7 +27,7 @@ class AnalyticsBudgetTest {
             YearMonth.of(2026, 11),
             true
         )
-        assertEquals(70000.0, result, 0.001)
+        assertEquals(78333.333333, result, 0.001)
     }
 
 
@@ -64,7 +64,75 @@ class AnalyticsBudgetTest {
             YearMonth.of(2026, 11),
             true
         )
-        assertEquals(97735.0, result, 0.001)
+        assertEquals(90641.333333, result, 0.001)
+    }
+
+    @Test fun calendarMonthUsesOnlyCoveredDaysAndSplitsPeriodsByDay() {
+        val periods = listOf(
+            PeriodIncome("2026-11-09", "2026-11-24", 16000.0),
+            PeriodIncome("2026-11-25", "2026-12-08", 14000.0),
+            PeriodIncome("2026-12-09", "2026-12-24", 16000.0),
+            PeriodIncome("2026-12-25", "2027-01-08", 15000.0)
+        )
+        val november = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periods, YearMonth.of(2026, 11), java.time.LocalDate.of(2026, 11, 30)
+        )
+        assertEquals(22000.0, november.enteredIncome, 0.001)
+        assertEquals(22, november.coveredDays)
+        assertEquals(8, november.uncoveredPastDays)
+        assertEquals(0.0, november.forecastIncome, 0.001)
+
+        val december = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periods, YearMonth.of(2026, 12), java.time.LocalDate.of(2027, 1, 31)
+        )
+        assertEquals(31000.0, december.enteredIncome, 0.001)
+        assertEquals(31, december.coveredDays)
+    }
+
+    @Test fun reportingCycleIncomeAddsTwoFullPeriodsAndExcludesCarryover() {
+        val result = AnalyticsBudgetCalculator.reportingCycleIncome(
+            listOf(
+                PeriodIncome("2026-11-09", "2026-11-24", 18000.0, earnedAmount = 16000.0, carryoverAmount = 2000.0),
+                PeriodIncome("2026-11-25", "2026-12-08", 14000.0)
+            ),
+            YearMonth.of(2026, 11),
+            9,
+            24
+        )
+        assertEquals(16000.0, result.firstIncome, 0.001)
+        assertEquals(14000.0, result.secondIncome, 0.001)
+        assertEquals(30000.0, result.totalIncome, 0.001)
+    }
+
+    @Test fun calendarForecastFillsOnlyUncoveredFutureDaysUsingMedianOfCompletedPeriods() {
+        val periods = listOf(
+            PeriodIncome("2026-10-01", "2026-10-15", 15000.0),
+            PeriodIncome("2026-10-16", "2026-10-31", 16000.0),
+            PeriodIncome("2026-11-09", "2026-11-24", 16000.0)
+        )
+        val result = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periods, YearMonth.of(2026, 11), java.time.LocalDate.of(2026, 11, 26)
+        )
+        assertEquals(16000.0, result.enteredIncome, 0.001)
+        assertEquals(4, result.forecastDays)
+        assertEquals(4000.0, result.forecastIncome, 0.001)
+        assertEquals(10, result.uncoveredPastDays)
+        assertEquals(4, result.uncoveredFutureDays)
+        assertEquals(20000.0, result.totalIncome, 0.001)
+    }
+
+    @Test fun calendarMonthNeverForecastsMissingDaysInThePast() {
+        val periods = listOf(
+            PeriodIncome("2026-10-01", "2026-10-15", 15000.0),
+            PeriodIncome("2026-10-16", "2026-10-31", 16000.0),
+            PeriodIncome("2026-11-09", "2026-11-24", 16000.0)
+        )
+        val result = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periods, YearMonth.of(2026, 11), java.time.LocalDate.of(2026, 11, 30)
+        )
+        assertEquals(16000.0, result.enteredIncome, 0.001)
+        assertEquals(0.0, result.forecastIncome, 0.001)
+        assertEquals(14, result.uncoveredPastDays)
     }
 
     @Test fun carryoverBeforeAddsUnspentBalanceFromCompletedPeriods() {
