@@ -423,8 +423,8 @@ private fun FlexiblePeriodEditorDialog(
     var name by remember(periods) { mutableStateOf("Период " + (periods.size + 1)) }
     var startText by remember(periods) {
         mutableStateOf(
-            if (periods.isEmpty()) LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-            else periods.last().end.plusDays(1).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+            if (periods.isEmpty()) LocalDate.now().format(DateTimeFormatter.ofPattern("ddMMyyyy"))
+            else periods.last().end.plusDays(1).format(DateTimeFormatter.ofPattern("ddMMyyyy"))
         )
     }
     var daysText by remember(periods) { mutableStateOf("1") }
@@ -446,9 +446,11 @@ private fun FlexiblePeriodEditorDialog(
                 OutlinedTextField(name, { name = it }, label = { Text("Название") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     startText,
-                    { if (periods.isEmpty()) startText = formatFlexibleDateInput(it) },
+                    { if (periods.isEmpty()) startText = it.filter(Char::isDigit).take(8) },
                     readOnly = periods.isNotEmpty(),
                     label = { Text("Начало (ДД.ММ.ГГГГ)") },
+                    visualTransformation = DateDigitsVisualTransformation,
+                    placeholder = { Text("ДД.ММ.ГГГГ") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -562,19 +564,14 @@ private fun buildFlexiblePeriodReport(
     )
 }
 
-private fun parseFlexibleDate(raw: String): LocalDate? = runCatching {
+internal fun parseFlexibleDate(raw: String): LocalDate? = runCatching {
     val digits = raw.filter(Char::isDigit)
-    if (digits.length == 8) LocalDate.parse(digits, DateTimeFormatter.ofPattern("ddMMyyyy")) else null
+    require(digits.length == 8)
+    LocalDate.parse(
+        digits,
+        DateTimeFormatter.ofPattern("ddMMuuuu").withResolverStyle(java.time.format.ResolverStyle.STRICT)
+    )
 }.getOrNull()
-
-private fun formatFlexibleDateInput(raw: String): String {
-    val digits = raw.filter(Char::isDigit).take(8)
-    return when {
-        digits.length <= 2 -> digits
-        digits.length <= 4 -> digits.take(2) + "." + digits.drop(2)
-        else -> digits.take(2) + "." + digits.substring(2, 4) + "." + digits.drop(4)
-    }
-}
 
 private fun formatFlexibleMoney(value: Double): String =
     String.format(Locale("ru", "RU"), "%,.0f ₽", value)
