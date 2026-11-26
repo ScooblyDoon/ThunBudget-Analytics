@@ -64,6 +64,7 @@ internal class BudgetStore(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     private val incomeLedger = IncomeLedgerRepository(prefs)
+    private val flexiblePeriodRepository = FlexiblePeriodRepository(prefs)
 
     init {
         incomeLedger.migrateLegacyIfNeeded()
@@ -285,6 +286,12 @@ internal class BudgetStore(context: Context) {
     fun loadRecurringPayments(): List<RecurringPayment> = RecurringPaymentStore(appContext).load()
     fun saveRecurringPayments(items: List<RecurringPayment>) { RecurringPaymentStore(appContext).save(items); saveAutomaticBackup() }
 
+    fun loadFlexiblePeriods(): List<FlexiblePeriodDefinition> = flexiblePeriodRepository.load()
+    fun saveFlexiblePeriods(items: List<FlexiblePeriodDefinition>) {
+        flexiblePeriodRepository.save(items)
+        saveAutomaticBackup()
+    }
+
     fun loadExpenses(): List<Expense> {
         val raw=prefs.getString("expenses","[]") ?: "[]"
         return runCatching {
@@ -302,7 +309,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1")
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY)
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -430,7 +437,7 @@ internal class BudgetStore(context: Context) {
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1")) {
+            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY)) {
                 "В резервной копии обнаружено неизвестное поле."
             }
             val value = data.get(key)
@@ -501,6 +508,17 @@ internal class BudgetStore(context: Context) {
             val end = LocalDate.parse(row.getString("periodEnd"))
             require(!end.isBefore(start) && !date.isBefore(start) && !date.isAfter(end))
         }
+        val flexiblePeriods = JSONArray(data.optString(FlexiblePeriodRepository.KEY, "[]"))
+        val flexiblePeriodRows = (0 until flexiblePeriods.length()).map { index ->
+            val row = flexiblePeriods.getJSONObject(index)
+            FlexiblePeriodDefinition(
+                id = row.getString("id"),
+                name = row.getString("name"),
+                start = LocalDate.parse(row.getString("start")),
+                end = LocalDate.parse(row.getString("end"))
+            )
+        }
+        FlexiblePeriodRules.validateSequence(flexiblePeriodRows)
         val monthlyIncome = data.getString("income").toDoubleOrNull()
         val savings = data.getString("savings").toDoubleOrNull()
         require(monthlyIncome != null && monthlyIncome.isFinite() && monthlyIncome > 0.0)
@@ -1419,21 +1437,48 @@ private fun ThunBudgetApp() {
                             row.category.equals("Перенос средств", true) ||
                                 (row.title.trim().lowercase(Locale.ROOT) to row.category.trim().lowercase(Locale.ROOT)) in recurringHistoryKeys
                         }
+                        val forecastRows = variableHistoryExpenses.mapNotNull { row ->
+                            runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+                        }
+                        val forecastBacktest = remember(
+                            variableHistoryExpenses, categories, today, firstPeriodStartDay, firstPeriodEndDay
+                        ) {
+                            BudgetForecastBacktester.evaluate(
+                                categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+                                expenses = forecastRows,
+                                asOf = today,
+                                firstStartDay = firstPeriodStartDay,
+                                firstEndDay = firstPeriodEndDay
+                            )
+                        }
                         val forecast = BudgetForecastCalculator.calculate(
                             categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
-                            expenses = variableHistoryExpenses.mapNotNull { row ->
-                                runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
-                            },
+                            expenses = forecastRows,
                             asOf = today,
                             firstStartDay = firstPeriodStartDay,
                             firstEndDay = firstPeriodEndDay,
                             monthsToAnalyze = 6,
-                            nextPeriodDays = forecastDays
+                            nextPeriodDays = forecastDays,
+                            calibration = forecastBacktest.calibration,
+                            forecastStartDate = forecastFrom.takeIf { forecastDays > 0 },
+                            forecastEndDate = nextForecastRange.end.takeIf { forecastDays > 0 }
                         )
                         val forecastActualToDate = expenses.filter { row ->
                             row.date >= nextForecastRange.start.toString() && row.date <= minOf(today, nextForecastRange.end).toString() &&
                                 !row.category.equals("Перенос средств", true)
                         }.sumOf { it.amount }
+                        // Explicit future-dated one-off expenses are known commitments.
+                        // They are separate from actuals and from the statistical forecast.
+                        val forecastFutureEnteredByCategory = expenses.asSequence()
+                            .filter { row ->
+                                row.date >= nextForecastRange.start.toString() &&
+                                    row.date > today.toString() &&
+                                    row.date <= nextForecastRange.end.toString() &&
+                                    !row.category.equals("Перенос средств", true)
+                            }
+                            .groupBy { it.category }
+                            .mapValues { (_, rows) -> rows.sumOf { it.amount } }
+                        val forecastFutureEntered = forecastFutureEnteredByCategory.values.sum()
                         val recurringForecastByCategory = mutableMapOf<String, Double>()
                         recurringPayments.filter { it.active }.forEach { payment ->
                             var month = YearMonth.from(nextForecastRange.start)
@@ -1456,7 +1501,21 @@ private fun ThunBudgetApp() {
                             }
                         }
                         val upcomingRecurringSpend = recurringForecastByCategory.values.sum()
-                        val forecastExpectedSpend = forecastActualToDate + forecast.totalPeriodForecast + upcomingRecurringSpend
+                        val recurringMonthlyForecastByCategory = mutableMapOf<String, Double>()
+                        val forecastNextCalendarMonth = YearMonth.from(today).plusMonths(1)
+                        recurringPayments.filter { it.active }.forEach { payment ->
+                            val dueDate = payment.dueDate(forecastNextCalendarMonth)
+                            val alreadyRecorded = expenses.any { row ->
+                                row.title.equals(payment.title, true) &&
+                                    row.category.equals(payment.category, true) &&
+                                    row.date == dueDate.toString()
+                            }
+                            if (!payment.isCompleted(forecastNextCalendarMonth) && !alreadyRecorded) {
+                                recurringMonthlyForecastByCategory[payment.category] =
+                                    (recurringMonthlyForecastByCategory[payment.category] ?: 0.0) + payment.amount
+                            }
+                        }
+                        val recurringMonthlyForecast = recurringMonthlyForecastByCategory.values.sum()
                         val forecastIncomeRow = periodIncomes.firstOrNull {
                             it.start == nextForecastRange.start.toString() && it.end == nextForecastRange.end.toString()
                         }
@@ -1465,7 +1524,13 @@ private fun ThunBudgetApp() {
                         )
                         val forecastAvailableIncome = forecastIncomeRow?.earnedAmount?.plus(forecastCarryover)
                             ?: plannedForPeriod(income, 100.0, nextForecastRange.start.toString(), nextForecastRange.end.toString())
-                        val forecastBalance = forecastAvailableIncome - forecastExpectedSpend
+                        val forecastProjection = BudgetForecastProjectionCalculator.calculate(
+                            actualToDate = forecastActualToDate,
+                            futureEnteredExpenses = forecastFutureEntered,
+                            variableForecast = forecast.totalPeriodForecast,
+                            recurringPayments = upcomingRecurringSpend,
+                            availableIncome = forecastAvailableIncome
+                        )
                         Card(shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1473,64 +1538,110 @@ private fun ThunBudgetApp() {
                                     TextButton(onClick = { showExpenseForecast = !showExpenseForecast }) { Text(if (showExpenseForecast) "Свернуть ▲" else "Развернуть ▼") }
                                 }
                                 if (showExpenseForecast) {
-                                    Text(
-                                        "Прогноз переменных расходов строится по завершённым периодам всей истории с повышенным весом последних периодов и постепенно учитывает темп текущего периода. Регулярные платежи добавляются отдельно по датам.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text("Учтено периодов (завершённые + текущий неполный): ${forecast.historyPeriods}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecast.totalMonthlyForecast + recurringPayments.filter { it.active }.sumOf { it.amount }), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Ожидаемые расходы всего до ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecastExpectedSpend), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                        }
-                                    }
-                                    Divider()
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Доход / доступные средства периода", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecastAvailableIncome), fontWeight = FontWeight.SemiBold)
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text(if (forecastBalance >= 0.0) "Ожидаемый остаток" else "Прогнозируемый дефицит", style = MaterialTheme.typography.bodySmall)
+                                            Text("Прогноз на следующий месяц", style = MaterialTheme.typography.bodySmall)
                                             Text(
-                                                money(kotlin.math.abs(forecastBalance)),
+                                                money(forecast.totalMonthlyForecast + recurringMonthlyForecast),
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (forecastBalance >= 0.0) Color(0xFF168A72) else Color(0xFFC74444)
+                                                style = MaterialTheme.typography.titleLarge
+                                            )
+                                        }
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                "Ожидаемые расходы до ${nextForecastRange.end.format(formatter)}",
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                            Text(
+                                                money(forecastProjection.expectedSpend),
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.titleLarge
                                             )
                                         }
                                     }
-                                    Text(
-                                        "Уже потрачено: ${money(forecastActualToDate)} · Переменные расходы: ${money(forecast.totalPeriodForecast)} · Регулярные платежи: ${money(upcomingRecurringSpend)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Divider()
-                                    forecast.categories.forEach { categoryForecast ->
-                                        val categoryActual = expenses.filter { row ->
-                                            row.category.equals(categoryForecast.category, true) &&
-                                                row.date >= nextForecastRange.start.toString() &&
-                                                row.date <= minOf(today, nextForecastRange.end).toString()
-                                        }.sumOf { it.amount }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(categoryForecast.category, fontWeight = FontWeight.Medium)
-                                                if (!categoryForecast.hasHistory) {
-                                                    Text("Недостаточно истории для прогноза — фактические расходы учтены отдельно", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
-                                            }
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Text(money(categoryForecast.forecastForNextMonth + recurringPayments.filter { it.active && it.category.equals(categoryForecast.category, true) }.sumOf { it.amount }), fontWeight = FontWeight.SemiBold)
-                                                Text("До конца периода: ${money(categoryActual + categoryForecast.forecastForPeriod + (recurringForecastByCategory[categoryForecast.category] ?: 0.0))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Уже потрачено", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.actualToDate), fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Внесённые будущие расходы", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.futureEnteredExpenses), fontWeight = FontWeight.SemiBold)
                                         }
                                     }
-                                    if (forecast.historyPeriods == 0) {
-                                        Text("Пока недостаточно истории завершённых периодов для надёжного прогноза.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Переменные расходы на остаток", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.variableForecast), fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Неоплаченные регулярные", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.recurringPayments), fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                    Divider()
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Доступный доход периода", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(money(forecastProjection.availableIncome), fontWeight = FontWeight.SemiBold)
+                                        }
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                if (forecastProjection.deficit > 0.0) "Прогнозируемый дефицит" else "Прогнозируемый остаток",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                money(if (forecastProjection.deficit > 0.0) forecastProjection.deficit else forecastProjection.surplus),
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (forecastProjection.deficit > 0.0) Color(0xFFC74444) else Color(0xFF168A72)
+                                            )
+                                        }
+                                    }
+                                    Divider()
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        forecast.categories.forEach { categoryForecast ->
+                                            val categoryActual = expenses.filter { row ->
+                                                row.category.equals(categoryForecast.category, true) &&
+                                                    row.date >= nextForecastRange.start.toString() &&
+                                                    row.date <= minOf(today, nextForecastRange.end).toString()
+                                            }.sumOf { it.amount }
+                                            val categoryMonthlyForecast =
+                                                categoryForecast.forecastForNextMonth +
+                                                    (recurringMonthlyForecastByCategory[categoryForecast.category] ?: 0.0)
+                                            val categoryPeriodForecast =
+                                                categoryActual +
+                                                    (forecastFutureEnteredByCategory[categoryForecast.category] ?: 0.0) +
+                                                    categoryForecast.forecastForPeriod +
+                                                    (recurringForecastByCategory[categoryForecast.category] ?: 0.0)
+                                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        categoryForecast.category,
+                                                        modifier = Modifier.weight(1f),
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                    Text(
+                                                        money(categoryMonthlyForecast),
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                                Text(
+                                                    "До конца периода: ${money(categoryPeriodForecast)}",
+                                                    modifier = Modifier.align(Alignment.End),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                if (categoryForecast.currentPeriodAnomaly) {
+                                                    Text(
+                                                        "Внимание: расходы выше обычного темпа. Прогноз до конца периода: ${money(categoryPeriodForecast)}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFFC74444)
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1555,6 +1666,85 @@ private fun ThunBudgetApp() {
                         val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
                         val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
                         MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
+                    }
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Плановые и фактические расходы",
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = {
+                                    showPlanChart = !showPlanChart
+                                    persistUiExpanded(context, "chart_plan", showPlanChart)
+                                }
+                            ) {
+                                Text(if (showPlanChart) "Скрыть" else "Показать")
+                            }
+                        }
+                    }
+                    if (showPlanChart) {
+                        items(categories, key = { "analysis-plan-" + it.name }) { category ->
+                            val startDate = analyticsMonth.atDay(1).toString()
+                            val endDate = analyticsMonth.atEndOfMonth().toString()
+                            val actual = expenses.filter {
+                                it.category == category.name && it.date >= startDate && it.date <= endDate
+                            }.sumOf { it.amount }
+                            val plannedIncome = analyticsMonthIncome.takeIf { it > 0.0 } ?: income
+                            val planned = plannedForPeriod(
+                                plannedIncome,
+                                category.percent,
+                                startDate,
+                                endDate
+                            )
+                            Card {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            category.name,
+                                            modifier = Modifier.weight(1f),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            "${money(actual)} / ${money(planned)}",
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "Факт",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        LinearProgressIndicator(
+                                            progress = {
+                                                if (planned > 0.0) (actual / planned).coerceIn(0.0, 1.0).toFloat() else 0f
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            color = if (actual > planned) Color(0xFFC74444) else Color(0xFF168A72)
+                                        )
+                                    }
+                                    Text(
+                                        "${if (actual > planned) "Превышение" else "Остаток"}: ${money(kotlin.math.abs(planned - actual))}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (actual > planned) Color(0xFFC74444) else Color(0xFF168A72)
+                                    )
+                                    val metrics = AnalyticsBudgetCalculator.metrics(planned, actual)
+                                    Text(
+                                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                     item {
                         val previousMonth = analyticsMonth.minusMonths(1)
@@ -1680,7 +1870,9 @@ private fun ThunBudgetApp() {
                             firstStartDay = firstPeriodStartDay,
                             firstEndDay = firstPeriodEndDay,
                             monthsToAnalyze = 6,
-                            nextPeriodDays = forecastDays
+                            nextPeriodDays = forecastDays,
+                            forecastStartDate = forecastFrom.takeIf { forecastDays > 0 },
+                            forecastEndDate = selectedEnd.takeIf { forecastDays > 0 }
                         )
                         val projectedSpend = periodFacts.mapValues { (category, actual) ->
                             actual + (periodForecast.categories.firstOrNull { it.category == category }?.forecastForPeriod ?: 0.0)
@@ -1728,7 +1920,7 @@ private fun ThunBudgetApp() {
                 2 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     ChartsScreen(
                         expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
-                        showPlan=showPlanChart,onShowPlanChange={showPlanChart=it; persistUiExpanded(context,"chart_plan",it)},showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
+                        showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
                         selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
                         showCategoryCharts=showCategoryCharts,onShowCategoryChartsChange={showCategoryCharts=it; persistUiExpanded(context,"chart_categories",it)},
                         fallbackIncome=income,periodIncomes=periodIncomes
@@ -2677,7 +2869,7 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
 @Composable
 private fun ChartsScreen(
     expenses:List<Expense>,categories:List<BudgetCategory>,month:YearMonth,onMonthChange:(YearMonth)->Unit,
-    showPlan:Boolean,onShowPlanChange:(Boolean)->Unit,showPie:Boolean,onShowPieChange:(Boolean)->Unit,
+    showPie:Boolean,onShowPieChange:(Boolean)->Unit,
     selectedChartCategoryNames:String,onSelectedChartCategoryNamesChange:(String)->Unit,
     showCategoryCharts:Boolean,onShowCategoryChartsChange:(Boolean)->Unit,
     fallbackIncome:Double,periodIncomes:List<PeriodIncome>
@@ -2747,27 +2939,6 @@ private fun ChartsScreen(
                 }
             }
         }
-        }
-        item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Плановые и фактические расходы",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={onShowPlanChange(!showPlan)}) { Text(if(showPlan) "Скрыть" else "Показать") } } }
-        if(showPlan) {
-            items(categories,key={"chart-plan-"+it.name}) { cat ->
-                val fact=monthExpenses.filter { it.category==cat.name }.sumOf { it.amount }
-                val plan=plannedForPeriod(monthIncome,cat.percent,from,to)
-                Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment=Alignment.CenterVertically) { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text("${money(fact)} / ${money(plan)}",fontWeight=FontWeight.SemiBold) }
-                    Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Text("Факт",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.weight(1f),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
-                    }
-                    Text("${if(fact>plan) "Превышение" else "Остаток"}: ${money(kotlin.math.abs(plan-fact))}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
-                    val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
-                    Text(
-                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } }
-            }
         }
         item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Структура расходов",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={onShowPieChange(!showPie)}) { Text(if(showPie) "Скрыть" else "Показать") } } }
         if(showPie) {

@@ -8,7 +8,7 @@ name: Android APK
 
 on:
   push:
-    branches: [ "main", "feature/next-update-ux", "feature/charts-icon-ai-foundation-2026-11-19", "feature/assistant-intent-v1-2026-11-19", "feature/home-screen-widget-v1-2026-11-19", "feature/reliability-voice-analytics-v2-2026-11-19", "feature/widget-2x2-2026-11-19", "feature/major-update-1.1.0-1.2.0-2026-11-19", "feature/tbank-notification-import-2026-11-19", "feature/backup-cloud-retention-2026-11-20", "feature/next-update-voice-history-2026-11-20", "feature/fix-voice-dates-history-2026-11-20", "fix/voice-natural-phrases-date-field-2026-11-20", "feature/quarterly-allocation-recurring-payments-2026-11-20", "release/rustore-icon-1.3.16", "feature/assistant-financial-intelligence-1.3.17", "fix/manual-allocation-restore-2026-11-20", "fix/recurring-payments-add-button-2026-11-20", "feature/collapse-pending-payments-2026-11-20", "feature/recurring-payments-calendar-2026-11-20", "fix/responsive-layout-2026-11-20", "feature/reporting-period-settings-income-collapse-2026-11-22", "fix/restore-overview-controls-2026-11-22", "feature/reporting-period-budget-carryover-2026-11-24", "feature/dynamic-expense-history-analytics-2026-11-24", "fix/thunbudget-user-feedback-2026-11-25", "test/apk-dialog-nav-only-2026-11-25", "fix/unified-dialogs-all-screens-2026-11-25", "fix/dialog-design-only-2026-11-25", "feature/unified-light-dark-dialog-palette-2026-11-25", "fix/dialog-runtime-diagnostics-and-ui-tests-2026-11-25", "fix/compose-dialog-screenshot-test-603", "fix/global-dialog-field-palette-616", "restore/analytics-calculations-build-622" ]
+    branches: [ "main", "feature/next-update-ux", "feature/charts-icon-ai-foundation-2026-11-19", "feature/assistant-intent-v1-2026-11-19", "feature/home-screen-widget-v1-2026-11-19", "feature/reliability-voice-analytics-v2-2026-11-19", "feature/widget-2x2-2026-11-19", "feature/major-update-1.1.0-1.2.0-2026-11-19", "feature/tbank-notification-import-2026-11-19", "feature/backup-cloud-retention-2026-11-20", "feature/next-update-voice-history-2026-11-20", "feature/fix-voice-dates-history-2026-11-20", "fix/voice-natural-phrases-date-field-2026-11-20", "feature/quarterly-allocation-recurring-payments-2026-11-20", "release/rustore-icon-1.3.16", "feature/assistant-financial-intelligence-1.3.17", "fix/manual-allocation-restore-2026-11-20", "fix/recurring-payments-add-button-2026-11-20", "feature/collapse-pending-payments-2026-11-20", "feature/recurring-payments-calendar-2026-11-20", "fix/responsive-layout-2026-11-20", "feature/reporting-period-settings-income-collapse-2026-11-22", "fix/restore-overview-controls-2026-11-22", "feature/reporting-period-budget-carryover-2026-11-24", "feature/dynamic-expense-history-analytics-2026-11-24", "fix/thunbudget-user-feedback-2026-11-25", "test/apk-dialog-nav-only-2026-11-25", "fix/unified-dialogs-all-screens-2026-11-25", "fix/dialog-design-only-2026-11-25", "feature/unified-light-dark-dialog-palette-2026-11-25", "fix/dialog-runtime-diagnostics-and-ui-tests-2026-11-25", "fix/compose-dialog-screenshot-test-603", "fix/global-dialog-field-palette-616", "restore/analytics-calculations-build-622", "feature/forecast-engine-v2" ]
   workflow_dispatch:
 
 concurrency:
@@ -37,6 +37,16 @@ jobs:
           gradle-version: "8.9"
       - name: Run unit tests and compile debug APK
         run: gradle :app:testDebugUnitTest :app:assembleDebug
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThunBudget-Analytics-unit-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/**
+            app/build/reports/tests/testDebugUnitTest/**
+          if-no-files-found: warn
+          retention-days: 7
       - name: Enable KVM for Android emulator
         run: |
           if [ -e /dev/kvm ]; then
@@ -51,8 +61,10 @@ jobs:
             echo "KVM unavailable; falling back to Android TCG software emulation."
             echo "ANDROID_I_WANT_MY_TCG=yes" >> "$GITHUB_ENV"
           fi
+      # Styling regression screenshots are opt-in for commits that change dialog/theme UI.
+      # Functional updates keep unit tests and release verification without being blocked by theme screenshots.
       - name: Run Compose dialog screenshot tests on Android emulator
-        if: github.ref != 'refs/heads/restore/analytics-calculations-build-622'
+        if: contains(github.event.head_commit.message, '[dialog-ui]')
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -77,16 +89,28 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]') }}
         env:
           KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.THUNBUDGET_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.THUNBUDGET_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.THUNBUDGET_KEY_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::A signed Release APK was requested, but the persistent signing key secret is missing."
-            exit 1
-          fi
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::A signed Release APK was requested, but a required persistent signing secret is missing: $name"
+              exit 1
+            fi
+          done
       - name: Decode persistent release keystore
         if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]') }}
         env:
           KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/thunbudget-release.jks"
+          KEYSTORE_PASSWORD: ${{ secrets.THUNBUDGET_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.THUNBUDGET_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/thunbudget-release.jks"
+          test -s "$RUNNER_TEMP/thunbudget-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/thunbudget-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          test -s "$RUNNER_TEMP/thunbudget-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/thunbudget-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
       - name: Build signed release APK
         id: signed_release
         if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]') }}
@@ -107,7 +131,13 @@ jobs:
             echo "::error::Android apksigner was not found in $SDK_ROOT/build-tools."
             exit 1
           fi
-          "$APKSIGNER" verify --verbose --print-certs "$APK_PATH"
+          VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs "$APK_PATH" 2>&1)"
+          printf '%s\n' "$VERIFY_OUTPUT"
+          EXPECTED_CERT_SHA256="f8ac7d059a0bf9bb974b36d55247f356284f3d8d455d591fae43ef6a3467c5c8"
+          if ! printf '%s\n' "$VERIFY_OUTPUT" | grep -Fq "$EXPECTED_CERT_SHA256"; then
+            echo "::error::APK signature does not match the established release certificate."
+            exit 1
+          fi
       - name: Upload signed release APK
         if: ${{ steps.signed_release.outcome == 'success' }}
         uses: actions/upload-artifact@v4

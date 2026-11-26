@@ -19,7 +19,23 @@ data class CategoryForecast(
     val forecastForPeriod: Double,
     val historyPeriods: Int,
     val hasHistory: Boolean,
-    val averagePeriodSpend: Double
+    val averagePeriodSpend: Double,
+    val profile: String = "Недостаточно данных",
+    val forecastLowForPeriod: Double = forecastForPeriod,
+    val forecastHighForPeriod: Double = forecastForPeriod,
+    val trendPercent: Double = 0.0,
+    val volatilityPercent: Double = 0.0,
+    val evidenceQuality: String = "Низкая",
+    val positiveHistoryPeriods: Int = 0,
+    val currentPeriodAnomaly: Boolean = false,
+    val explanation: String = "",
+    val seasonalityFactor: Double = 1.0,
+    val seasonalityCycles: Int = 0,
+    val seasonalityApplied: Boolean = false,
+    val intervalMethod: String = "Ориентировочный диапазон",
+    val calibrationSamples: Int = 0,
+    val calibrationCoveragePercent: Double? = null,
+    val calibrationScaleForPeriod: Double = forecastForPeriod
 ) {
     val historyMonths: Int get() = historyPeriods
 }
@@ -60,7 +76,10 @@ object BudgetForecastCalculator {
         firstStartDay: Int,
         firstEndDay: Int,
         monthsToAnalyze: Int,
-        nextPeriodDays: Int? = null
+        nextPeriodDays: Int? = null,
+        calibration: ForecastCalibration? = null,
+        forecastStartDate: LocalDate? = null,
+        forecastEndDate: LocalDate? = null
     ): BudgetForecast {
         require(firstStartDay in 1..31 && firstEndDay in firstStartDay..31)
 
@@ -97,7 +116,20 @@ object BudgetForecastCalculator {
             activeTotalDays > 0L -> activeTotalDays.toDouble()
             else -> 0.0
         }
-        val targetDays = nextPeriodDays?.coerceAtLeast(0)?.toDouble() ?: averagePeriodDays
+        val inferredTargetDays = nextPeriodDays?.coerceAtLeast(0)?.toDouble() ?: averagePeriodDays
+        val explicitTargetRange = forecastStartDate?.let { start ->
+            forecastEndDate?.takeIf { end -> !end.isBefore(start) }?.let { end -> start to end }
+        }
+        val targetDays = explicitTargetRange?.let {
+            ChronoUnit.DAYS.between(it.first, it.second).toDouble() + 1.0
+        } ?: inferredTargetDays
+        val inferredRangeStart = explicitTargetRange?.first ?: asOf.plusDays(1)
+        val inferredRangeEnd = explicitTargetRange?.second ?: if (nextPeriodDays != null && nextPeriodDays > 0) {
+            inferredRangeStart.plusDays(nextPeriodDays.toLong() - 1L)
+        } else null
+        val targetRange = explicitTargetRange ?: if (
+            inferredRangeEnd != null && !inferredRangeEnd.isBefore(inferredRangeStart)
+        ) inferredRangeStart to inferredRangeEnd else null
         val monthDays = 365.2425 / 12.0
         val observedPeriods = completedPeriods.size + if (activeExpenses.isNotEmpty()) 1 else 0
         val historyStart = completedPeriods.firstOrNull()?.start ?: activePeriod?.start
@@ -105,20 +137,40 @@ object BudgetForecastCalculator {
         val observedExpenses = completedExpenses + activeExpenses
 
         val forecasts = categories.distinct().map { category ->
-            val periodRates = completedPeriods.map { period ->
-                val spent = completedExpenses.asSequence()
+            val periodAmounts = completedPeriods.map { period ->
+                completedExpenses.asSequence()
                     .filter { it.category.equals(category, ignoreCase = true) }
                     .filter { !it.date.isBefore(period.start) && !it.date.isAfter(period.end) }
                     .sumOf { it.amount }
-                spent / daysIn(period).toDouble()
             }
-            val hasCompletedHistory = completedPeriods.isNotEmpty() &&
-                completedExpenses.any { it.category.equals(category, ignoreCase = true) }
-            val historicalRate = if (completedPeriods.isEmpty()) 0.0 else {
-                val cappedRates = capHighOutliers(periodRates)
-                weightedAverage(cappedRates)
+            val periodRates = periodAmounts.mapIndexed { index, amount ->
+                amount / daysIn(completedPeriods[index]).toDouble()
             }
-
+            val positiveRates = periodRates.filter { it > 0.0 }
+            val recentRates = periodRates.takeLast(12)
+            val positiveFrequency = if (recentRates.isEmpty()) 0.0
+                else recentRates.count { it > 0.0 }.toDouble() / recentRates.size.toDouble()
+            val hasCompletedHistory = positiveRates.isNotEmpty()
+            val historicalRateRaw = if (completedPeriods.isEmpty()) 0.0 else {
+                weightedAverage(capHighOutliers(periodRates))
+            }
+            var profile = when {
+                periodRates.isEmpty() || positiveRates.size < 2 -> "Недостаточно данных"
+                positiveFrequency <= 0.35 -> "Редкие расходы"
+                positiveFrequency >= 0.70 -> "Регулярные расходы"
+                else -> "Переменные расходы"
+            }
+            // Intermittent categories use a Croston-style smoothed event size / interval model.
+            val historicalRate = if (
+                profile == "Редкие расходы" && positiveRates.size >= 2 && averagePeriodDays > 0.0
+            ) {
+                // Croston-style estimate: smooth event size and the interval
+                // between events separately, then divide to get expected spend
+                // per reporting period and convert it to a daily rate.
+                crostonPeriodForecast(periodAmounts) / averagePeriodDays
+            } else historicalRateRaw
+            val trendFactor = dampedTrendFactor(periodRates)
+            val trendAdjustedRate = historicalRate * trendFactor
             val currentCategoryExpenses = activeExpenses.filter {
                 it.category.equals(category, ignoreCase = true)
             }
@@ -127,28 +179,128 @@ object BudgetForecastCalculator {
                 currentCategoryExpenses.sumOf { it.amount } / activeElapsedDays.toDouble()
             } else 0.0
 
-            // A single unusually large purchase must not be extrapolated as if it
-            // were a new daily habit. Existing categories may accelerate, but the
-            // observed pace is capped at 2x their historical baseline and blended
-            // in gradually. New categories need repeated evidence or at least half
-            // a reporting period before their current pace is extrapolated.
+            // The current pace is a secondary signal. A single unusually large
+            // purchase is kept in actuals but cannot become the new baseline.
             val cappedCurrentRate = if (hasCompletedHistory && historicalRate > 0.0) {
                 minOf(currentRate, historicalRate * MAX_CURRENT_PACE_MULTIPLIER)
             } else currentRate
             val enoughNewCategoryEvidence = currentCategoryExpenses.size >= 2 ||
                 (activeTotalDays > 0L && activeElapsedDays.toDouble() / activeTotalDays.toDouble() >= 0.5)
+            if (!hasCompletedHistory && hasCurrentData && enoughNewCategoryEvidence) {
+                profile = "Новая категория"
+            }
             val dailyRate = when {
                 hasCompletedHistory && hasCurrentData ->
-                    historicalRate * (1.0 - activeWeight) + cappedCurrentRate * activeWeight
-                hasCompletedHistory -> historicalRate
+                    trendAdjustedRate * (1.0 - activeWeight) + cappedCurrentRate * activeWeight
+                hasCompletedHistory -> trendAdjustedRate
                 hasCurrentData && enoughNewCategoryEvidence -> currentRate
                 else -> 0.0
             }.coerceAtLeast(0.0)
 
-            val monthlyForecast = dailyRate * monthDays
-            val periodForecast = dailyRate * targetDays
-            val historicalPeriodAverage = if (completedPeriods.isNotEmpty()) historicalRate * averagePeriodDays else dailyRate * averagePeriodDays
-            val hasHistory = hasCompletedHistory || (hasCurrentData && enoughNewCategoryEvidence)
+            val volatility = robustVolatility(periodRates)
+            val volatilityPercent = volatility * 100.0
+            val evidenceQuality = when {
+                periodRates.size >= 12 && positiveRates.size >= 8 && volatility <= 0.45 -> "Высокая"
+                periodRates.size >= 6 && positiveRates.size >= 4 -> "Средняя"
+                else -> "Низкая"
+            }
+            // A transparent planning range, not a statistically calibrated
+            // confidence interval. It widens when history is short or unstable.
+            var uncertainty = (0.15 + volatility * 0.45 +
+                if (periodRates.size < 6) 0.25 else 0.0).coerceIn(0.15, 0.85)
+            if (profile == "Редкие расходы") {
+                uncertainty = maxOf(uncertainty, (1.0 - positiveFrequency) * 0.65)
+            }
+            val nextCalendarMonth = YearMonth.from(asOf).plusMonths(1)
+            val nextCalendarMonthEstimate = CalendarSeasonalityModel.estimate(
+                category, validExpenses, asOf, nextCalendarMonth
+            )
+            val monthlyForecast = dailyRate * nextCalendarMonth.lengthOfMonth().toDouble() *
+                nextCalendarMonthEstimate.factor
+            val periodProjection = when {
+                targetDays <= 0.0 -> SeasonallyAdjustedForecast(0.0, 1.0, 0, false)
+                targetRange != null -> CalendarSeasonalityModel.project(
+                    dailyRate = dailyRate,
+                    category = category,
+                    expenses = validExpenses,
+                    asOf = asOf,
+                    startDate = targetRange.first,
+                    endDate = targetRange.second
+                )
+                else -> {
+                    val estimate = CalendarSeasonalityModel.estimate(
+                        category, validExpenses, asOf, YearMonth.from(asOf.plusDays(1))
+                    )
+                    SeasonallyAdjustedForecast(
+                        amount = dailyRate * targetDays * estimate.factor,
+                        averageFactor = estimate.factor,
+                        completeCycles = estimate.completeCycles,
+                        applied = estimate.applied
+                    )
+                }
+            }
+            val periodForecast = periodProjection.amount
+            val historicalPeriodAverage = if (completedPeriods.isNotEmpty()) {
+                historicalRate * averagePeriodDays
+            } else dailyRate * averagePeriodDays
+            val calibrationScale = maxOf(
+                periodForecast,
+                historicalPeriodAverage * (targetDays / averagePeriodDays.coerceAtLeast(1.0)) *
+                    periodProjection.averageFactor * 0.25,
+                1.0
+            )
+            val calibrationBand = calibration?.forCategory(category)
+            val calibratedInterval = calibrationBand?.radius != null
+            val fallbackLow = periodForecast * (1.0 - uncertainty).coerceAtLeast(0.0)
+            val fallbackHigh = periodForecast * (1.0 + uncertainty)
+            val forecastLow = if (calibratedInterval) {
+                maxOf(0.0, periodForecast - calibrationBand!!.radius!! * calibrationScale)
+            } else fallbackLow
+            val forecastHigh = if (calibratedInterval) {
+                periodForecast + calibrationBand!!.radius!! * calibrationScale
+            } else fallbackHigh
+            val intervalMethod = if (calibratedInterval) {
+                "Эмпирическая калибровка 80%"
+            } else {
+                "Робастный ориентир; мало ошибок backtest"
+            }
+
+            val enoughNewCategoryHistory = hasCurrentData && enoughNewCategoryEvidence
+            val hasHistory = hasCompletedHistory || enoughNewCategoryHistory
+            val positiveMedian = median(positiveRates)
+            val positiveMad = median(positiveRates.map { kotlin.math.abs(it - positiveMedian) })
+            val anomalyThreshold = if (positiveMedian > 0.0) {
+                positiveMedian + maxOf(positiveMedian * 0.8, positiveMad * 3.0 * 1.4826)
+            } else Double.POSITIVE_INFINITY
+            val currentPeriodAnomaly = hasCompletedHistory && hasCurrentData &&
+                currentRate > anomalyThreshold
+            val trendPercent = (trendFactor - 1.0) * 100.0
+            val trendText = when {
+                trendPercent >= 5.0 -> "тренд повышает расчётную ставку на ${trendPercent.toInt()}%"
+                trendPercent <= -5.0 -> "тренд снижает расчётную ставку на ${kotlin.math.abs(trendPercent).toInt()}%"
+                else -> "выраженного тренда нет"
+            }
+            val frequencyText = "${(positiveFrequency * 100.0).toInt()}% последних периодов с расходами"
+            val explanation = when {
+                !hasHistory -> "Недостаточно повторяющихся данных для прогноза"
+                currentPeriodAnomaly -> "Трата в текущем периоде заметно выше обычного темпа; она учтена в факте, но ограниченно влияет на прогноз"
+                profile == "Редкие расходы" -> "Редкие траты: учтены частота появления и типичный размер; $frequencyText"
+                profile == "Новая категория" -> "Новая категория: оценка основана на текущих данных; накопленной истории пока нет"
+                else -> "Профиль: $profile; $trendText; $frequencyText"
+            }
+            val seasonalExplanation = when {
+                periodProjection.completeCycles < 2 -> "Сезонность не применялась: нужно не менее двух полных годовых циклов"
+                periodProjection.applied -> "Учтена календарная сезонность ×${"%.2f".format(java.util.Locale.ROOT, periodProjection.averageFactor)}"
+                else -> "Сезонность проверена по ${periodProjection.completeCycles} циклам, выраженного эффекта нет"
+            }
+            val intervalExplanation = if (calibratedInterval) {
+                "Диапазон откалиброван по ${calibrationBand!!.observations} ретропроверкам; эмпирическое покрытие " +
+                    "${"%.0f".format(java.util.Locale.ROOT, calibrationBand.empiricalCoveragePercent ?: 0.0)}%"
+            } else {
+                "Для калибровки диапазона доступно ${calibrationBand?.observations ?: 0} ошибок; нужно не менее ${ForecastIntervalCalibrator.MIN_OBSERVATIONS}"
+            }
+            val detailedExplanation = listOf(explanation, seasonalExplanation, intervalExplanation)
+                .filter { it.isNotBlank() }.joinToString(". ")
 
             CategoryForecast(
                 category = category,
@@ -157,7 +309,23 @@ object BudgetForecastCalculator {
                 forecastForPeriod = periodForecast,
                 historyPeriods = observedPeriods,
                 hasHistory = hasHistory,
-                averagePeriodSpend = historicalPeriodAverage
+                averagePeriodSpend = historicalPeriodAverage,
+                profile = profile,
+                forecastLowForPeriod = forecastLow,
+                forecastHighForPeriod = forecastHigh,
+                trendPercent = trendPercent,
+                volatilityPercent = volatilityPercent,
+                evidenceQuality = evidenceQuality,
+                positiveHistoryPeriods = positiveRates.size,
+                currentPeriodAnomaly = currentPeriodAnomaly,
+                explanation = detailedExplanation,
+                seasonalityFactor = periodProjection.averageFactor,
+                seasonalityCycles = periodProjection.completeCycles,
+                seasonalityApplied = periodProjection.applied,
+                intervalMethod = intervalMethod,
+                calibrationSamples = calibrationBand?.observations ?: 0,
+                calibrationCoveragePercent = calibrationBand?.empiricalCoveragePercent,
+                calibrationScaleForPeriod = calibrationScale
             )
         }
 
@@ -170,6 +338,61 @@ object BudgetForecastCalculator {
             totalPeriodForecast = forecasts.sumOf { it.forecastForPeriod },
             reportingPeriods = completedPeriods
         )
+    }
+
+
+    private fun crostonPeriodForecast(periodAmounts: List<Double>, alpha: Double = 0.30): Double {
+        val events = periodAmounts.mapIndexedNotNull { index, amount ->
+            if (amount > 0.0) index to amount else null
+        }
+        if (events.size < 2) {
+            val positives = events.map { it.second }
+            return median(positives) * events.size.toDouble() / periodAmounts.size.coerceAtLeast(1).toDouble()
+        }
+        var smoothedSize = events.first().second
+        var smoothedInterval = (events[1].first - events[0].first).coerceAtLeast(1).toDouble()
+        for (index in 1 until events.size) {
+            val event = events[index]
+            smoothedSize += alpha * (event.second - smoothedSize)
+            if (index > 1) {
+                val interval = (event.first - events[index - 1].first).coerceAtLeast(1).toDouble()
+                smoothedInterval += alpha * (interval - smoothedInterval)
+            }
+        }
+        return smoothedSize / smoothedInterval.coerceAtLeast(1.0)
+    }
+
+    private fun median(values: List<Double>): Double {
+        if (values.isEmpty()) return 0.0
+        val sorted = values.sorted()
+        val middle = sorted.size / 2
+        return if (sorted.size % 2 == 0) {
+            (sorted[middle - 1] + sorted[middle]) / 2.0
+        } else sorted[middle]
+    }
+
+    private fun robustVolatility(rates: List<Double>): Double {
+        if (rates.size < 2) return 1.0
+        val center = median(rates)
+        if (center <= 0.0) return 1.0
+        val mad = median(rates.map { kotlin.math.abs(it - center) })
+        return (1.4826 * mad / center).coerceIn(0.0, 2.0)
+    }
+
+    /**
+     * Compare the last three observations with the preceding three and damp
+     * the difference before projecting it forward. This deliberately avoids
+     * fitting an aggressive line through a handful of volatile transactions.
+     */
+    private fun dampedTrendFactor(rates: List<Double>): Double {
+        if (rates.size < 6) return 1.0
+        val prior = rates.dropLast(3).takeLast(3)
+        val recent = rates.takeLast(3)
+        if (prior.isEmpty() || recent.isEmpty()) return 1.0
+        val priorAverage = prior.average()
+        if (priorAverage <= 0.0) return 1.0
+        val change = (recent.average() - priorAverage) / priorAverage
+        return (1.0 + change * 0.35).coerceIn(0.85, 1.15)
     }
 
     private fun capHighOutliers(rates: List<Double>): List<Double> {
@@ -232,3 +455,55 @@ object BudgetForecastCalculator {
             .toList()
     }
 }
+
+/**
+ * Transparent sum of already-known spend and future-only projections.
+ * Each amount has one owner: posted actuals, dated future entries, variable
+ * forecast for dates after today, or unpaid recurring commitments.
+ */
+data class BudgetForecastProjection(
+    val actualToDate: Double,
+    val futureEnteredExpenses: Double,
+    val variableForecast: Double,
+    val recurringPayments: Double,
+    val availableIncome: Double,
+    val expectedSpend: Double,
+    val balance: Double
+) {
+    val deficit: Double get() = (-balance).coerceAtLeast(0.0)
+    val surplus: Double get() = balance.coerceAtLeast(0.0)
+}
+
+object BudgetForecastProjectionCalculator {
+    fun calculate(
+        actualToDate: Double,
+        futureEnteredExpenses: Double,
+        variableForecast: Double,
+        recurringPayments: Double,
+        availableIncome: Double
+    ): BudgetForecastProjection {
+        val components = listOf(
+            actualToDate,
+            futureEnteredExpenses,
+            variableForecast,
+            recurringPayments,
+            availableIncome
+        )
+        require(components.all { it.isFinite() && it >= 0.0 }) {
+            "Суммы прогноза должны быть конечными и неотрицательными."
+        }
+        val expectedSpend = actualToDate + futureEnteredExpenses +
+            variableForecast + recurringPayments
+        val balance = availableIncome - expectedSpend
+        return BudgetForecastProjection(
+            actualToDate = actualToDate,
+            futureEnteredExpenses = futureEnteredExpenses,
+            variableForecast = variableForecast,
+            recurringPayments = recurringPayments,
+            availableIncome = availableIncome,
+            expectedSpend = expectedSpend,
+            balance = balance
+        )
+    }
+}
+

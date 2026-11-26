@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.YearMonth
 
 class BudgetForecastCalculatorTest {
     private val startDay = 9
@@ -204,6 +205,261 @@ class BudgetForecastCalculatorTest {
         )
         assertTrue("Future-dated transactions must not influence the forecast",
             result.totalPeriodForecast < 2000.0)
+    }
+
+
+    @Test fun detectsDampedPositiveTrendWithoutExtrapolatingFullSpike() {
+        val rows = listOf(
+            "2026-06-10" to 1000.0,
+            "2026-07-10" to 1100.0,
+            "2026-08-10" to 1200.0,
+            "2026-09-10" to 1800.0,
+            "2026-10-10" to 2000.0,
+            "2026-11-10" to 2400.0
+        ).map { ForecastExpense("Продукты", it.second, LocalDate.parse(it.first)) }
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        assertTrue("A multi-period rise should be identified", result.categories.single().trendPercent > 0.0)
+        assertTrue("Trend adjustment must remain damped", result.categories.single().trendPercent <= 15.0)
+    }
+
+    @Test fun classifiesIntermittentCategoriesByFrequencyAndEventSize() {
+        val rows = listOf(
+            ForecastExpense("Подарки", 6000.0, LocalDate.parse("2026-06-10")),
+            ForecastExpense("Подарки", 3000.0, LocalDate.parse("2026-09-10"))
+        )
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Подарки"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        val category = result.categories.single()
+        assertEquals("Редкие расходы", category.profile)
+        assertTrue("A sparse category should use an expected-value forecast", category.forecastForPeriod > 0.0)
+        assertTrue(category.forecastHighForPeriod > category.forecastLowForPeriod)
+    }
+
+    @Test fun exposesWiderRangeForMoreVolatileCategories() {
+        val stable = (0..7).map { i ->
+            ForecastExpense("Продукты", 1500.0, LocalDate.parse("2026-04-10").plusMonths(i.toLong()))
+        }
+        val volatile = listOf(
+            300.0, 6000.0, 500.0, 7000.0, 400.0, 6500.0, 350.0, 6000.0
+        ).mapIndexed { i, amount ->
+            ForecastExpense("Развлечения", amount, LocalDate.parse("2026-04-10").plusMonths(i.toLong()))
+        }
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты", "Развлечения"),
+            expenses = stable + volatile,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        val regular = result.categories.first { it.category == "Продукты" }
+        val erratic = result.categories.first { it.category == "Развлечения" }
+        val regularWidth = regular.forecastHighForPeriod - regular.forecastLowForPeriod
+        val erraticWidth = erratic.forecastHighForPeriod - erratic.forecastLowForPeriod
+        assertTrue("Unstable history should produce a wider planning range", erraticWidth > regularWidth)
+    }
+
+    @Test fun flagsAnUnusuallyFastCurrentPeriodPace() {
+        val rows = (0..5).map { i ->
+            ForecastExpense("Продукты", 1500.0, LocalDate.parse("2026-05-10").plusMonths(i.toLong()))
+        } + ForecastExpense("Продукты", 5000.0, LocalDate.parse("2026-11-25"))
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-25"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 10
+        )
+        assertTrue("A large current-period acceleration should be flagged", result.categories.single().currentPeriodAnomaly)
+    }
+
+
+    @Test fun backtestUsesRollingOriginHistoryAndReturnsErrorMetrics() {
+        val rows = (0..8).map { i ->
+            ForecastExpense(
+                "Продукты",
+                1000.0 + i * 100.0,
+                LocalDate.parse("2026-02-10").plusMonths(i.toLong())
+            )
+        }
+        val result = BudgetForecastBacktester.evaluate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        assertTrue("At least one future period must be validated", result.evaluatedPeriods > 0)
+        assertTrue(result.evaluatedCategoryPeriods >= result.evaluatedPeriods)
+        assertTrue(result.actualSpend > 0.0)
+        assertTrue(result.forecastSpend >= 0.0)
+        assertTrue(result.meanAbsoluteError != null && result.meanAbsoluteError >= 0.0)
+        assertTrue(result.weightedAbsolutePercentageError != null)
+    }
+
+    @Test fun backtestDoesNotClaimAccuracyWithoutEnoughTrainingHistory() {
+        val result = BudgetForecastBacktester.evaluate(
+            categories = listOf("Продукты"),
+            expenses = listOf(
+                ForecastExpense("Продукты", 1000.0, LocalDate.parse("2026-10-10")),
+                ForecastExpense("Продукты", 1200.0, LocalDate.parse("2026-10-25"))
+            ),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        assertEquals(0, result.evaluatedPeriods)
+        assertEquals(null, result.weightedAbsolutePercentageError)
+    }
+
+
+    @Test fun backtestCountsZeroSpendPeriodsInsteadOfDroppingThem() {
+        val result = BudgetForecastBacktester.evaluate(
+            categories = listOf("Подарки"),
+            expenses = listOf(
+                ForecastExpense("Подарки", 5000.0, LocalDate.parse("2026-02-10"))
+            ),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        assertTrue("Zero-spend periods are still forecast observations", result.evaluatedPeriods > 0)
+        assertEquals(null, result.weightedAbsolutePercentageError)
+    }
+
+
+    @Test fun intermittentForecastUsesEventSizeAndGapBetweenEvents() {
+        val rows = listOf(
+            "2026-05-10" to 1000.0,
+            "2026-06-25" to 1000.0
+        ).map { ForecastExpense("Нерегулярный платёж", it.second, LocalDate.parse(it.first)) }
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Нерегулярный платёж"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-08-09"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 92
+        )
+        val category = result.categories.single()
+        assertEquals("Редкие расходы", category.profile)
+        // The two events are three reporting periods apart: 1,000 / 3 ₽ per period.
+        // The 92-day horizon spans exactly the six completed periods in this fixture.
+        assertEquals(2000.0, category.forecastForPeriod, 0.01)
+    }
+
+
+    @Test fun annualSeasonalityRequiresTwoCompleteComparableCycles() {
+        val rows = (0 until 29).flatMap { offset ->
+            val month = YearMonth.of(2024, 1).plusMonths(offset.toLong())
+            val base = ForecastExpense("Путешествия", 1000.0, month.atDay(10))
+            if (month.monthValue == 7) {
+                listOf(base, ForecastExpense("Путешествия", 5000.0, month.atDay(15)))
+            } else listOf(base)
+        }
+        val mature = CalendarSeasonalityModel.estimate(
+            category = "Путешествия",
+            expenses = rows,
+            asOf = LocalDate.parse("2026-06-30"),
+            targetMonth = YearMonth.of(2026, 7)
+        )
+        assertTrue("Two complete annual cycles should be available", mature.completeCycles >= 2)
+        assertTrue("Repeated July peaks should raise the July factor", mature.factor > 1.0)
+        assertTrue(mature.factor <= 1.8)
+
+        val immature = CalendarSeasonalityModel.estimate(
+            category = "Путешествия",
+            expenses = rows,
+            asOf = LocalDate.parse("2025-06-30"),
+            targetMonth = YearMonth.of(2025, 7)
+        )
+        assertEquals(1.0, immature.factor, 0.001)
+        assertEquals(0, immature.completeCycles)
+    }
+
+    @Test fun rollingOriginErrorsCalibrateTheCategoryForecastRange() {
+        val rows = (0..31).flatMap { offset ->
+            val month = YearMonth.of(2024, 1).plusMonths(offset.toLong())
+            listOf(
+                ForecastExpense("Продукты", 800.0 + (offset % 4) * 70.0, month.atDay(12)),
+                ForecastExpense("Продукты", 900.0 + (offset % 3) * 80.0, month.atDay(26))
+            )
+        }
+        val asOf = LocalDate.parse("2026-10-23")
+        val backtest = BudgetForecastBacktester.evaluate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = asOf,
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        val band = backtest.calibration.forCategory("Продукты")
+        assertTrue("The rolling-origin test should collect enough residuals", band != null && band.observations >= 8)
+        assertTrue("An 80% empirical radius should be available", band?.radius != null)
+
+        val forecast = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = asOf,
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 0,
+            nextPeriodDays = 16,
+            calibration = backtest.calibration,
+            forecastStartDate = LocalDate.parse("2026-10-24"),
+            forecastEndDate = LocalDate.parse("2026-11-08")
+        ).categories.single()
+        assertTrue(forecast.intervalMethod.contains("80%"))
+        assertEquals(band!!.observations, forecast.calibrationSamples)
+        assertTrue(forecast.forecastLowForPeriod <= forecast.forecastForPeriod)
+        assertTrue(forecast.forecastHighForPeriod >= forecast.forecastForPeriod)
+    }
+
+    @Test fun projectionIncludesFutureEnteredExpensesAndEachForecastComponentExactlyOnce() {
+        val projection = BudgetForecastProjectionCalculator.calculate(
+            actualToDate = 9514.0,
+            futureEnteredExpenses = 7000.0,
+            variableForecast = 41392.0,
+            recurringPayments = 1800.0,
+            availableIncome = 36881.0
+        )
+        assertEquals(59706.0, projection.expectedSpend, 0.001)
+        assertEquals(-22825.0, projection.balance, 0.001)
+        assertEquals(22825.0, projection.deficit, 0.001)
+        assertEquals(0.0, projection.surplus, 0.001)
+    }
+
+    @Test fun projectionSeparatesSurplusFromDeficit() {
+        val projection = BudgetForecastProjectionCalculator.calculate(
+            actualToDate = 1000.0,
+            futureEnteredExpenses = 500.0,
+            variableForecast = 1500.0,
+            recurringPayments = 500.0,
+            availableIncome = 5000.0
+        )
+        assertEquals(3500.0, projection.expectedSpend, 0.001)
+        assertEquals(1500.0, projection.balance, 0.001)
+        assertEquals(0.0, projection.deficit, 0.001)
+        assertEquals(1500.0, projection.surplus, 0.001)
     }
 
 }
