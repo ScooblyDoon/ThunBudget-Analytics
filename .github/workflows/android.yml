@@ -170,3 +170,4 @@ jobs:
 # [final-apk] Verify modal overlays inherit the selected light/dark app theme.
 
 # [final-apk] Build and verify signed release after analytics calculation audit.
+# Flexible periods: rerun Android unit tests and Kotlin/Compose compilation after moving report state out of LazyListScope.
