@@ -1853,10 +1853,18 @@ private fun ThunBudgetApp() {
                                         color = if (actual > planned) Color(0xFFC74444) else Color(0xFF168A72)
                                     )
                                     val metrics = AnalyticsBudgetCalculator.metrics(planned, actual)
+                                    val remainingPercent = metrics.remainingPercent
+                                    val budgetStatus = when {
+                                        remainingPercent == null -> "План не задан"
+                                        remainingPercent >= 0.0 ->
+                                            "Свободный остаток: ${String.format(Locale("ru", "RU"), "%.1f", remainingPercent)}%"
+                                        else ->
+                                            "Превышение: ${String.format(Locale("ru", "RU"), "%.1f", kotlin.math.abs(remainingPercent))}%"
+                                    }
                                     Text(
-                                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Превышение: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
+                                        budgetStatus,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if ((remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -1892,7 +1900,9 @@ private fun ThunBudgetApp() {
                         val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
                         val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
                         val pEffectiveIncome=pIncome+pCarryover
-                        val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*cat.percent/100.0 else plannedForPeriod(calculatedMonthlyIncome,cat.percent,pStart.toString(),pEnd.toString())
+                        val savedPeriodPlan = reportingPeriodCategoryPlans[pStart.toString() to pEnd.toString()].orEmpty()
+                        val pPlanPercent = savedPeriodPlan.entries.firstOrNull { it.key.equals(cat.name, true) }?.value ?: cat.percent
+                        val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*pPlanPercent/100.0 else plannedForPeriod(calculatedMonthlyIncome,pPlanPercent,pStart.toString(),pEnd.toString())
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
@@ -1951,7 +1961,7 @@ private fun ThunBudgetApp() {
                         val from=analyticsMonth.atDay(1).toString()
                         val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
-                        val plan=plannedForPeriod(calculatedMonthlyIncome,cat.percent,from,to)
+                        val plan=analyticsMonthPlanAmounts[cat.name] ?: 0.0
                         Card { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
