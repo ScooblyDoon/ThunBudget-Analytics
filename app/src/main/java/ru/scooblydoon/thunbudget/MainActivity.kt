@@ -64,6 +64,7 @@ internal class BudgetStore(context: Context) {
     private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     private val incomeLedger = IncomeLedgerRepository(prefs)
+    private val flexiblePeriodRepository = FlexiblePeriodRepository(prefs)
 
     init {
         incomeLedger.migrateLegacyIfNeeded()
@@ -285,6 +286,12 @@ internal class BudgetStore(context: Context) {
     fun loadRecurringPayments(): List<RecurringPayment> = RecurringPaymentStore(appContext).load()
     fun saveRecurringPayments(items: List<RecurringPayment>) { RecurringPaymentStore(appContext).save(items); saveAutomaticBackup() }
 
+    fun loadFlexiblePeriods(): List<FlexiblePeriodDefinition> = flexiblePeriodRepository.load()
+    fun saveFlexiblePeriods(items: List<FlexiblePeriodDefinition>) {
+        flexiblePeriodRepository.save(items)
+        saveAutomaticBackup()
+    }
+
     fun loadExpenses(): List<Expense> {
         val raw=prefs.getString("expenses","[]") ?: "[]"
         return runCatching {
@@ -302,7 +309,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1")
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY)
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -430,7 +437,7 @@ internal class BudgetStore(context: Context) {
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1")) {
+            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY)) {
                 "В резервной копии обнаружено неизвестное поле."
             }
             val value = data.get(key)
@@ -501,6 +508,17 @@ internal class BudgetStore(context: Context) {
             val end = LocalDate.parse(row.getString("periodEnd"))
             require(!end.isBefore(start) && !date.isBefore(start) && !date.isAfter(end))
         }
+        val flexiblePeriods = JSONArray(data.optString(FlexiblePeriodRepository.KEY, "[]"))
+        val flexiblePeriodRows = (0 until flexiblePeriods.length()).map { index ->
+            val row = flexiblePeriods.getJSONObject(index)
+            FlexiblePeriodDefinition(
+                id = row.getString("id"),
+                name = row.getString("name"),
+                start = LocalDate.parse(row.getString("start")),
+                end = LocalDate.parse(row.getString("end"))
+            )
+        }
+        FlexiblePeriodRules.validateSequence(flexiblePeriodRows)
         val monthlyIncome = data.getString("income").toDoubleOrNull()
         val savings = data.getString("savings").toDoubleOrNull()
         require(monthlyIncome != null && monthlyIncome.isFinite() && monthlyIncome > 0.0)
