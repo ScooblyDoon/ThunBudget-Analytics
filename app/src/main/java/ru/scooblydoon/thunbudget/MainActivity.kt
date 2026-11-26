@@ -686,7 +686,7 @@ private fun ThunBudgetApp() {
     var showAllocationDialog by remember { mutableStateOf(false) }
     var showDynamicAllocationDialog by remember { mutableStateOf(false) }
     var showExpenseForecast by rememberSaveable { mutableStateOf(false) }
-    var analyticsIncomeMode by rememberSaveable { mutableIntStateOf(0) }
+    var analyticsIncomeMode by rememberSaveable(key = "analytics_income_source_mode_v2") { mutableIntStateOf(0) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
