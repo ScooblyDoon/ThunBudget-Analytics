@@ -130,7 +130,7 @@ object BudgetForecastCalculator {
                 weightedAverage(capHighOutliers(periodRates))
             }
             val typicalPositiveRate = median(positiveRates)
-            val profile = when {
+            var profile = when {
                 periodRates.isEmpty() || positiveRates.size < 2 -> "Недостаточно данных"
                 positiveFrequency <= 0.35 -> "Редкие расходы"
                 positiveFrequency >= 0.70 -> "Регулярные расходы"
@@ -160,6 +160,9 @@ object BudgetForecastCalculator {
             } else currentRate
             val enoughNewCategoryEvidence = currentCategoryExpenses.size >= 2 ||
                 (activeTotalDays > 0L && activeElapsedDays.toDouble() / activeTotalDays.toDouble() >= 0.5)
+            if (!hasCompletedHistory && hasCurrentData && enoughNewCategoryEvidence) {
+                profile = "Новая категория"
+            }
             val dailyRate = when {
                 hasCompletedHistory && hasCurrentData ->
                     trendAdjustedRate * (1.0 - activeWeight) + cappedCurrentRate * activeWeight
@@ -210,6 +213,7 @@ object BudgetForecastCalculator {
                 !hasHistory -> "Недостаточно повторяющихся данных для прогноза"
                 currentPeriodAnomaly -> "Трата в текущем периоде заметно выше обычного темпа; она учтена в факте, но ограниченно влияет на прогноз"
                 profile == "Редкие расходы" -> "Редкие траты: учтены частота появления и типичный размер; $frequencyText"
+                profile == "Новая категория" -> "Новая категория: оценка основана на текущих данных; накопленной истории пока нет"
                 else -> "Профиль: $profile; $trendText; $frequencyText"
             }
 
