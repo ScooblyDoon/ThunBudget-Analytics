@@ -1798,25 +1798,10 @@ private fun ThunBudgetApp() {
                                 it.category.equals(category.name, ignoreCase = true) &&
                                     it.date >= actualStart.toString() && it.date <= actualEnd.toString()
                             }.sumOf { it.amount }
-                            val plannedIncome = analyticsPlanFactIncome
-                            val categoryPercent = analyticsCycleAllocation?.percentages?.get(category.name) ?: category.percent
-                            val planned = plannedIncome.coerceAtLeast(0.0) * categoryPercent / 100.0
-                            val periodShares = analyticsCycleAllocation?.periodPercentages?.get(category.name).orEmpty()
-                            val hasDynamicShare = autoAllocationEnabled &&
-                                !category.name.equals("Непредвиденные расходы", ignoreCase = true) &&
-                                !category.name.equals("Резервные средства", ignoreCase = true) &&
-                                !category.name.equals("Перенос средств", ignoreCase = true) &&
-                                periodShares.any { it > 0.0 }
-                            val shareDescription = when {
-                                hasDynamicShare && periodShares.size >= 2 -> {
-                                    val formatted = periodShares.joinToString(" и ") {
-                                        String.format(Locale("ru", "RU"), "%.1f%%", it)
-                                    }
-                                    "Средняя доля: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}% ($formatted)"
-                                }
-                                hasDynamicShare ->
-                                    "Доля по периоду: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}%"
-                                else -> "Доля бюджета: ${String.format(Locale("ru", "RU"), "%.1f", categoryPercent)}%"
+                            val planned = if (monthlyMode) {
+                                analyticsMonthPlanAmounts[category.name] ?: 0.0
+                            } else {
+                                analyticsCyclePlanAmounts[category.name] ?: 0.0
                             }
                             Card {
                                 Column(
@@ -1858,14 +1843,9 @@ private fun ThunBudgetApp() {
                                     )
                                     val metrics = AnalyticsBudgetCalculator.metrics(planned, actual)
                                     Text(
-                                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
+                                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Превышение: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        shareDescription,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
