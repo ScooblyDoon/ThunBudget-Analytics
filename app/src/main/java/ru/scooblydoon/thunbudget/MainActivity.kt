@@ -774,7 +774,6 @@ private fun ThunBudgetApp() {
         periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
     )
     val calculatedMonthlyIncome = analyticsMonthIncomeEstimate.totalIncome.takeIf { it > 0.0 } ?: income
-    val analyticsMonthIncome = calculatedMonthlyIncome
     val analyticsPlanFactIncome = if (analyticsIncomeMode == 0) calculatedMonthlyIncome else analyticsCycleIncome.totalIncome
     val displayedMonthlyIncome = calculatedMonthlyIncome
     val analyticsCycleAllocation = remember(
