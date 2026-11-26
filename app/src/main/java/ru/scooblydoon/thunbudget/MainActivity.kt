@@ -1114,6 +1114,7 @@ private fun ThunBudgetApp() {
                 recurringPayments = store.loadRecurringPayments()
                 periodIncomes = store.loadPeriodIncomes()
                 incomeEntries = store.loadIncomeEntries()
+                flexiblePeriods = store.loadFlexiblePeriods()
                 periodStart = store.loadPeriodStart() ?: periodStart
                 periodEnd = store.loadPeriodEnd() ?: periodEnd
                 selectedPeriod = -1
@@ -2541,7 +2542,7 @@ private fun ThunBudgetApp() {
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
-            expenses=store.loadExpenses(); recurringPayments=store.loadRecurringPayments(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries()
+            expenses=store.loadExpenses(); recurringPayments=store.loadRecurringPayments(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1; store.saveSelectedPeriod(-1); backupMessage="Автоматическая резервная копия восстановлена."
         } else backupMessage="Не удалось восстановить автоматическую копию."
@@ -2552,7 +2553,7 @@ private fun ThunBudgetApp() {
         val restored = store.restorePreviousBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
-            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries()
+            expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1
             store.saveSelectedPeriod(-1)
@@ -2581,6 +2582,7 @@ private fun ThunBudgetApp() {
                     expenses=store.loadExpenses()
                     periodIncomes=store.loadPeriodIncomes()
                     incomeEntries=store.loadIncomeEntries()
+                    flexiblePeriods=store.loadFlexiblePeriods()
                     selectedPeriod=if(isSecondPeriodToday) 1 else 0
                     store.saveSelectedPeriod(selectedPeriod)
                     periodStart=if(selectedPeriod==1) secondPeriodStart.toString() else firstPeriodStart.toString()
@@ -2621,7 +2623,7 @@ private fun ThunBudgetApp() {
             showUndoConfirmation=false
             if (store.restoreUndoSnapshot()) {
                 expenses=store.loadExpenses(); categories=store.loadCategories(); recurringPayments=store.loadRecurringPayments()
-                periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); income=store.loadIncome()
+                periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods(); income=store.loadIncome()
                 savingsGoal=store.loadSavingsGoal()
                 periodStart=store.loadPeriodStart() ?: periodStart
                 periodEnd=store.loadPeriodEnd() ?: periodEnd
