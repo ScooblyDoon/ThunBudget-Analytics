@@ -301,10 +301,25 @@ internal class BudgetStore(context: Context) {
     }
 
     fun saveCategories(items: List<BudgetCategory>, planStart: String? = null, planEnd: String? = null) {
+        val previous = loadCategories()
         val normalizedPairs = BudgetAllocationCalculator.withReserve(items.map { it.name to it.percent })
         val normalized = normalizedPairs.map { BudgetCategory(it.first, it.second) }
+        fun planShares(categories: List<BudgetCategory>) = categories
+            .filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
+            .associate { it.name.lowercase(Locale.ROOT) to it.percent }
+        val previousPlan = planShares(previous)
+        val nextPlan = planShares(normalized)
+        val planActuallyChanged = previousPlan.keys != nextPlan.keys ||
+            nextPlan.any { (name, percent) ->
+                kotlin.math.abs(percent - (previousPlan[name] ?: 0.0)) > 0.0001
+            }
         persistCategories(normalized)
-        if (planStart != null && planEnd != null) saveReportingPeriodCategoryPlan(planStart, planEnd, normalized)
+        // Routine persistence (for example, adding the zero-percent transfer
+        // category) must not rewrite the reporting-period plan with auto-derived
+        // live shares. Save a period snapshot only when the budget itself changed.
+        if (planStart != null && planEnd != null && planActuallyChanged) {
+            saveReportingPeriodCategoryPlan(planStart, planEnd, normalized)
+        }
     }
 
     /**
