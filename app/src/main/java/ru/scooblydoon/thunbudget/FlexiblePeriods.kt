@@ -84,7 +84,7 @@ object FlexiblePeriodRules {
 
     fun remainingDays(periods: List<FlexiblePeriodDefinition>): Long {
         val ordered = validateSequence(periods)
-        if (ordered.isEmpty()) return 31L
+        if (ordered.isEmpty()) return 0L
         val maximum = maximumAllowedDays(ordered.first().start, ordered.last().end)
         return (maximum - ordered.sumOf { it.dayCount }).coerceAtLeast(0L)
     }
