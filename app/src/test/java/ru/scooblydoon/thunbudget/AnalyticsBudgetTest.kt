@@ -184,6 +184,7 @@ class AnalyticsBudgetTest {
 
     @Test fun calendarMonthIncomeUsesExactInclusiveReportingDayOverlap() {
         val periods = listOf(
+            PeriodIncome("2026-11-01", "2026-11-30", 100000.0), // obsolete overlapping monthly aggregate
             PeriodIncome("2026-11-09", "2026-11-23", 60854.0),
             PeriodIncome("2026-11-24", "2026-12-08", 36881.0)
         )
@@ -222,7 +223,8 @@ class AnalyticsBudgetTest {
         val result = ReportingPeriodCategoryPlanCalculator.monthlyPlan(
             currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
             periodIncomes = listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 15000.0)
+                PeriodIncome("2026-11-09", "2026-11-23", 15000.0),
+                PeriodIncome("2026-11-24", "2026-12-08", 15000.0)
             ),
             savedPlans = mapOf(
                 ("2026-11-09" to "2026-11-23") to mapOf("Продукты" to 20.0),
@@ -232,7 +234,7 @@ class AnalyticsBudgetTest {
             forecastIncome = 4000.0
         )
 
-        assertEquals(4200.0, result["Продукты"]!!, 0.001)
+        assertEquals(6100.0, result["Продукты"]!!, 0.001)
     }
 
     @Test fun carryoverBeforeAddsUnspentBalanceFromCompletedPeriods() {
