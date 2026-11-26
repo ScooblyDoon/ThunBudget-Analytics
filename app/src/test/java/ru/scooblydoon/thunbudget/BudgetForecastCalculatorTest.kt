@@ -329,4 +329,19 @@ class BudgetForecastCalculatorTest {
         assertEquals(null, result.weightedAbsolutePercentageError)
     }
 
+
+    @Test fun backtestCountsZeroSpendPeriodsInsteadOfDroppingThem() {
+        val result = BudgetForecastBacktester.evaluate(
+            categories = listOf("Подарки"),
+            expenses = listOf(
+                ForecastExpense("Подарки", 5000.0, LocalDate.parse("2026-02-10"))
+            ),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        assertTrue("Zero-spend periods are still forecast observations", result.evaluatedPeriods > 0)
+        assertEquals(null, result.weightedAbsolutePercentageError)
+    }
+
 }
