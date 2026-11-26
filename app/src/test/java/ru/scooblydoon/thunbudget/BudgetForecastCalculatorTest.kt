@@ -344,4 +344,26 @@ class BudgetForecastCalculatorTest {
         assertEquals(null, result.weightedAbsolutePercentageError)
     }
 
+
+    @Test fun intermittentForecastUsesEventSizeAndGapBetweenEvents() {
+        val rows = listOf(
+            "2026-05-10" to 1000.0,
+            "2026-06-10" to 1000.0,
+            "2026-07-10" to 1000.0
+        ).map { ForecastExpense("Нерегулярный платёж", it.second, LocalDate.parse(it.first)) }
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Нерегулярный платёж"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-09-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        val category = result.categories.single()
+        assertEquals("Редкие расходы", category.profile)
+        // The events are two reporting periods apart: 1,000 / 2 = 500 ₽ per period.
+        assertEquals(500.0, category.forecastForPeriod, 0.01)
+    }
+
 }
