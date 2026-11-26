@@ -37,6 +37,13 @@ object IncomeLedgerMigration {
     ): List<IncomeEntry> {
         val result = existing.toMutableList()
         val knownIds = result.mapTo(mutableSetOf()) { it.id }
+        // The legacy period summary may already be represented by detailed
+        // entries in the new ledger. Prevent importing the same period total
+        // a second time, while preserving multiple distinct entries per period.
+        val earnedPeriods = result.filterNot { it.isCarryover }
+            .mapTo(mutableSetOf()) { it.periodStart to it.periodEnd }
+        val carryoverPeriods = result.filter { it.isCarryover }
+            .mapTo(mutableSetOf()) { it.periodStart to it.periodEnd }
         legacy.forEachIndexed { index, row ->
             val start = LocalDate.parse(row.start)
             val end = LocalDate.parse(row.end)
@@ -46,7 +53,7 @@ object IncomeLedgerMigration {
                 row.carryoverAmount.isFinite() && row.carryoverAmount >= 0.0
             ) { "Некорректная сумма дохода." }
             val id = "legacy-${row.start}-${row.end}-${index}"
-            if (row.earnedAmount > 0.0 && knownIds.add(id)) {
+            if (row.earnedAmount > 0.0 && earnedPeriods.add(row.start to row.end) && knownIds.add(id)) {
                 result += IncomeEntry(
                     id = id,
                     title = "Перенесённый доход за период",
@@ -58,7 +65,7 @@ object IncomeLedgerMigration {
                 )
             }
             val carryoverId = "legacy-carryover-${row.start}-${row.end}-$index"
-            if (row.carryoverAmount > 0.0 && knownIds.add(carryoverId)) {
+            if (row.carryoverAmount > 0.0 && carryoverPeriods.add(row.start to row.end) && knownIds.add(carryoverId)) {
                 result += IncomeEntry(
                     id = carryoverId,
                     title = "Перенос средств за период",
