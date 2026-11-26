@@ -204,8 +204,8 @@ object BudgetForecastCalculator {
                 currentRate > anomalyThreshold
             val trendPercent = (trendFactor - 1.0) * 100.0
             val trendText = when {
-                trendPercent >= 5.0 -> "последние периоды растут примерно на ${trendPercent.toInt()}%"
-                trendPercent <= -5.0 -> "последние периоды снижаются примерно на ${kotlin.math.abs(trendPercent).toInt()}%"
+                trendPercent >= 5.0 -> "тренд повышает расчётную ставку на ${trendPercent.toInt()}%"
+                trendPercent <= -5.0 -> "тренд снижает расчётную ставку на ${kotlin.math.abs(trendPercent).toInt()}%"
                 else -> "выраженного тренда нет"
             }
             val frequencyText = "${(positiveFrequency * 100.0).toInt()}% последних периодов с расходами"
