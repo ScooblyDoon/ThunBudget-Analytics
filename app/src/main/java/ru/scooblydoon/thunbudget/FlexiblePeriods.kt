@@ -238,6 +238,9 @@ object FlexiblePeriodAnalyticsCalculator {
         val earnedIncome = periodIncomes.filterNot { it.isCarryover }.sumOf { it.amount }
         val carryoverIncome = periodIncomes.filter { it.isCarryover }.sumOf { it.amount }
         val ledgerIncome = earnedIncome + carryoverIncome
+        val budgetCategories = categories.filterNot {
+            it.name.equals(TRANSFER_CATEGORY, ignoreCase = true)
+        }
 
         // When no dated income exists for the range, spread configured monthly income
         // over the actual calendar days covered, including partial months and leap years.
@@ -247,7 +250,7 @@ object FlexiblePeriodAnalyticsCalculator {
             period.end
         )
         val budgetIncome = if (ledgerIncome > 0.0) ledgerIncome else proratedMonthlyIncome
-        val totalPercent = categories.sumOf { it.percent }
+        val totalPercent = budgetCategories.sumOf { it.percent }
         val plannedTotal = budgetIncome * totalPercent / 100.0
 
         val isFuture = period.start.isAfter(asOf)
@@ -262,9 +265,7 @@ object FlexiblePeriodAnalyticsCalculator {
             else -> ChronoUnit.DAYS.between(asOf.plusDays(1), period.end) + 1L
         }.coerceAtLeast(0L)
 
-        val categoryResults = categories
-            .filterNot { it.name.equals(TRANSFER_CATEGORY, ignoreCase = true) }
-            .map { category ->
+        val categoryResults = budgetCategories.map { category ->
                 val categoryExpenses = periodExpenses.filter {
                     it.category.equals(category.name, ignoreCase = true)
                 }
@@ -300,8 +301,10 @@ object FlexiblePeriodAnalyticsCalculator {
         val variableForecastTotal = categoryResults.sumOf { it.variableForecast }
         val recurringForecastTotal = categoryResults.sumOf { it.recurringForecast }
         val projectedTotal = actualTotal + futureEnteredTotal + variableForecastTotal + recurringForecastTotal
-        val projectedLow = categoryResults.sumOf { it.projectedLow }
-        val projectedHigh = categoryResults.sumOf { it.projectedHigh }
+        val projectedLow = actualTotal + futureEnteredTotal +
+            categoryResults.sumOf { it.projectedLow - it.actualToDate - it.futureEntered }
+        val projectedHigh = actualTotal + futureEnteredTotal +
+            categoryResults.sumOf { it.projectedHigh - it.actualToDate - it.futureEntered }
         val remainingToPlan = plannedTotal - actualTotal
 
         return FlexiblePeriodReport(
