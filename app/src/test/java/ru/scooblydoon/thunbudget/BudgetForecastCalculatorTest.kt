@@ -206,4 +206,88 @@ class BudgetForecastCalculatorTest {
             result.totalPeriodForecast < 2000.0)
     }
 
+
+    @Test fun detectsDampedPositiveTrendWithoutExtrapolatingFullSpike() {
+        val rows = listOf(
+            "2026-06-10" to 1000.0,
+            "2026-07-10" to 1100.0,
+            "2026-08-10" to 1200.0,
+            "2026-09-10" to 1800.0,
+            "2026-10-10" to 2000.0,
+            "2026-11-10" to 2400.0
+        ).map { ForecastExpense("Продукты", it.second, LocalDate.parse(it.first)) }
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        assertTrue("A multi-period rise should be identified", result.categories.single().trendPercent > 0.0)
+        assertTrue("Trend adjustment must remain damped", result.categories.single().trendPercent <= 15.0)
+    }
+
+    @Test fun classifiesIntermittentCategoriesByFrequencyAndEventSize() {
+        val rows = listOf(
+            ForecastExpense("Подарки", 6000.0, LocalDate.parse("2026-06-10")),
+            ForecastExpense("Подарки", 3000.0, LocalDate.parse("2026-09-10"))
+        )
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Подарки"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        val category = result.categories.single()
+        assertEquals("Редкие расходы", category.profile)
+        assertTrue("A sparse category should use an expected-value forecast", category.forecastForPeriod > 0.0)
+        assertTrue(category.forecastHighForPeriod > category.forecastLowForPeriod)
+    }
+
+    @Test fun exposesWiderRangeForMoreVolatileCategories() {
+        val stable = (0..7).map { i ->
+            ForecastExpense("Продукты", 1500.0, LocalDate.parse("2026-04-10").plusMonths(i.toLong()))
+        }
+        val volatile = listOf(
+            300.0, 6000.0, 500.0, 7000.0, 400.0, 6500.0, 350.0, 6000.0
+        ).mapIndexed { i, amount ->
+            ForecastExpense("Развлечения", amount, LocalDate.parse("2026-04-10").plusMonths(i.toLong()))
+        }
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты", "Развлечения"),
+            expenses = stable + volatile,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 15
+        )
+        val regular = result.categories.first { it.category == "Продукты" }
+        val erratic = result.categories.first { it.category == "Развлечения" }
+        val regularWidth = regular.forecastHighForPeriod - regular.forecastLowForPeriod
+        val erraticWidth = erratic.forecastHighForPeriod - erratic.forecastLowForPeriod
+        assertTrue("Unstable history should produce a wider planning range", erraticWidth > regularWidth)
+    }
+
+    @Test fun flagsAnUnusuallyFastCurrentPeriodPace() {
+        val rows = (0..5).map { i ->
+            ForecastExpense("Продукты", 1500.0, LocalDate.parse("2026-05-10").plusMonths(i.toLong()))
+        } + ForecastExpense("Продукты", 5000.0, LocalDate.parse("2026-11-25"))
+        val result = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-25"),
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = 10
+        )
+        assertTrue("A large current-period acceleration should be flagged", result.categories.single().currentPeriodAnomaly)
+    }
+
 }
