@@ -1503,112 +1503,69 @@ private fun ThunBudgetApp() {
                                     TextButton(onClick = { showExpenseForecast = !showExpenseForecast }) { Text(if (showExpenseForecast) "Свернуть ▲" else "Развернуть ▼") }
                                 }
                                 if (showExpenseForecast) {
-                                    Text(
-                                        "Прогноз переменных расходов строится по завершённым периодам всей истории с повышенным весом последних периодов и постепенно учитывает темп текущего периода. Регулярные платежи добавляются отдельно по датам.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text("Учтено периодов (завершённые + текущий неполный): ${forecast.historyPeriods}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (forecastBacktest.weightedAbsolutePercentageError != null) {
-                                        val wape = String.format(Locale("ru", "RU"), "%.1f", forecastBacktest.weightedAbsolutePercentageError)
-                                        val mae = forecastBacktest.meanAbsoluteError?.let { money(it) } ?: "н/д"
-                                        val bias = forecastBacktest.biasPercent?.let {
-                                            String.format(Locale("ru", "RU"), "%+.1f", it)
-                                        } ?: "н/д"
-                                        Text(
-                                            "Ретропроверка (${forecastBacktest.evaluatedPeriods} периодов): WAPE ${wape}% · MAE ${mae} · смещение ${bias}%",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    } else {
-                                        Text(
-                                            "Для проверки ошибки прогноза пока недостаточно завершённых периодов с фактическими расходами",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Прогноз на следующий месяц", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecast.totalMonthlyForecast + recurringMonthlyForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Ожидаемые расходы всего до ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecastExpectedSpend), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                        }
-                                    }
-                                    Divider()
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Доход / доступные средства периода", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecastAvailableIncome), fontWeight = FontWeight.SemiBold)
-                                        }
-                                        Column(Modifier.weight(1f)) {
-                                            Text(if (forecastBalance >= 0.0) "Ожидаемый остаток" else "Прогнозируемый дефицит", style = MaterialTheme.typography.bodySmall)
                                             Text(
-                                                money(kotlin.math.abs(forecastBalance)),
+                                                money(forecast.totalMonthlyForecast + recurringMonthlyForecast),
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (forecastBalance >= 0.0) Color(0xFF168A72) else Color(0xFFC74444)
+                                                style = MaterialTheme.typography.titleLarge
+                                            )
+                                        }
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                "Ожидаемые расходы до ${nextForecastRange.end.format(formatter)}",
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                            Text(
+                                                money(forecastExpectedSpend),
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.titleLarge
                                             )
                                         }
                                     }
-                                    Text(
-                                        "Уже потрачено: ${money(forecastActualToDate)} · Переменные расходы: ${money(forecast.totalPeriodForecast)} · Регулярные платежи: ${money(upcomingRecurringSpend)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        "Диапазон будущих переменных трат: ${money(forecast.categories.sumOf { it.forecastLowForPeriod })}–${money(forecast.categories.sumOf { it.forecastHighForPeriod })}. При наличии минимум восьми ошибок на категорию он калибруется по rolling backtest; иначе остаётся робастным ориентиром.",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
                                     Divider()
-                                    forecast.categories.forEach { categoryForecast ->
-                                        val categoryActual = expenses.filter { row ->
-                                            row.category.equals(categoryForecast.category, true) &&
-                                                row.date >= nextForecastRange.start.toString() &&
-                                                row.date <= minOf(today, nextForecastRange.end).toString()
-                                        }.sumOf { it.amount }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Column(Modifier.weight(1f)) {
-                                                Text(categoryForecast.category, fontWeight = FontWeight.Medium)
-                                                Text(
-                                                    "${categoryForecast.profile} · доказательность: ${categoryForecast.evidenceQuality}",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                val seasonalLabel = if (categoryForecast.seasonalityCycles >= 2) {
-                                                    "Сезонность ×${String.format(Locale("ru", "RU"), "%.2f", categoryForecast.seasonalityFactor)} (${categoryForecast.seasonalityCycles} цикла)"
-                                                } else "Сезонность не применялась: менее двух полных циклов"
-                                                val intervalLabel = if (categoryForecast.calibrationSamples >= ForecastIntervalCalibrator.MIN_OBSERVATIONS) {
-                                                    "Диапазон: калиброван по ${categoryForecast.calibrationSamples} проверкам (эмпирическое покрытие ${String.format(Locale("ru", "RU"), "%.0f", categoryForecast.calibrationCoveragePercent ?: 0.0)}%)"
-                                                } else {
-                                                    "Диапазон: ориентировочный · ошибок backtest ${categoryForecast.calibrationSamples}/${ForecastIntervalCalibrator.MIN_OBSERVATIONS}"
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        forecast.categories.forEach { categoryForecast ->
+                                            val categoryActual = expenses.filter { row ->
+                                                row.category.equals(categoryForecast.category, true) &&
+                                                    row.date >= nextForecastRange.start.toString() &&
+                                                    row.date <= minOf(today, nextForecastRange.end).toString()
+                                            }.sumOf { it.amount }
+                                            val categoryMonthlyForecast =
+                                                categoryForecast.forecastForNextMonth +
+                                                    (recurringMonthlyForecastByCategory[categoryForecast.category] ?: 0.0)
+                                            val categoryPeriodForecast =
+                                                categoryActual + categoryForecast.forecastForPeriod +
+                                                    (recurringForecastByCategory[categoryForecast.category] ?: 0.0)
+                                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        categoryForecast.category,
+                                                        modifier = Modifier.weight(1f),
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                    Text(
+                                                        money(categoryMonthlyForecast),
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
                                                 }
                                                 Text(
-                                                    "$seasonalLabel · $intervalLabel",
+                                                    "До конца периода: ${money(categoryPeriodForecast)}",
+                                                    modifier = Modifier.align(Alignment.End),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
-                                                Text(
-                                                    "Переменные траты на остаток: ${money(categoryForecast.forecastForPeriod)} (${money(categoryForecast.forecastLowForPeriod)}–${money(categoryForecast.forecastHighForPeriod)})",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    categoryForecast.explanation,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = if (categoryForecast.currentPeriodAnomaly) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Text(money(categoryForecast.forecastForNextMonth + (recurringMonthlyForecastByCategory[categoryForecast.category] ?: 0.0)), fontWeight = FontWeight.SemiBold)
-                                                Text("До конца периода: ${money(categoryActual + categoryForecast.forecastForPeriod + (recurringForecastByCategory[categoryForecast.category] ?: 0.0))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                if (categoryForecast.currentPeriodAnomaly) {
+                                                    Text(
+                                                        "Внимание: расходы выше обычного темпа. Прогноз до конца периода: ${money(categoryPeriodForecast)}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFFC74444)
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
-                                    if (forecast.historyPeriods == 0) {
-                                        Text("Пока недостаточно истории завершённых периодов для надёжного прогноза.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
