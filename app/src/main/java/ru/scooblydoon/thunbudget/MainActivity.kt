@@ -861,7 +861,9 @@ private fun ThunBudgetApp() {
         firstStart = analyticsCycleIncome.firstStart,
         firstEnd = analyticsCycleIncome.firstEnd,
         secondStart = analyticsCycleIncome.secondStart,
-        secondEnd = analyticsCycleIncome.secondEnd
+        secondEnd = analyticsCycleIncome.secondEnd,
+        firstIncome = analyticsCycleIncome.firstIncome,
+        secondIncome = analyticsCycleIncome.secondIncome
     )
     val analyticsCyclePlanAmounts = currentCategoryShares.associate { (name, _) ->
         name to analyticsCycleIncome.totalIncome.coerceAtLeast(0.0) *
