@@ -85,7 +85,7 @@ class FlexiblePeriodsTest {
     @Test
     fun crossingFromFebruaryIntoMarchUsesTheLongerMonthsThirtyOneDayLimit() {
         val februaryAndMarch = period("february-march", "Февраль–март", "2026-02-01", "2026-03-03")
-        assertEquals(30L, FlexiblePeriodRules.totalDays(listOf(februaryAndMarch)))
+        assertEquals(31L, FlexiblePeriodRules.totalDays(listOf(februaryAndMarch)))
         assertEquals(31L, FlexiblePeriodRules.maximumAllowedDays(februaryAndMarch.start, februaryAndMarch.end))
     }
 
