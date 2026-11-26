@@ -71,6 +71,40 @@ internal fun FlexiblePeriodsScreen(
         Color(0xFF9A6AD6), Color(0xFFE16C70), Color(0xFF5C9DB8),
         Color(0xFF8B9A45), Color(0xFF7A8290)
     )
+    val report = if (selected != null) {
+        remember(
+            selected, expenses, incomeEntries, categories, monthlyIncome, recurringPayments,
+            today, firstPeriodStartDay, firstPeriodEndDay
+        ) {
+            buildFlexiblePeriodReport(
+                selected, expenses, incomeEntries, categories, monthlyIncome,
+                recurringPayments, today, firstPeriodStartDay, firstPeriodEndDay
+            )
+        }
+    } else null
+    val selectedIndex = if (selected != null) ordered.indexOfFirst { it.id == selected.id } else -1
+    val previousPeriod = if (selectedIndex > 0) ordered.getOrNull(selectedIndex - 1) else null
+    val previousReport = if (previousPeriod != null) {
+        remember(previousPeriod, expenses, incomeEntries, categories, monthlyIncome, today) {
+            FlexiblePeriodAnalyticsCalculator.calculate(
+                period = previousPeriod,
+                categories = categories.map { category -> FlexiblePeriodCategoryPlan(category.name, category.percent) },
+                expenses = expenses.mapNotNull { row ->
+                    runCatching {
+                        FlexiblePeriodExpense(row.id, row.title, row.category, row.amount, LocalDate.parse(row.date))
+                    }.getOrNull()
+                },
+                incomes = incomeEntries.mapNotNull { entry ->
+                    runCatching {
+                        FlexiblePeriodIncome(entry.amount, LocalDate.parse(entry.date), entry.isCarryover)
+                    }.getOrNull()
+                },
+                monthlyIncomeFallback = monthlyIncome,
+                asOf = today
+            )
+        }
+    } else null
+
 
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp),
@@ -171,34 +205,7 @@ internal fun FlexiblePeriodsScreen(
             }
         }
 
-        if (selected != null) {
-            val report = remember(
-                selected, expenses, incomeEntries, categories, monthlyIncome, recurringPayments,
-                today, firstPeriodStartDay, firstPeriodEndDay
-            ) {
-                buildFlexiblePeriodReport(
-                    selected, expenses, incomeEntries, categories, monthlyIncome,
-                    recurringPayments, today, firstPeriodStartDay, firstPeriodEndDay
-                )
-            }
-            val index = ordered.indexOfFirst { it.id == selected.id }
-            val previous = ordered.getOrNull(index - 1)
-            val previousReport = previous?.let {
-                remember(it, expenses, incomeEntries, categories, monthlyIncome, today) {
-                    FlexiblePeriodAnalyticsCalculator.calculate(
-                        period = it,
-                        categories = categories.map { c -> FlexiblePeriodCategoryPlan(c.name, c.percent) },
-                        expenses = expenses.mapNotNull { row ->
-                            runCatching { FlexiblePeriodExpense(row.id, row.title, row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
-                        },
-                        incomes = incomeEntries.mapNotNull { row ->
-                            runCatching { FlexiblePeriodIncome(row.amount, LocalDate.parse(row.date), row.isCarryover) }.getOrNull()
-                        },
-                        monthlyIncomeFallback = monthlyIncome,
-                        asOf = today
-                    )
-                }
-            }
+        if (selected != null && report != null) {
             item { Divider(); Text("Аналитика периода", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
             item {
                 val execution = if (report.plannedTotal > 0.0) report.projectedTotal / report.plannedTotal else 0.0
@@ -251,7 +258,7 @@ internal fun FlexiblePeriodsScreen(
                     }
                 }
             }
-            if (previousReport != null && previous != null) {
+            if (previousReport != null && previousPeriod != null) {
                 item {
                     val currentAverage = report.averageActualPerElapsedDay
                     val previousAverage = previousReport.averageActualPerElapsedDay
@@ -261,7 +268,7 @@ internal fun FlexiblePeriodsScreen(
                     Card(shape = RoundedCornerShape(16.dp)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Сравнение с предыдущим периодом", fontWeight = FontWeight.SemiBold)
-                            Text(previous.name + " · " + previous.dayCount + " дней", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(previousPeriod.name + " · " + previousPeriod.dayCount + " дней", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
                                 if (difference == null) "Недостаточно данных для сравнения среднего дневного расхода."
                                 else "Средний расход в день: " + formatFlexibleMoney(currentAverage!!) + " против " +
