@@ -1648,26 +1648,8 @@ private fun ThunBudgetApp() {
                             }
                         }
                     }
-                    item { Text("Текущий отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
-                    item {
-                        val currentStart = LocalDate.parse(periodStart)
-                        val currentEnd = LocalDate.parse(periodEnd)
-                        val total = expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
-                        MetricCard("${currentStart.format(formatter)} — ${currentEnd.format(formatter)} · расходы",money(total),Modifier.fillMaxWidth())
-                    }
                     item { Text("Источник месячного дохода для расчёта бюджета",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { SegmentedButton(selected=analyticsIncomeMode==0,onClick={analyticsIncomeMode=0},shape=SegmentedButtonDefaults.itemShape(0,2)) { Text("Месячный доход") }; SegmentedButton(selected=analyticsIncomeMode==1,onClick={analyticsIncomeMode=1},shape=SegmentedButtonDefaults.itemShape(1,2)) { Text("2 отчётных периода") } }; Text(if(analyticsIncomeMode==0) "Месячный доход из настроек: ${money(analyticsMonthIncome)}" else "Доходы за периоды 24–8 и 9–23: ${money(analyticsMonthIncome)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                    item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
-                    item {
-                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick={analyticsMonth=analyticsMonth.minusMonths(1)}) { Text("‹") }
-                            Text(analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU")).withLocale(Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                            TextButton(onClick={if(analyticsMonth<YearMonth.now()) analyticsMonth=analyticsMonth.plusMonths(1)}) { Text("›") }
-                        }
-                        val from=analyticsMonth.atDay(1).toString()
-                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
-                        val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
-                        MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
-                    }
+                    item { Text("Выбранный месяц: " + analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -1747,6 +1729,56 @@ private fun ThunBudgetApp() {
                             }
                         }
                     }
+                    item { Divider(); Text("Расходы за выбранный отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item {
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected=analyticsPeriodType==0,onClick={analyticsPeriodType=0},label={Text("9–23")})
+                            FilterChip(selected=analyticsPeriodType==1,onClick={analyticsPeriodType=1},label={Text("24–8")})
+                        }
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            TextButton(onClick={analyticsPeriodMonth=analyticsPeriodMonth.minusMonths(1)}) { Text("‹") }
+                            Text(analyticsPeriodMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                            TextButton(onClick={if(analyticsPeriodMonth<YearMonth.now()) analyticsPeriodMonth=analyticsPeriodMonth.plusMonths(1)}) { Text("›") }
+                        }
+                    }
+                    item {
+                        val periodProposal = ReportingPeriodCalculator.propose(analyticsPeriodMonth, firstPeriodStartDay, firstPeriodEndDay)
+                        val pStart=if(analyticsPeriodType==0) periodProposal.first.start else periodProposal.second.start
+                        val pEnd=if(analyticsPeriodType==0) periodProposal.first.end else periodProposal.second.end
+                        val visibleEnd=minOf(pEnd,today)
+                        val periodTotal=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
+                        MetricCard("${pStart.format(formatter)} — ${pEnd.format(formatter)} · потрачено",money(periodTotal),Modifier.fillMaxWidth())
+                    }
+                    item { TextButton(onClick={showPeriodCategories=!showPeriodCategories; persistUiExpanded(context,"period_categories",showPeriodCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showPeriodCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
+                    if(showPeriodCategories) items(categories,key={ "period-"+it.name }) { cat ->
+                        val periodProposal = ReportingPeriodCalculator.propose(analyticsPeriodMonth, firstPeriodStartDay, firstPeriodEndDay)
+                        val pStart=if(analyticsPeriodType==0) periodProposal.first.start else periodProposal.second.start
+                        val pEnd=if(analyticsPeriodType==0) periodProposal.first.end else periodProposal.second.end
+                        val visibleEnd=minOf(pEnd,today)
+                        val fact=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.category==cat.name && it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
+                        val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
+                        val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
+                        val pEffectiveIncome=pIncome+pCarryover
+                        val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*cat.percent/100.0 else plannedForPeriod(analyticsMonthIncome,cat.percent,pStart.toString(),pEnd.toString())
+                        Card { Column(Modifier.padding(14.dp)) {
+                            Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
+                            val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
+                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток бюджета: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
+                            Text("Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}%",style=MaterialTheme.typography.labelSmall,color=if((metrics.remainingPercent ?: 0.0)<0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant)
+                        } }
+                    }
+                    item { Text("Расходы за отчётный месяц",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item {
+                        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick={analyticsMonth=analyticsMonth.minusMonths(1)}) { Text("‹") }
+                            Text(analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU")).withLocale(Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                            TextButton(onClick={if(analyticsMonth<YearMonth.now()) analyticsMonth=analyticsMonth.plusMonths(1)}) { Text("›") }
+                        }
+                        val from=analyticsMonth.atDay(1).toString()
+                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
+                        val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
+                        MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
+                    }
                     item {
                         val previousMonth = analyticsMonth.minusMonths(1)
                         val currentFrom = analyticsMonth.atDay(1)
@@ -1792,44 +1824,6 @@ private fun ThunBudgetApp() {
                             LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
                             Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
-                            Text("Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}%",style=MaterialTheme.typography.labelSmall,color=if((metrics.remainingPercent ?: 0.0)<0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant)
-                        } }
-                    }
-                    item { Divider(); Text("Расходы за выбранный отчётный период",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
-                    item {
-                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected=analyticsPeriodType==0,onClick={analyticsPeriodType=0},label={Text("9–23")})
-                            FilterChip(selected=analyticsPeriodType==1,onClick={analyticsPeriodType=1},label={Text("24–8")})
-                        }
-                        Row(verticalAlignment=Alignment.CenterVertically) {
-                            TextButton(onClick={analyticsPeriodMonth=analyticsPeriodMonth.minusMonths(1)}) { Text("‹") }
-                            Text(analyticsPeriodMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                            TextButton(onClick={if(analyticsPeriodMonth<YearMonth.now()) analyticsPeriodMonth=analyticsPeriodMonth.plusMonths(1)}) { Text("›") }
-                        }
-                    }
-                    item {
-                        val periodProposal = ReportingPeriodCalculator.propose(analyticsPeriodMonth, firstPeriodStartDay, firstPeriodEndDay)
-                        val pStart=if(analyticsPeriodType==0) periodProposal.first.start else periodProposal.second.start
-                        val pEnd=if(analyticsPeriodType==0) periodProposal.first.end else periodProposal.second.end
-                        val visibleEnd=minOf(pEnd,today)
-                        val periodTotal=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
-                        MetricCard("${pStart.format(formatter)} — ${pEnd.format(formatter)} · потрачено",money(periodTotal),Modifier.fillMaxWidth())
-                    }
-                    item { TextButton(onClick={showPeriodCategories=!showPeriodCategories; persistUiExpanded(context,"period_categories",showPeriodCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showPeriodCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
-                    if(showPeriodCategories) items(categories,key={ "period-"+it.name }) { cat ->
-                        val periodProposal = ReportingPeriodCalculator.propose(analyticsPeriodMonth, firstPeriodStartDay, firstPeriodEndDay)
-                        val pStart=if(analyticsPeriodType==0) periodProposal.first.start else periodProposal.second.start
-                        val pEnd=if(analyticsPeriodType==0) periodProposal.first.end else periodProposal.second.end
-                        val visibleEnd=minOf(pEnd,today)
-                        val fact=if(visibleEnd.isBefore(pStart)) 0.0 else expenses.filter { it.category==cat.name && it.date>=pStart.toString() && it.date<=visibleEnd.toString() }.sumOf { it.amount }
-                        val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
-                        val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
-                        val pEffectiveIncome=pIncome+pCarryover
-                        val plan=if(pEffectiveIncome>0.0) pEffectiveIncome*cat.percent/100.0 else plannedForPeriod(analyticsMonthIncome,cat.percent,pStart.toString(),pEnd.toString())
-                        Card { Column(Modifier.padding(14.dp)) {
-                            Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
-                            val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
-                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток бюджета: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
                             Text("Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}%",style=MaterialTheme.typography.labelSmall,color=if((metrics.remainingPercent ?: 0.0)<0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant)
                         } }
                     }
