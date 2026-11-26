@@ -159,8 +159,17 @@ class AnalyticsBudgetTest {
         )
 
         assertEquals(20.0, result.averagePercentages["Продукты"]!!, 0.001)
-        assertEquals(20.0, result.averagePercentages["Транспорт"]!!, 0.001)
-        assertEquals(60.0, result.averagePercentages["Резервные средства"]!!, 0.001)
+        val totalCycleIncome = 60854.0 + 36881.0
+        assertEquals(
+            (60854.0 * 0.10 + 36881.0 * 0.30) / totalCycleIncome * 100.0,
+            result.averagePercentages["Транспорт"]!!,
+            0.001
+        )
+        assertEquals(
+            (60854.0 * 0.70 + 36881.0 * 0.50) / totalCycleIncome * 100.0,
+            result.averagePercentages["Резервные средства"]!!,
+            0.001
+        )
         assertEquals(10.0, result.firstPeriodPercentages["Транспорт"]!!, 0.001)
         assertEquals(30.0, result.secondPeriodPercentages["Транспорт"]!!, 0.001)
 
@@ -198,7 +207,9 @@ class AnalyticsBudgetTest {
             firstStart = java.time.LocalDate.parse("2026-11-09"),
             firstEnd = java.time.LocalDate.parse("2026-11-23"),
             secondStart = java.time.LocalDate.parse("2026-11-24"),
-            secondEnd = java.time.LocalDate.parse("2026-12-08")
+            secondEnd = java.time.LocalDate.parse("2026-12-08"),
+            firstIncome = 60854.0,
+            secondIncome = 36881.0
         )
 
         assertEquals(20.0, result.averagePercentages["Продукты"]!!, 0.001)
