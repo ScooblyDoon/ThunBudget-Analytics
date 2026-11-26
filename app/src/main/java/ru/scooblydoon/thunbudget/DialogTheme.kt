@@ -172,6 +172,7 @@ internal fun AppAlertDialog(
                 )
                 dialogWindow?.setBackgroundDrawableResource(android.R.color.transparent)
             }
+            CompositionLocalProvider(LocalThunBudgetDialogFields provides true) {
             Surface(
                 modifier = modifier.fillMaxWidth(0.92f).widthIn(max = 440.dp),
                 shape = RoundedCornerShape(24.dp),
@@ -208,6 +209,7 @@ internal fun AppAlertDialog(
                         }
                     }
                 }
+            }
             }
         }
         }
