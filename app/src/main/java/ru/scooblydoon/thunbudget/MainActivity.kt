@@ -1509,6 +1509,11 @@ private fun ThunBudgetApp() {
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    Text(
+                                        "Ориентировочный диапазон будущих переменных трат: ${money(forecast.categories.sumOf { it.forecastLowForPeriod })}–${money(forecast.categories.sumOf { it.forecastHighForPeriod })}. Это оценка разброса, не гарантия.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                     Divider()
                                     forecast.categories.forEach { categoryForecast ->
                                         val categoryActual = expenses.filter { row ->
@@ -1519,9 +1524,21 @@ private fun ThunBudgetApp() {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Column(Modifier.weight(1f)) {
                                                 Text(categoryForecast.category, fontWeight = FontWeight.Medium)
-                                                if (!categoryForecast.hasHistory) {
-                                                    Text("Недостаточно истории для прогноза — фактические расходы учтены отдельно", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
+                                                Text(
+                                                    "${categoryForecast.profile} · доказательность: ${categoryForecast.evidenceQuality}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    "Переменные траты на остаток: ${money(categoryForecast.forecastForPeriod)} (${money(categoryForecast.forecastLowForPeriod)}–${money(categoryForecast.forecastHighForPeriod)})",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    categoryForecast.explanation,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (categoryForecast.currentPeriodAnomaly) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
                                                 Text(money(categoryForecast.forecastForNextMonth + recurringPayments.filter { it.active && it.category.equals(categoryForecast.category, true) }.sumOf { it.amount }), fontWeight = FontWeight.SemiBold)
