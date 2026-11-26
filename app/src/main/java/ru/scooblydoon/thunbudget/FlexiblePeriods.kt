@@ -29,8 +29,9 @@ data class FlexiblePeriodDefinition(
 
 object FlexiblePeriodRules {
     /**
-     * Custom periods form one continuous calendar sequence. This prevents a date
-     * from being counted twice or silently falling between adjacent periods.
+     * The user-defined cycle is a consecutive sequence of custom periods.
+     * Its total duration may use the number of days in one touched calendar
+     * month, or in two adjacent months when the sequence crosses a month edge.
      */
     fun validateSequence(periods: List<FlexiblePeriodDefinition>): List<FlexiblePeriodDefinition> {
         require(periods.map { it.id }.distinct().size == periods.size) {
@@ -46,9 +47,52 @@ object FlexiblePeriodRules {
                 "Периоды должны идти подряд: без пересечений и пропущенных дней."
             }
         }
+        if (ordered.isNotEmpty()) {
+            val startMonth = YearMonth.from(ordered.first().start)
+            val endMonth = YearMonth.from(ordered.last().end)
+            val touchedMonths = ChronoUnit.MONTHS.between(startMonth, endMonth) + 1L
+            require(touchedMonths in 1L..2L) {
+                "Одна последовательность может затрагивать не более двух календарных месяцев."
+            }
+            val maximumDays = maximumAllowedDays(ordered.first().start, ordered.last().end)
+            val totalDays = ordered.sumOf { it.dayCount }
+            require(totalDays <= maximumDays) {
+                "Общая длительность периодов не может превышать $maximumDays календарных дней."
+            }
+        }
         return ordered
     }
 
+    /**
+     * When the sequence crosses one month boundary, use the longer of the
+     * two calendar months. This permits a 31-day cycle such as Nov 16–Dec 16,
+     * while February-only sequences remain limited to 28 or 29 days.
+     */
+    fun maximumAllowedDays(start: LocalDate, end: LocalDate): Long {
+        require(!end.isBefore(start))
+        val firstMonth = YearMonth.from(start)
+        val lastMonth = YearMonth.from(end)
+        val touchedMonths = ChronoUnit.MONTHS.between(firstMonth, lastMonth) + 1L
+        require(touchedMonths in 1L..2L) {
+            "Последовательность может затрагивать не более двух календарных месяцев."
+        }
+        return maxOf(firstMonth.lengthOfMonth(), lastMonth.lengthOfMonth()).toLong()
+    }
+
+    fun totalDays(periods: List<FlexiblePeriodDefinition>): Long =
+        validateSequence(periods).sumOf { it.dayCount }
+
+    fun remainingDays(periods: List<FlexiblePeriodDefinition>): Long {
+        val ordered = validateSequence(periods)
+        if (ordered.isEmpty()) return 31L
+        val maximum = maximumAllowedDays(ordered.first().start, ordered.last().end)
+        return (maximum - ordered.sumOf { it.dayCount }).coerceAtLeast(0L)
+    }
+
+    /**
+     * Periods are appended in chronological order. A new period always starts
+     * the day after the previous one, so users cannot create gaps or overlaps.
+     */
     fun add(
         periods: List<FlexiblePeriodDefinition>,
         period: FlexiblePeriodDefinition
@@ -58,10 +102,8 @@ object FlexiblePeriodRules {
             "Период с таким идентификатором уже существует."
         }
         if (ordered.isNotEmpty()) {
-            val canPrepend = period.end.plusDays(1) == ordered.first().start
-            val canAppend = ordered.last().end.plusDays(1) == period.start
-            require(canPrepend || canAppend) {
-                "Новый период должен примыкать к началу или концу существующей последовательности."
+            require(ordered.last().end.plusDays(1) == period.start) {
+                "Новый период должен начинаться на следующий день после предыдущего."
             }
         }
         return validateSequence(ordered + period)
@@ -85,7 +127,7 @@ object FlexiblePeriodRules {
         require(ordered.any { it.id == id }) { "Период не найден." }
         val index = ordered.indexOfFirst { it.id == id }
         require(index == 0 || index == ordered.lastIndex) {
-            "Сначала объедини соседние интервалы, чтобы не оставить разрыв в последовательности."
+            "Удалить можно только первый или последний период последовательности."
         }
         return ordered.filterNot { it.id == id }
     }
@@ -96,7 +138,6 @@ object FlexiblePeriodRules {
     ): FlexiblePeriodDefinition? =
         validateSequence(periods).singleOrNull { !date.isBefore(it.start) && !date.isAfter(it.end) }
 }
-
 class FlexiblePeriodRepository(private val preferences: SharedPreferences) {
     companion object {
         const val KEY = "flexible_periods_v1"
