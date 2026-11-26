@@ -772,7 +772,13 @@ private fun ThunBudgetApp() {
     val overviewMonth = YearMonth.from(LocalDate.parse(periodEnd))
     val monthPeriodIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, overviewMonth, true)
     val displayedMonthlyIncome = if(monthPeriodIncome>0.0) monthPeriodIncome else income
-    val analyticsMonthIncome = AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, analyticsIncomeMode == 1)
+    val analyticsMonthIncome = if (analyticsIncomeMode == 1) {
+        val twoPeriodTotal = ReportingPeriodIncomeCalculator.sumForMonth(periodIncomes, analyticsMonth)
+        twoPeriodTotal.takeIf { it > 0.0 }
+            ?: AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, false)
+    } else {
+        AnalyticsBudgetCalculator.monthlyIncome(income, periodIncomes, analyticsMonth, false)
+    }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
     val remaining=planned-totalSpent
@@ -3304,7 +3310,6 @@ private fun SettingsDialog(
         "categories" to "Категории",
         "income" to "Доход",
         "period" to "Период",
-        "flexible" to "Гибкие периоды",
         "overview" to "Обзор",
         "export" to "Excel",
         "backup" to "Копирование",
@@ -3340,16 +3345,6 @@ private fun SettingsDialog(
                         Text("Цель рассчитывается от дохода и используется в планировании бюджета.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     "period" -> ReportingPeriodSettingsSection(startDay=firstPeriodStartDay,endDay=firstPeriodEndDay,onSave=onSaveReportingDays)
-                    "flexible" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                        Text("Произвольные отчётные периоды",fontWeight=FontWeight.Bold)
-                        Text("В будущем можно будет создавать любое количество периодов: 4 недельных, 6 периодов по 4–5 дней или ежедневные интервалы.",style=MaterialTheme.typography.bodyMedium)
-                        Text("Предлагаемая логика аналитики:",fontWeight=FontWeight.SemiBold)
-                        Text("• Операция относится ровно к одному периоду по дате — без пропусков и двойного учёта.")
-                        Text("• Прогноз считается по фактическому числу дней каждого периода, а не по условному месяцу.")
-                        Text("• Сводки за месяц и год остаются календарными; отчётные периоды показываются отдельным срезом.")
-                        Text("• Доходы, регулярные платежи и перенос остатков распределяются по датам, а не делятся механически на число периодов.")
-                        Text("Пока это проектируемый режим: он не меняет текущие расчёты и историю.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                     "overview" -> Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("Настройка главного экрана",fontWeight=FontWeight.Bold)
                         Text("Измени порядок информационных блоков на вкладке «Обзор».",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
