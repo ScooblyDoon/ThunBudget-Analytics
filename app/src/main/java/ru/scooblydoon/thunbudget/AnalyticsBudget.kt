@@ -38,101 +38,131 @@ internal data class ReportingCycleIncomeEstimate(
 }
 
 
-internal data class ReportingCycleCategoryAllocation(
-    val percentages: Map<String, Double>,
-    val periodPercentages: Map<String, List<Double>>,
-    val periodsUsed: Int
+internal data class ReportingCycleCategoryPlan(
+    val averagePercentages: Map<String, Double>,
+    val firstPeriodPercentages: Map<String, Double>,
+    val secondPeriodPercentages: Map<String, Double>
 )
 
 /**
- * Derives live category shares from the first and second reporting periods
- * in the selected cycle. Each period has equal weight, so 20% and 26% become
- * a 23% planning share. Only periods with a recorded earned-income amount
- * are included; carryovers and future-dated expenses are excluded.
+ * Uses the percentages that were actually assigned as the category plan in
+ * each reporting period. Actual spending is deliberately not used to derive
+ * a plan percentage. Missing historical snapshots fall back to the current
+ * category setup, which is the safest migration path for older app versions.
  */
-internal object ReportingCycleCategoryAllocationCalculator {
-    private const val RESERVE_CATEGORY = "Резервные средства"
-    private const val PROTECTED_RESERVE_CATEGORY = "Непредвиденные расходы"
+internal object ReportingPeriodCategoryPlanCalculator {
     private const val TRANSFER_CATEGORY = "Перенос средств"
 
-    fun calculate(
+    fun cyclePlan(
+        currentShares: List<Pair<String, Double>>,
+        savedPlans: Map<Pair<String, String>, Map<String, Double>>,
+        firstStart: java.time.LocalDate,
+        firstEnd: java.time.LocalDate,
+        secondStart: java.time.LocalDate,
+        secondEnd: java.time.LocalDate
+    ): ReportingCycleCategoryPlan {
+        val fallback = currentShares.associate { it.first to it.second }
+        fun readPlan(start: java.time.LocalDate, end: java.time.LocalDate): Map<String, Double> {
+            val stored = savedPlans[start.toString() to end.toString()].orEmpty()
+            return currentShares.associate { (name, current) ->
+                val storedValue = stored.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+                val value = storedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current
+                name to if (name.equals(TRANSFER_CATEGORY, true)) 0.0 else value
+            }
+        }
+        val first = readPlan(firstStart, firstEnd)
+        val second = readPlan(secondStart, secondEnd)
+        val average = currentShares.associate { (name, current) ->
+            val firstValue = first[name] ?: current
+            val secondValue = second[name] ?: current
+            name to if (name.equals(TRANSFER_CATEGORY, true)) 0.0
+                else ((firstValue + secondValue) / 2.0).coerceIn(0.0, 100.0)
+        }
+        return ReportingCycleCategoryPlan(
+            averagePercentages = average,
+            firstPeriodPercentages = first,
+            secondPeriodPercentages = second
+        )
+    }
+
+    /**
+     * Calendar-month category budget: each known income period contributes
+     * only its calendar-day overlap with the selected month, multiplied by
+     * the saved plan percentage for that exact period. Missing future days
+     * may receive the separate income forecast at the average available plan
+     * percentage; missing past days are never filled.
+     */
+    fun monthlyPlan(
         currentShares: List<Pair<String, Double>>,
         periodIncomes: List<PeriodIncome>,
-        expenses: List<Expense>,
+        savedPlans: Map<Pair<String, String>, Map<String, Double>>,
         month: java.time.YearMonth,
-        firstStartDay: Int,
-        firstEndDay: Int,
-        asOf: java.time.LocalDate
-    ): ReportingCycleCategoryAllocation {
-        val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
-        val ranges = listOf(proposal.first, proposal.second)
-        val samples = ranges.mapNotNull { range ->
-            if (range.start.isAfter(asOf)) return@mapNotNull null
-            val earnedIncome = periodIncomes.asSequence()
-                .filter { it.start == range.start.toString() && it.end == range.end.toString() }
-                .sumOf { if (it.earnedAmount.isFinite()) it.earnedAmount.coerceAtLeast(0.0) else 0.0 }
-            if (earnedIncome <= 0.0) return@mapNotNull null
-            val visibleEnd = minOf(range.end, asOf)
-            val periodExpenses = expenses.filter { row ->
-                row.date >= range.start.toString() && row.date <= visibleEnd.toString() &&
-                    !row.category.equals(TRANSFER_CATEGORY, ignoreCase = true) &&
-                    row.amount.isFinite() && row.amount > 0.0
+        forecastIncome: Double = 0.0
+    ): Map<String, Double> {
+        val result = currentShares.associate { it.first to 0.0 }.toMutableMap()
+        val monthStart = month.atDay(1)
+        val monthEnd = month.atEndOfMonth()
+        val coveredDates = mutableSetOf<java.time.LocalDate>()
+        val validPeriods = periodIncomes.mapNotNull { row ->
+            val start = runCatching { java.time.LocalDate.parse(row.start) }.getOrNull() ?: return@mapNotNull null
+            val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
+            val earned = row.earnedAmount
+            if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
+            Triple(start, end, earned)
+        }.groupBy { it.first to it.second }
+            .map { (range, rows) -> Triple(range.first, range.second, rows.sumOf { it.third }) }
+            .sortedBy { it.first }
+
+        validPeriods.forEach { (start, end, earnedAmount) ->
+            val overlapStart = maxOf(start, monthStart)
+            val overlapEnd = minOf(end, monthEnd)
+            if (overlapEnd.isBefore(overlapStart)) return@forEach
+            val dayCount = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
+            if (dayCount <= 0L) return@forEach
+            val dailyIncome = earnedAmount / dayCount.toDouble()
+            val saved = savedPlans[start.toString() to end.toString()].orEmpty()
+            val planForPeriod = currentShares.associate { (name, current) ->
+                val savedValue = saved.entries.firstOrNull { it.key.equals(name, true) }?.value
+                name to (savedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current)
             }
-            range to (earnedIncome to periodExpenses)
-        }
-
-        if (samples.isEmpty()) {
-            return ReportingCycleCategoryAllocation(
-                percentages = currentShares.toMap(),
-                periodPercentages = emptyMap(),
-                periodsUsed = 0
-            )
-        }
-
-        val periodPercentages = currentShares.associate { (name, _) ->
-            val values = samples.map { (_, sample) ->
-                val (income, periodExpenses) = sample
-                val spent = periodExpenses.asSequence()
-                    .filter { it.category.equals(name, ignoreCase = true) }
-                    .sumOf { it.amount }
-                spent / income * 100.0
+            var date = overlapStart
+            while (!date.isAfter(overlapEnd)) {
+                if (coveredDates.add(date)) {
+                    currentShares.forEach { (name, _) ->
+                        if (!name.equals(TRANSFER_CATEGORY, true)) {
+                            result[name] = (result[name] ?: 0.0) +
+                                dailyIncome * (planForPeriod[name] ?: 0.0) / 100.0
+                        }
+                    }
+                }
+                date = date.plusDays(1)
             }
-            name to values
         }
 
-        val shares = currentShares.associate { (name, current) ->
-            val samplesForCategory = periodPercentages[name].orEmpty()
-            val hasActualHistory = samplesForCategory.any { it > 0.0 }
-            val value = when {
-                name.equals(RESERVE_CATEGORY, ignoreCase = true) -> current
-                name.equals(PROTECTED_RESERVE_CATEGORY, ignoreCase = true) -> current
-                name.equals(TRANSFER_CATEGORY, ignoreCase = true) -> current
-                hasActualHistory -> samplesForCategory.average()
-                else -> current
+        // Forecast is already limited to uncovered future calendar days by
+        // CalendarMonthIncomeEstimate. Use an equal-weight average of the
+        // actual plan shares in the reporting periods intersecting this month.
+        if (forecastIncome.isFinite() && forecastIncome > 0.0) {
+            val relevantPlans = validPeriods.filter { (start, end, _) ->
+                !end.isBefore(monthStart) && !start.isAfter(monthEnd)
+            }.map { (start, end, _) ->
+                val saved = savedPlans[start.toString() to end.toString()].orEmpty()
+                currentShares.associate { (name, current) ->
+                    val storedValue = saved.entries.firstOrNull { it.key.equals(name, true) }?.value
+                    name to (storedValue?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: current)
+                }
             }
-            name to value.coerceIn(0.0, 100.0)
-        }.toMutableMap()
-
-        val reserveNames = currentShares.map { it.first }
-            .filter { it.equals(RESERVE_CATEGORY, ignoreCase = true) }
-        val nonReserveTotal = shares.filterKeys { !it.equals(RESERVE_CATEGORY, ignoreCase = true) }
-            .values.sumOf { it.coerceAtLeast(0.0) }
-        if (nonReserveTotal > 100.0) {
-            val scale = 100.0 / nonReserveTotal
-            shares.keys.filterNot { it.equals(RESERVE_CATEGORY, ignoreCase = true) }
-                .forEach { name -> shares[name] = (shares[name] ?: 0.0) * scale }
+            val forecastShares = currentShares.associate { (name, current) ->
+                name to if (relevantPlans.isNotEmpty()) relevantPlans.map { it[name] ?: current }.average() else current
+            }
+            currentShares.forEach { (name, _) ->
+                if (!name.equals(TRANSFER_CATEGORY, true)) {
+                    result[name] = (result[name] ?: 0.0) +
+                        forecastIncome * (forecastShares[name] ?: 0.0) / 100.0
+                }
+            }
         }
-        reserveNames.firstOrNull()?.let { reserveName ->
-            val allocated = shares.filterKeys { !it.equals(RESERVE_CATEGORY, ignoreCase = true) }
-                .values.sumOf { it.coerceAtLeast(0.0) }
-            shares[reserveName] = (100.0 - allocated).coerceAtLeast(0.0)
-        }
-
-        return ReportingCycleCategoryAllocation(
-            percentages = shares,
-            periodPercentages = periodPercentages,
-            periodsUsed = samples.size
-        )
+        return result
     }
 }
 
