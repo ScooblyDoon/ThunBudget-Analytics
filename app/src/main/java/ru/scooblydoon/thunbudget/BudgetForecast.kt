@@ -28,7 +28,14 @@ data class CategoryForecast(
     val evidenceQuality: String = "Низкая",
     val positiveHistoryPeriods: Int = 0,
     val currentPeriodAnomaly: Boolean = false,
-    val explanation: String = ""
+    val explanation: String = "",
+    val seasonalityFactor: Double = 1.0,
+    val seasonalityCycles: Int = 0,
+    val seasonalityApplied: Boolean = false,
+    val intervalMethod: String = "Ориентировочный диапазон",
+    val calibrationSamples: Int = 0,
+    val calibrationCoveragePercent: Double? = null,
+    val calibrationScaleForPeriod: Double = forecastForPeriod
 ) {
     val historyMonths: Int get() = historyPeriods
 }
@@ -69,7 +76,10 @@ object BudgetForecastCalculator {
         firstStartDay: Int,
         firstEndDay: Int,
         monthsToAnalyze: Int,
-        nextPeriodDays: Int? = null
+        nextPeriodDays: Int? = null,
+        calibration: ForecastCalibration? = null,
+        forecastStartDate: LocalDate? = null,
+        forecastEndDate: LocalDate? = null
     ): BudgetForecast {
         require(firstStartDay in 1..31 && firstEndDay in firstStartDay..31)
 
@@ -106,7 +116,20 @@ object BudgetForecastCalculator {
             activeTotalDays > 0L -> activeTotalDays.toDouble()
             else -> 0.0
         }
-        val targetDays = nextPeriodDays?.coerceAtLeast(0)?.toDouble() ?: averagePeriodDays
+        val inferredTargetDays = nextPeriodDays?.coerceAtLeast(0)?.toDouble() ?: averagePeriodDays
+        val explicitTargetRange = forecastStartDate?.let { start ->
+            forecastEndDate?.takeIf { end -> !end.isBefore(start) }?.let { end -> start to end }
+        }
+        val targetDays = explicitTargetRange?.let {
+            ChronoUnit.DAYS.between(it.first, it.second).toDouble() + 1.0
+        } ?: inferredTargetDays
+        val inferredRangeStart = explicitTargetRange?.first ?: asOf.plusDays(1)
+        val inferredRangeEnd = explicitTargetRange?.second ?: if (nextPeriodDays != null && nextPeriodDays > 0) {
+            inferredRangeStart.plusDays(nextPeriodDays.toLong() - 1L)
+        } else null
+        val targetRange = explicitTargetRange ?: if (
+            inferredRangeEnd != null && !inferredRangeEnd.isBefore(inferredRangeStart)
+        ) inferredRangeStart to inferredRangeEnd else null
         val monthDays = 365.2425 / 12.0
         val observedPeriods = completedPeriods.size + if (activeExpenses.isNotEmpty()) 1 else 0
         val historyStart = completedPeriods.firstOrNull()?.start ?: activePeriod?.start
@@ -188,13 +211,57 @@ object BudgetForecastCalculator {
             if (profile == "Редкие расходы") {
                 uncertainty = maxOf(uncertainty, (1.0 - positiveFrequency) * 0.65)
             }
-            val monthlyForecast = dailyRate * monthDays
-            val periodForecast = dailyRate * targetDays
-            val forecastLow = periodForecast * (1.0 - uncertainty).coerceAtLeast(0.0)
-            val forecastHigh = periodForecast * (1.0 + uncertainty)
+            val nextCalendarMonthEstimate = CalendarSeasonalityModel.estimate(
+                category, validExpenses, asOf, YearMonth.from(asOf).plusMonths(1)
+            )
+            val monthlyForecast = dailyRate * monthDays * nextCalendarMonthEstimate.factor
+            val periodProjection = when {
+                targetDays <= 0.0 -> SeasonallyAdjustedForecast(0.0, 1.0, 0, false)
+                targetRange != null -> CalendarSeasonalityModel.project(
+                    dailyRate = dailyRate,
+                    category = category,
+                    expenses = validExpenses,
+                    asOf = asOf,
+                    startDate = targetRange.first,
+                    endDate = targetRange.second
+                )
+                else -> {
+                    val estimate = CalendarSeasonalityModel.estimate(
+                        category, validExpenses, asOf, YearMonth.from(asOf.plusDays(1))
+                    )
+                    SeasonallyAdjustedForecast(
+                        amount = dailyRate * targetDays * estimate.factor,
+                        averageFactor = estimate.factor,
+                        completeCycles = estimate.completeCycles,
+                        applied = estimate.applied
+                    )
+                }
+            }
+            val periodForecast = periodProjection.amount
             val historicalPeriodAverage = if (completedPeriods.isNotEmpty()) {
                 historicalRate * averagePeriodDays
             } else dailyRate * averagePeriodDays
+            val calibrationScale = maxOf(
+                periodForecast,
+                historicalPeriodAverage * (targetDays / averagePeriodDays.coerceAtLeast(1.0)) *
+                    periodProjection.averageFactor * 0.25,
+                1.0
+            )
+            val calibrationBand = calibration?.forCategory(category)
+            val calibratedInterval = calibrationBand?.radius != null
+            val fallbackLow = periodForecast * (1.0 - uncertainty).coerceAtLeast(0.0)
+            val fallbackHigh = periodForecast * (1.0 + uncertainty)
+            val forecastLow = if (calibratedInterval) {
+                maxOf(0.0, periodForecast - calibrationBand!!.radius!! * calibrationScale)
+            } else fallbackLow
+            val forecastHigh = if (calibratedInterval) {
+                periodForecast + calibrationBand!!.radius!! * calibrationScale
+            } else fallbackHigh
+            val intervalMethod = if (calibratedInterval) {
+                "Эмпирическая калибровка 80%"
+            } else {
+                "Робастный ориентир; мало ошибок backtest"
+            }
 
             val enoughNewCategoryHistory = hasCurrentData && enoughNewCategoryEvidence
             val hasHistory = hasCompletedHistory || enoughNewCategoryHistory
@@ -219,6 +286,19 @@ object BudgetForecastCalculator {
                 profile == "Новая категория" -> "Новая категория: оценка основана на текущих данных; накопленной истории пока нет"
                 else -> "Профиль: $profile; $trendText; $frequencyText"
             }
+            val seasonalExplanation = when {
+                periodProjection.completeCycles < 2 -> "Сезонность не применялась: нужно не менее двух полных годовых циклов"
+                periodProjection.applied -> "Учтена календарная сезонность ×${"%.2f".format(java.util.Locale.ROOT, periodProjection.averageFactor)}"
+                else -> "Сезонность проверена по ${periodProjection.completeCycles} циклам, выраженного эффекта нет"
+            }
+            val intervalExplanation = if (calibratedInterval) {
+                "Диапазон откалиброван по ${calibrationBand!!.observations} ретропроверкам; эмпирическое покрытие " +
+                    "${"%.0f".format(java.util.Locale.ROOT, calibrationBand.empiricalCoveragePercent ?: 0.0)}%"
+            } else {
+                "Для калибровки диапазона доступно ${calibrationBand?.observations ?: 0} ошибок; нужно не менее ${ForecastIntervalCalibrator.MIN_OBSERVATIONS}"
+            }
+            val detailedExplanation = listOf(explanation, seasonalExplanation, intervalExplanation)
+                .filter { it.isNotBlank() }.joinToString(". ")
 
             CategoryForecast(
                 category = category,
@@ -236,7 +316,14 @@ object BudgetForecastCalculator {
                 evidenceQuality = evidenceQuality,
                 positiveHistoryPeriods = positiveRates.size,
                 currentPeriodAnomaly = currentPeriodAnomaly,
-                explanation = explanation
+                explanation = detailedExplanation,
+                seasonalityFactor = periodProjection.averageFactor,
+                seasonalityCycles = periodProjection.completeCycles,
+                seasonalityApplied = periodProjection.applied,
+                intervalMethod = intervalMethod,
+                calibrationSamples = calibrationBand?.observations ?: 0,
+                calibrationCoveragePercent = calibrationBand?.empiricalCoveragePercent,
+                calibrationScaleForPeriod = calibrationScale
             )
         }
 

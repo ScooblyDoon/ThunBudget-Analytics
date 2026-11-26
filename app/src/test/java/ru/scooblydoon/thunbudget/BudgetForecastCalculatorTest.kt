@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.YearMonth
 
 class BudgetForecastCalculatorTest {
     private val startDay = 9
@@ -364,6 +365,73 @@ class BudgetForecastCalculatorTest {
         // The two events are three reporting periods apart: 1,000 / 3 ₽ per period.
         // The 92-day horizon spans exactly the six completed periods in this fixture.
         assertEquals(2000.0, category.forecastForPeriod, 0.01)
+    }
+
+
+    @Test fun annualSeasonalityRequiresTwoCompleteComparableCycles() {
+        val rows = (0 until 29).flatMap { offset ->
+            val month = YearMonth.of(2024, 1).plusMonths(offset.toLong())
+            val base = ForecastExpense("Путешествия", 1000.0, month.atDay(10))
+            if (month.monthValue == 7) {
+                listOf(base, ForecastExpense("Путешествия", 5000.0, month.atDay(15)))
+            } else listOf(base)
+        }
+        val mature = CalendarSeasonalityModel.estimate(
+            category = "Путешествия",
+            expenses = rows,
+            asOf = LocalDate.parse("2026-06-30"),
+            targetMonth = YearMonth.of(2026, 7)
+        )
+        assertTrue("Two complete annual cycles should be available", mature.completeCycles >= 2)
+        assertTrue("Repeated July peaks should raise the July factor", mature.factor > 1.0)
+        assertTrue(mature.factor <= 1.8)
+
+        val immature = CalendarSeasonalityModel.estimate(
+            category = "Путешествия",
+            expenses = rows,
+            asOf = LocalDate.parse("2025-06-30"),
+            targetMonth = YearMonth.of(2025, 7)
+        )
+        assertEquals(1.0, immature.factor, 0.001)
+        assertEquals(0, immature.completeCycles)
+    }
+
+    @Test fun rollingOriginErrorsCalibrateTheCategoryForecastRange() {
+        val rows = (0..31).flatMap { offset ->
+            val month = YearMonth.of(2024, 1).plusMonths(offset.toLong())
+            listOf(
+                ForecastExpense("Продукты", 800.0 + (offset % 4) * 70.0, month.atDay(12)),
+                ForecastExpense("Продукты", 900.0 + (offset % 3) * 80.0, month.atDay(26))
+            )
+        }
+        val asOf = LocalDate.parse("2026-10-23")
+        val backtest = BudgetForecastBacktester.evaluate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = asOf,
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        val band = backtest.calibration.forCategory("Продукты")
+        assertTrue("The rolling-origin test should collect enough residuals", band != null && band.observations >= 8)
+        assertTrue("An 80% empirical radius should be available", band?.radius != null)
+
+        val forecast = BudgetForecastCalculator.calculate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = asOf,
+            firstStartDay = startDay,
+            firstEndDay = endDay,
+            monthsToAnalyze = 0,
+            nextPeriodDays = 16,
+            calibration = backtest.calibration,
+            forecastStartDate = LocalDate.parse("2026-10-24"),
+            forecastEndDate = LocalDate.parse("2026-11-08")
+        ).categories.single()
+        assertTrue(forecast.intervalMethod.contains("80%"))
+        assertEquals(band!!.observations, forecast.calibrationSamples)
+        assertTrue(forecast.forecastLowForPeriod <= forecast.forecastForPeriod)
+        assertTrue(forecast.forecastHighForPeriod >= forecast.forecastForPeriod)
     }
 
 }

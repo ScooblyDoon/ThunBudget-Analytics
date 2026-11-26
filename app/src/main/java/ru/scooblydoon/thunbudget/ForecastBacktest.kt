@@ -11,7 +11,8 @@ internal data class ForecastBacktestMetrics(
     val forecastSpend: Double,
     val meanAbsoluteError: Double?,
     val weightedAbsolutePercentageError: Double?,
-    val biasPercent: Double?
+    val biasPercent: Double?,
+    val calibration: ForecastCalibration = ForecastCalibration()
 )
 
 /**
@@ -40,7 +41,7 @@ internal object BudgetForecastBacktester {
         )
         val periods = history.reportingPeriods
         if (periods.size <= MIN_TRAINING_PERIODS) {
-            return ForecastBacktestMetrics(0, 0, 0.0, 0.0, null, null, null)
+            return ForecastBacktestMetrics(0, 0, 0.0, 0.0, null, null, null, ForecastCalibration())
         }
         val firstTargetIndex = maxOf(MIN_TRAINING_PERIODS, periods.size - MAX_EVALUATION_PERIODS)
         var evaluatedPeriods = 0
@@ -48,6 +49,7 @@ internal object BudgetForecastBacktester {
         var totalActual = 0.0
         var totalForecast = 0.0
         var absoluteError = 0.0
+        val calibrationErrors = mutableMapOf<String, MutableList<Double>>()
 
         for (index in firstTargetIndex until periods.size) {
             val target = periods[index]
@@ -61,7 +63,9 @@ internal object BudgetForecastBacktester {
                 firstStartDay = firstStartDay,
                 firstEndDay = firstEndDay,
                 monthsToAnalyze = 0,
-                nextPeriodDays = targetDays
+                nextPeriodDays = targetDays,
+                forecastStartDate = target.start,
+                forecastEndDate = target.end
             )
             val actualRows = expenses.filter {
                 !it.date.isBefore(target.start) && !it.date.isAfter(target.end)
@@ -71,9 +75,19 @@ internal object BudgetForecastBacktester {
                     .filter { it.category.equals(category, ignoreCase = true) }
                     .filterNot { it.category.equals("Перенос средств", ignoreCase = true) }
                     .sumOf { it.amount.coerceAtLeast(0.0) }
-                val forecast = prediction.categories.firstOrNull {
+                val categoryPrediction = prediction.categories.firstOrNull {
                     it.category.equals(category, ignoreCase = true)
-                }?.forecastForPeriod ?: 0.0
+                }
+                val forecast = categoryPrediction?.forecastForPeriod ?: 0.0
+                if (categoryPrediction != null && forecast > 0.0 &&
+                    categoryPrediction.calibrationScaleForPeriod > 0.0
+                ) {
+                    val errorScore = abs(forecast - actual) / categoryPrediction.calibrationScaleForPeriod
+                    if (errorScore.isFinite()) {
+                        calibrationErrors.getOrPut(category.trim().lowercase()) { mutableListOf() }
+                            .add(errorScore)
+                    }
+                }
                 totalActual += actual
                 totalForecast += forecast
                 absoluteError += abs(forecast - actual)
@@ -93,7 +107,8 @@ internal object BudgetForecastBacktester {
             forecastSpend = totalForecast,
             meanAbsoluteError = mae,
             weightedAbsolutePercentageError = wape,
-            biasPercent = bias
+            biasPercent = bias,
+            calibration = ForecastIntervalCalibrator.build(calibrationErrors)
         )
     }
 }

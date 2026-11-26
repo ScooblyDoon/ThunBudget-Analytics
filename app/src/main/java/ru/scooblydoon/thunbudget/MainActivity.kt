@@ -1419,30 +1419,32 @@ private fun ThunBudgetApp() {
                             row.category.equals("Перенос средств", true) ||
                                 (row.title.trim().lowercase(Locale.ROOT) to row.category.trim().lowercase(Locale.ROOT)) in recurringHistoryKeys
                         }
-                        val forecast = BudgetForecastCalculator.calculate(
-                            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
-                            expenses = variableHistoryExpenses.mapNotNull { row ->
-                                runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
-                            },
-                            asOf = today,
-                            firstStartDay = firstPeriodStartDay,
-                            firstEndDay = firstPeriodEndDay,
-                            monthsToAnalyze = 6,
-                            nextPeriodDays = forecastDays
-                        )
+                        val forecastRows = variableHistoryExpenses.mapNotNull { row ->
+                            runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+                        }
                         val forecastBacktest = remember(
                             variableHistoryExpenses, categories, today, firstPeriodStartDay, firstPeriodEndDay
                         ) {
                             BudgetForecastBacktester.evaluate(
                                 categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
-                                expenses = variableHistoryExpenses.mapNotNull { row ->
-                                    runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
-                                },
+                                expenses = forecastRows,
                                 asOf = today,
                                 firstStartDay = firstPeriodStartDay,
                                 firstEndDay = firstPeriodEndDay
                             )
                         }
+                        val forecast = BudgetForecastCalculator.calculate(
+                            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+                            expenses = forecastRows,
+                            asOf = today,
+                            firstStartDay = firstPeriodStartDay,
+                            firstEndDay = firstPeriodEndDay,
+                            monthsToAnalyze = 6,
+                            nextPeriodDays = forecastDays,
+                            calibration = forecastBacktest.calibration,
+                            forecastStartDate = forecastFrom.takeIf { forecastDays > 0 },
+                            forecastEndDate = nextForecastRange.end.takeIf { forecastDays > 0 }
+                        )
                         val forecastActualToDate = expenses.filter { row ->
                             row.date >= nextForecastRange.start.toString() && row.date <= minOf(today, nextForecastRange.end).toString() &&
                                 !row.category.equals("Перенос средств", true)
@@ -1469,6 +1471,21 @@ private fun ThunBudgetApp() {
                             }
                         }
                         val upcomingRecurringSpend = recurringForecastByCategory.values.sum()
+                        val recurringMonthlyForecastByCategory = mutableMapOf<String, Double>()
+                        val forecastNextCalendarMonth = YearMonth.from(today).plusMonths(1)
+                        recurringPayments.filter { it.active }.forEach { payment ->
+                            val dueDate = payment.dueDate(forecastNextCalendarMonth)
+                            val alreadyRecorded = expenses.any { row ->
+                                row.title.equals(payment.title, true) &&
+                                    row.category.equals(payment.category, true) &&
+                                    row.date == dueDate.toString()
+                            }
+                            if (!payment.isCompleted(forecastNextCalendarMonth) && !alreadyRecorded) {
+                                recurringMonthlyForecastByCategory[payment.category] =
+                                    (recurringMonthlyForecastByCategory[payment.category] ?: 0.0) + payment.amount
+                            }
+                        }
+                        val recurringMonthlyForecast = recurringMonthlyForecastByCategory.values.sum()
                         val forecastExpectedSpend = forecastActualToDate + forecast.totalPeriodForecast + upcomingRecurringSpend
                         val forecastIncomeRow = periodIncomes.firstOrNull {
                             it.start == nextForecastRange.start.toString() && it.end == nextForecastRange.end.toString()
@@ -1512,8 +1529,8 @@ private fun ThunBudgetApp() {
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
-                                            Text(money(forecast.totalMonthlyForecast + recurringPayments.filter { it.active }.sumOf { it.amount }), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                            Text("Прогноз на следующий месяц", style = MaterialTheme.typography.bodySmall)
+                                            Text(money(forecast.totalMonthlyForecast + recurringMonthlyForecast), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                         }
                                         Column(Modifier.weight(1f)) {
                                             Text("Ожидаемые расходы всего до ${nextForecastRange.end.format(formatter)}", style = MaterialTheme.typography.bodySmall)
@@ -1541,7 +1558,7 @@ private fun ThunBudgetApp() {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        "Ориентировочный диапазон будущих переменных трат: ${money(forecast.categories.sumOf { it.forecastLowForPeriod })}–${money(forecast.categories.sumOf { it.forecastHighForPeriod })}. Это оценка разброса, не гарантия.",
+                                        "Диапазон будущих переменных трат: ${money(forecast.categories.sumOf { it.forecastLowForPeriod })}–${money(forecast.categories.sumOf { it.forecastHighForPeriod })}. При наличии минимум восьми ошибок на категорию он калибруется по rolling backtest; иначе остаётся робастным ориентиром.",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1560,6 +1577,19 @@ private fun ThunBudgetApp() {
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
+                                                val seasonalLabel = if (categoryForecast.seasonalityCycles >= 2) {
+                                                    "Сезонность ×${String.format(Locale("ru", "RU"), "%.2f", categoryForecast.seasonalityFactor)} (${categoryForecast.seasonalityCycles} цикла)"
+                                                } else "Сезонность не применялась: менее двух полных циклов"
+                                                val intervalLabel = if (categoryForecast.calibrationSamples >= ForecastIntervalCalibrator.MIN_OBSERVATIONS) {
+                                                    "Диапазон: калиброван по ${categoryForecast.calibrationSamples} проверкам (эмпирическое покрытие ${String.format(Locale("ru", "RU"), "%.0f", categoryForecast.calibrationCoveragePercent ?: 0.0)}%)"
+                                                } else {
+                                                    "Диапазон: ориентировочный · ошибок backtest ${categoryForecast.calibrationSamples}/${ForecastIntervalCalibrator.MIN_OBSERVATIONS}"
+                                                }
+                                                Text(
+                                                    "$seasonalLabel · $intervalLabel",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
                                                 Text(
                                                     "Переменные траты на остаток: ${money(categoryForecast.forecastForPeriod)} (${money(categoryForecast.forecastLowForPeriod)}–${money(categoryForecast.forecastHighForPeriod)})",
                                                     style = MaterialTheme.typography.labelSmall,
@@ -1572,7 +1602,7 @@ private fun ThunBudgetApp() {
                                                 )
                                             }
                                             Column(horizontalAlignment = Alignment.End) {
-                                                Text(money(categoryForecast.forecastForNextMonth + recurringPayments.filter { it.active && it.category.equals(categoryForecast.category, true) }.sumOf { it.amount }), fontWeight = FontWeight.SemiBold)
+                                                Text(money(categoryForecast.forecastForNextMonth + (recurringMonthlyForecastByCategory[categoryForecast.category] ?: 0.0)), fontWeight = FontWeight.SemiBold)
                                                 Text("До конца периода: ${money(categoryActual + categoryForecast.forecastForPeriod + (recurringForecastByCategory[categoryForecast.category] ?: 0.0))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                         }
@@ -1728,7 +1758,9 @@ private fun ThunBudgetApp() {
                             firstStartDay = firstPeriodStartDay,
                             firstEndDay = firstPeriodEndDay,
                             monthsToAnalyze = 6,
-                            nextPeriodDays = forecastDays
+                            nextPeriodDays = forecastDays,
+                            forecastStartDate = forecastFrom.takeIf { forecastDays > 0 },
+                            forecastEndDate = selectedEnd.takeIf { forecastDays > 0 }
                         )
                         val projectedSpend = periodFacts.mapValues { (category, actual) ->
                             actual + (periodForecast.categories.firstOrNull { it.category == category }?.forecastForPeriod ?: 0.0)
