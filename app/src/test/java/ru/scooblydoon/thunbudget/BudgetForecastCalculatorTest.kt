@@ -290,4 +290,43 @@ class BudgetForecastCalculatorTest {
         assertTrue("A large current-period acceleration should be flagged", result.categories.single().currentPeriodAnomaly)
     }
 
+
+    @Test fun backtestUsesRollingOriginHistoryAndReturnsErrorMetrics() {
+        val rows = (0..8).map { i ->
+            ForecastExpense(
+                "Продукты",
+                1000.0 + i * 100.0,
+                LocalDate.parse("2026-02-10").plusMonths(i.toLong())
+            )
+        }
+        val result = BudgetForecastBacktester.evaluate(
+            categories = listOf("Продукты"),
+            expenses = rows,
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        assertTrue("At least one future period must be validated", result.evaluatedPeriods > 0)
+        assertTrue(result.evaluatedCategoryPeriods >= result.evaluatedPeriods)
+        assertTrue(result.actualSpend > 0.0)
+        assertTrue(result.forecastSpend >= 0.0)
+        assertTrue(result.meanAbsoluteError != null && result.meanAbsoluteError >= 0.0)
+        assertTrue(result.weightedAbsolutePercentageError != null)
+    }
+
+    @Test fun backtestDoesNotClaimAccuracyWithoutEnoughTrainingHistory() {
+        val result = BudgetForecastBacktester.evaluate(
+            categories = listOf("Продукты"),
+            expenses = listOf(
+                ForecastExpense("Продукты", 1000.0, LocalDate.parse("2026-10-10")),
+                ForecastExpense("Продукты", 1200.0, LocalDate.parse("2026-10-25"))
+            ),
+            asOf = LocalDate.parse("2026-11-24"),
+            firstStartDay = startDay,
+            firstEndDay = endDay
+        )
+        assertEquals(0, result.evaluatedPeriods)
+        assertEquals(null, result.weightedAbsolutePercentageError)
+    }
+
 }
