@@ -114,12 +114,14 @@ object BudgetForecastCalculator {
         val observedExpenses = completedExpenses + activeExpenses
 
         val forecasts = categories.distinct().map { category ->
-            val periodRates = completedPeriods.map { period ->
-                val spent = completedExpenses.asSequence()
+            val periodAmounts = completedPeriods.map { period ->
+                completedExpenses.asSequence()
                     .filter { it.category.equals(category, ignoreCase = true) }
                     .filter { !it.date.isBefore(period.start) && !it.date.isAfter(period.end) }
                     .sumOf { it.amount }
-                spent / daysIn(period).toDouble()
+            }
+            val periodRates = periodAmounts.mapIndexed { index, amount ->
+                amount / daysIn(completedPeriods[index]).toDouble()
             }
             val positiveRates = periodRates.filter { it > 0.0 }
             val recentRates = periodRates.takeLast(12)
@@ -139,9 +141,12 @@ object BudgetForecastCalculator {
             // For intermittent categories, estimate expected spend as
             // typical event size multiplied by the probability of an event.
             val historicalRate = if (
-                profile == "Редкие расходы" && positiveRates.size >= 2
+                profile == "Редкие расходы" && positiveRates.size >= 2 && averagePeriodDays > 0.0
             ) {
-                typicalPositiveRate * positiveFrequency
+                // Croston-style estimate: smooth event size and the interval
+                // between events separately, then divide to get expected spend
+                // per reporting period and convert it to a daily rate.
+                crostonPeriodForecast(periodAmounts.takeLast(12)) / averagePeriodDays
             } else historicalRateRaw
             val trendFactor = dampedTrendFactor(periodRates)
             val trendAdjustedRate = historicalRate * trendFactor
@@ -248,6 +253,27 @@ object BudgetForecastCalculator {
         )
     }
 
+
+    private fun crostonPeriodForecast(periodAmounts: List<Double>, alpha: Double = 0.30): Double {
+        val events = periodAmounts.mapIndexedNotNull { index, amount ->
+            if (amount > 0.0) index to amount else null
+        }
+        if (events.size < 2) {
+            val positives = events.map { it.second }
+            return median(positives) * events.size.toDouble() / periodAmounts.size.coerceAtLeast(1).toDouble()
+        }
+        var smoothedSize = events.first().second
+        var smoothedInterval = (events[1].first - events[0].first).coerceAtLeast(1).toDouble()
+        for (index in 1 until events.size) {
+            val event = events[index]
+            smoothedSize += alpha * (event.second - smoothedSize)
+            if (index > 1) {
+                val interval = (event.first - events[index - 1].first).coerceAtLeast(1).toDouble()
+                smoothedInterval += alpha * (interval - smoothedInterval)
+            }
+        }
+        return smoothedSize / smoothedInterval.coerceAtLeast(1.0)
+    }
 
     private fun median(values: List<Double>): Double {
         if (values.isEmpty()) return 0.0
