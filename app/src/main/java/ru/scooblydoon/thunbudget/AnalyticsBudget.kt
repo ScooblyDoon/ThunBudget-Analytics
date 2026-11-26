@@ -204,7 +204,7 @@ internal object AnalyticsBudgetCalculator {
         firstEndDay: Int = 23
     ): CalendarMonthIncomeEstimate {
         require(forecastLookbackPeriods >= 1)
-        val expectedRanges = (-1L..1L).flatMap { offset ->
+        val expectedRanges = (-4L..1L).flatMap { offset ->
             val period = ReportingPeriodCalculator.propose(month.plusMonths(offset), firstStartDay, firstEndDay)
             listOf(period.first, period.second)
         }.mapTo(mutableSetOf()) { it.start.toString() to it.end.toString() }
