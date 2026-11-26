@@ -309,9 +309,12 @@ internal class BudgetStore(context: Context) {
             .associate { it.name.lowercase(Locale.ROOT) to it.percent }
         val previousPlan = planShares(previous)
         val nextPlan = planShares(normalized)
-        val planActuallyChanged = previousPlan.keys != nextPlan.keys ||
-            nextPlan.any { (name, percent) ->
-                kotlin.math.abs(percent - (previousPlan[name] ?: 0.0)) > 0.0001
+        val planActuallyChanged =
+            previousPlan.any { (name, previousPercent) ->
+                val nextPercent = nextPlan[name]
+                nextPercent == null || kotlin.math.abs(nextPercent - previousPercent) > 0.0001
+            } || nextPlan.any { (name, nextPercent) ->
+                name !in previousPlan && nextPercent > 0.0001
             }
         persistCategories(normalized)
         // Routine persistence (for example, adding the zero-percent transfer
