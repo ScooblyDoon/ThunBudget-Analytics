@@ -15,8 +15,8 @@ android {
         applicationId = "ru.scooblydoon.thunbudget.analytics"
         minSdk = 26
         targetSdk = 35
-        versionCode = 48
-        versionName = "1.3.35"
+        versionCode = 49
+        versionName = "1.3.36"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
