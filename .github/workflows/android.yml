@@ -1,4 +1,4 @@
-# Full verification branch for the 2026-11-25 user feedback corrections.
+# Every successful branch run must produce a persistent-key-signed Release APK.
 # [final-apk] Build the explicit custom dialog surface implementation.
 # [final-apk] Include recurring payment dialogs in shared dialog system.
 # [final-apk] Fix recurring dialog action slot and rebuild.
@@ -21,8 +21,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    env:
-      THUNBUDGET_SIGNING_KEY: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,8 +33,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Run unit tests and compile debug APK
-        run: gradle :app:testDebugUnitTest :app:assembleDebug
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest
       - name: Upload unit test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -86,7 +84,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Require persistent release signing key
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]') }}
         env:
           KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.THUNBUDGET_KEYSTORE_PASSWORD }}
@@ -100,7 +97,6 @@ jobs:
             fi
           done
       - name: Decode persistent release keystore
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]') }}
         env:
           KEYSTORE_BASE64: ${{ secrets.THUNBUDGET_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.THUNBUDGET_KEYSTORE_PASSWORD }}
@@ -112,8 +108,6 @@ jobs:
           test -s "$RUNNER_TEMP/thunbudget-release.jks"
           keytool -list -keystore "$RUNNER_TEMP/thunbudget-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
       - name: Build signed release APK
-        id: signed_release
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[final-apk]') }}
         env:
           THUNBUDGET_KEYSTORE_FILE: ${{ runner.temp }}/thunbudget-release.jks
           THUNBUDGET_KEYSTORE_PASSWORD: ${{ secrets.THUNBUDGET_KEYSTORE_PASSWORD }}
@@ -121,7 +115,6 @@ jobs:
           THUNBUDGET_KEY_PASSWORD: ${{ secrets.THUNBUDGET_KEY_PASSWORD }}
         run: gradle :app:assembleRelease
       - name: Verify signed release APK
-        if: ${{ steps.signed_release.outcome == 'success' }}
         run: |
           APK_PATH="app/build/outputs/apk/release/app-release.apk"
           test -s "$APK_PATH"
@@ -139,25 +132,12 @@ jobs:
             exit 1
           fi
       - name: Upload signed release APK
-        if: ${{ steps.signed_release.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ThunBudget-Analytics-release
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Build debug APK (temporary, not suitable for upgrades)
-        if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[final-apk]') }}
-        run: gradle :app:assembleDebug
-      - name: Upload debug APK
-        if: ${{ !cancelled() && github.event_name != 'workflow_dispatch' && !contains(github.event.head_commit.message, '[final-apk]') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ThunBudget-Analytics-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
 # [final-apk] Trigger release build from the dialog design branch.
 # [final-apk] Re-run after correcting the light-theme screenshot fixture to use a light Material background.
 
@@ -170,4 +150,4 @@ jobs:
 # [final-apk] Verify modal overlays inherit the selected light/dark app theme.
 
 # [final-apk] Build and verify signed release after analytics calculation audit.
-# Flexible periods: rerun Android unit tests and Kotlin/Compose compilation after moving report state out of LazyListScope.
+# Flexible periods: run unit tests, build signed Release APK and verify the established signing certificate.
