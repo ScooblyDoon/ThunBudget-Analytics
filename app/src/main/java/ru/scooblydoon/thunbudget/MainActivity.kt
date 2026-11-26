@@ -1150,7 +1150,7 @@ private fun ThunBudgetApp() {
                     val newCategoryNames = fresh.map { it.category }.distinct().filterNot { name -> categories.any { it.name.equals(name, true) } }
                     if (newCategoryNames.isNotEmpty()) {
                         categories = categories + newCategoryNames.map { BudgetCategory(it, 0.0) }
-                        store.saveCategories(categories); categories=store.loadCategories()
+                        store.saveCategories(categories, periodStart, periodEnd); categories=store.loadCategories()
                     }
                     expenses = (expenses + fresh).distinctBy { it.id }.sortedByDescending { it.date }
                     store.saveExpenses(expenses)
@@ -1488,7 +1488,7 @@ private fun ThunBudgetApp() {
                                             showDynamicAllocationDialog = true
                                         } else {
                                             val restored = manualAllocationSnapshot.map { it.copy() }
-                                            store.restoreCategoriesExactly(restored)
+                                            store.restoreCategoriesExactly(restored, periodStart, periodEnd)
                                             categories = restored
                                             autoAllocationEnabled = false
                                             store.saveAutoAllocationEnabled(false)
@@ -2029,7 +2029,7 @@ private fun ThunBudgetApp() {
                                         categories = categories.map { cat ->
                                             cat.copy(percent = redistribution.updatedPercents[cat.name] ?: cat.percent)
                                         }
-                                        store.saveCategories(categories)
+                                        store.saveCategories(categories, periodStart, periodEnd)
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text("Применить перераспределение") }
@@ -2274,7 +2274,7 @@ private fun ThunBudgetApp() {
                             store.prepareUndoSnapshot(); canUndo=true
                             categories = categories.map { if (it.name == oldName) it.copy(name = newName) else it }
                             expenses = expenses.map { if (it.category == oldName) it.copy(category = newName) else it }
-                            store.saveCategories(categories); store.saveExpenses(expenses)
+                            store.saveCategories(categories, periodStart, periodEnd); store.saveExpenses(expenses)
                             voiceMessage = "Категория «$oldName» переименована в «$newName»."
                         } else {
                             voiceMessage = "Новое название пустое или такая категория уже существует."
@@ -2316,7 +2316,7 @@ private fun ThunBudgetApp() {
                         store.prepareUndoSnapshot(); canUndo=true
                         if (categories.none { it.name.equals(draft.category,true) } && categories.sumOf { it.percent } + draft.amount <= 100.0) {
                             categories = categories + BudgetCategory(draft.category,draft.amount)
-                            store.saveCategories(categories)
+                            store.saveCategories(categories, periodStart, periodEnd)
                         } else {
                             voiceMessage = "Категория уже существует или сумма долей превысит 100%."
                         }
@@ -2326,7 +2326,7 @@ private fun ThunBudgetApp() {
                         val old = categories.firstOrNull { it.name.equals(draft.category,true) }
                         if (old != null && categories.filterNot { it.name==old.name }.sumOf { it.percent } + draft.amount <= 100.0) {
                             categories = categories.map { if (it.name==old.name) it.copy(percent=draft.amount) else it }
-                            store.saveCategories(categories)
+                            store.saveCategories(categories, periodStart, periodEnd)
                         } else {
                             voiceMessage = "Не удалось изменить долю: проверь категорию и сумму процентов (не более 100%)."
                         }
@@ -2402,7 +2402,7 @@ private fun ThunBudgetApp() {
                 store.prepareUndoSnapshot(); canUndo = true
                 manualAllocationSnapshot = categories; store.saveManualAllocationSnapshot(categories)
                 categories = updated
-                store.saveCategories(categories)
+                store.saveCategories(categories, periodStart, periodEnd)
                 showAllocationDialog = false
             }
         )
@@ -2424,7 +2424,7 @@ private fun ThunBudgetApp() {
                 manualAllocationSnapshot = categories
                 store.saveManualAllocationSnapshot(categories)
                 categories = updated
-                store.saveCategories(categories)
+                store.saveCategories(categories, periodStart, periodEnd)
                 showDynamicAllocationDialog = false
             }
         )
@@ -2502,7 +2502,7 @@ private fun ThunBudgetApp() {
                         canUndo = true
                         val transferCategory = "Перенос средств"
                         if (categories.none { it.name.equals(transferCategory, true) }) {
-                            store.saveCategories(categories + BudgetCategory(transferCategory, 0.0))
+                            store.saveCategories(categories + BudgetCategory(transferCategory, 0.0), periodStart, periodEnd)
                             categories = store.loadCategories()
                         }
                         val transferExpense = Expense(
@@ -2548,14 +2548,14 @@ private fun ThunBudgetApp() {
                 store.prepareUndoSnapshot()
                 canUndo = true
                 val updatedCategories = categories + BudgetCategory(normalizedName, percent)
-                store.saveCategories(updatedCategories)
+                store.saveCategories(updatedCategories, periodStart, periodEnd)
                 categories = store.loadCategories()
                 true
             }
         },
         onDelete = { cat ->
         store.prepareUndoSnapshot(); canUndo=true
-        categories=categories.filterNot{it.name==cat.name}; store.saveCategories(categories); showCategoryManager=false
+        categories=categories.filterNot{it.name==cat.name}; store.saveCategories(categories, periodStart, periodEnd); showCategoryManager=false
     },onEdit={cat->editingCategory=cat;showCategoryManager=false})
     editingCategory?.let { oldCat ->
         CategoryEditDialog(oldCat,onDismiss={editingCategory=null},onSave={name,percent->
@@ -2563,7 +2563,7 @@ private fun ThunBudgetApp() {
                 store.prepareUndoSnapshot(); canUndo=true
                 categories=categories.map{if(it.name==oldCat.name) it.copy(name=name,percent=percent) else it}
                 expenses=expenses.map{if(it.category==oldCat.name) it.copy(category=name) else it}
-                store.saveCategories(categories); store.saveExpenses(expenses)
+                store.saveCategories(categories, periodStart, periodEnd); store.saveExpenses(expenses)
             }
             editingCategory=null
         })
@@ -2691,7 +2691,7 @@ private fun ThunBudgetApp() {
             store.saveExpenses(expenses)
         }
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; selectedPeriod=-1; store.saveSelectedPeriod(-1); store.savePeriod(start,end)
-        store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories); showSettings=false    })
+        store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories, periodStart, periodEnd); showSettings=false    })
     if(showResetConfirmation) AppAlertDialog(
                 onDismissRequest={showResetConfirmation=false},
         title={Text("Полностью сбросить данные?")},
