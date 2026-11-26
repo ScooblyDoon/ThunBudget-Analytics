@@ -839,23 +839,39 @@ private fun ThunBudgetApp() {
         periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
     )
     val calculatedMonthlyIncome = analyticsMonthIncomeEstimate.totalIncome.takeIf { it > 0.0 } ?: income
-    val analyticsPlanFactIncome = if (analyticsIncomeMode == 0) calculatedMonthlyIncome else analyticsCycleIncome.totalIncome
     val displayedMonthlyIncome = calculatedMonthlyIncome
-    val analyticsCycleAllocation = remember(
-        categories, periodIncomes, expenses, analyticsMonth, firstPeriodStartDay,
-        firstPeriodEndDay, today, autoAllocationEnabled
-    ) {
-        if (autoAllocationEnabled) {
-            ReportingCycleCategoryAllocationCalculator.calculate(
-                currentShares = categories.map { it.name to it.percent },
-                periodIncomes = periodIncomes,
-                expenses = expenses,
-                month = analyticsMonth,
-                firstStartDay = firstPeriodStartDay,
-                firstEndDay = firstPeriodEndDay,
-                asOf = today
-            )
-        } else null
+    val currentCategoryShares = categories.map { it.name to it.percent }
+    val reportingPeriodCategoryPlans = store.loadReportingPeriodCategoryPlans()
+    val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
+        currentShares = currentCategoryShares,
+        savedPlans = reportingPeriodCategoryPlans,
+        firstStart = analyticsCycleIncome.firstStart,
+        firstEnd = analyticsCycleIncome.firstEnd,
+        secondStart = analyticsCycleIncome.secondStart,
+        secondEnd = analyticsCycleIncome.secondEnd
+    )
+    val analyticsCyclePlanAmounts = currentCategoryShares.associate { (name, _) ->
+        name to analyticsCycleIncome.totalIncome.coerceAtLeast(0.0) *
+            (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0
+    }
+    val hasMonthlyIncomePeriods = periodIncomes.any { row ->
+        val range = runCatching { LocalDate.parse(row.start) to LocalDate.parse(row.end) }.getOrNull()
+        range != null && row.earnedAmount.isFinite() && row.earnedAmount > 0.0 &&
+            !range.second.isBefore(analyticsMonth.atDay(1)) &&
+            !range.first.isAfter(analyticsMonth.atEndOfMonth())
+    }
+    val analyticsMonthPlanAmounts = if (hasMonthlyIncomePeriods) {
+        ReportingPeriodCategoryPlanCalculator.monthlyPlan(
+            currentShares = currentCategoryShares,
+            periodIncomes = periodIncomes,
+            savedPlans = reportingPeriodCategoryPlans,
+            month = analyticsMonth,
+            forecastIncome = analyticsMonthIncomeEstimate.forecastIncome
+        )
+    } else {
+        currentCategoryShares.associate { (name, percent) ->
+            name to calculatedMonthlyIncome.coerceAtLeast(0.0) * percent / 100.0
+        }
     }
     val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
     val planned=if(effectivePeriodIncome>0.0) effectivePeriodIncome*categories.sumOf { it.percent }/100.0 else plannedForPeriod(income, categories.sumOf { it.percent }, periodStart, periodEnd)
