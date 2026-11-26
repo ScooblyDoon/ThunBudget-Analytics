@@ -348,23 +348,22 @@ class BudgetForecastCalculatorTest {
     @Test fun intermittentForecastUsesEventSizeAndGapBetweenEvents() {
         val rows = listOf(
             "2026-05-10" to 1000.0,
-            "2026-06-10" to 1000.0,
-            "2026-07-10" to 1000.0
+            "2026-06-25" to 1000.0
         ).map { ForecastExpense("Нерегулярный платёж", it.second, LocalDate.parse(it.first)) }
         val result = BudgetForecastCalculator.calculate(
             categories = listOf("Нерегулярный платёж"),
             expenses = rows,
-            asOf = LocalDate.parse("2026-09-24"),
+            asOf = LocalDate.parse("2026-08-09"),
             firstStartDay = startDay,
             firstEndDay = endDay,
             monthsToAnalyze = 6,
-            nextPeriodDays = 46
+            nextPeriodDays = 92
         )
         val category = result.categories.single()
         assertEquals("Редкие расходы", category.profile)
-        // The events are two reporting periods apart: 1,000 / 2 = 500 ₽ per period.
-        // 46 days is approximately three average reporting periods.
-        assertEquals(1500.0, category.forecastForPeriod, 0.01)
+        // The two events are three reporting periods apart: 1,000 / 3 ₽ per period.
+        // The 92-day horizon spans exactly the six completed periods in this fixture.
+        assertEquals(2000.0, category.forecastForPeriod, 0.01)
     }
 
 }
