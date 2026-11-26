@@ -66,7 +66,6 @@ internal object BudgetForecastBacktester {
             val actualRows = expenses.filter {
                 !it.date.isBefore(target.start) && !it.date.isAfter(target.end)
             }
-            var periodHadActual = false
             categories.distinct().forEach { category ->
                 val actual = actualRows.asSequence()
                     .filter { it.category.equals(category, ignoreCase = true) }
@@ -79,9 +78,9 @@ internal object BudgetForecastBacktester {
                 totalForecast += forecast
                 absoluteError += abs(forecast - actual)
                 evaluatedCategoryPeriods++
-                if (actual > 0.0) periodHadActual = true
             }
-            if (periodHadActual || actualRows.isNotEmpty()) evaluatedPeriods++
+            // Empty periods are valid observations and must remain in validation.
+            evaluatedPeriods++
         }
 
         val wape = if (totalActual > 0.0) absoluteError / totalActual * 100.0 else null
