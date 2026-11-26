@@ -37,6 +37,105 @@ internal data class ReportingCycleIncomeEstimate(
     val totalIncome: Double get() = firstIncome + secondIncome
 }
 
+
+internal data class ReportingCycleCategoryAllocation(
+    val percentages: Map<String, Double>,
+    val periodPercentages: Map<String, List<Double>>,
+    val periodsUsed: Int
+)
+
+/**
+ * Derives live category shares from the first and second reporting periods
+ * in the selected cycle. Each period has equal weight, so 20% and 26% become
+ * a 23% planning share. Only periods with a recorded earned-income amount
+ * are included; carryovers and future-dated expenses are excluded.
+ */
+internal object ReportingCycleCategoryAllocationCalculator {
+    private const val RESERVE_CATEGORY = "Резервные средства"
+    private const val PROTECTED_RESERVE_CATEGORY = "Непредвиденные расходы"
+    private const val TRANSFER_CATEGORY = "Перенос средств"
+
+    fun calculate(
+        currentShares: List<Pair<String, Double>>,
+        periodIncomes: List<PeriodIncome>,
+        expenses: List<Expense>,
+        month: java.time.YearMonth,
+        firstStartDay: Int,
+        firstEndDay: Int,
+        asOf: java.time.LocalDate
+    ): ReportingCycleCategoryAllocation {
+        val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
+        val ranges = listOf(proposal.first, proposal.second)
+        val samples = ranges.mapNotNull { range ->
+            if (range.start.isAfter(asOf)) return@mapNotNull null
+            val earnedIncome = periodIncomes.asSequence()
+                .filter { it.start == range.start.toString() && it.end == range.end.toString() }
+                .sumOf { if (it.earnedAmount.isFinite()) it.earnedAmount.coerceAtLeast(0.0) else 0.0 }
+            if (earnedIncome <= 0.0) return@mapNotNull null
+            val visibleEnd = minOf(range.end, asOf)
+            val periodExpenses = expenses.filter { row ->
+                row.date >= range.start.toString() && row.date <= visibleEnd.toString() &&
+                    !row.category.equals(TRANSFER_CATEGORY, ignoreCase = true) &&
+                    row.amount.isFinite() && row.amount > 0.0
+            }
+            range to (earnedIncome to periodExpenses)
+        }
+
+        if (samples.isEmpty()) {
+            return ReportingCycleCategoryAllocation(
+                percentages = currentShares.toMap(),
+                periodPercentages = emptyMap(),
+                periodsUsed = 0
+            )
+        }
+
+        val periodPercentages = currentShares.associate { (name, _) ->
+            val values = samples.map { (_, sample) ->
+                val (income, periodExpenses) = sample
+                val spent = periodExpenses.asSequence()
+                    .filter { it.category.equals(name, ignoreCase = true) }
+                    .sumOf { it.amount }
+                spent / income * 100.0
+            }
+            name to values
+        }
+
+        val shares = currentShares.associate { (name, current) ->
+            val samplesForCategory = periodPercentages[name].orEmpty()
+            val hasActualHistory = samplesForCategory.any { it > 0.0 }
+            val value = when {
+                name.equals(RESERVE_CATEGORY, ignoreCase = true) -> current
+                name.equals(PROTECTED_RESERVE_CATEGORY, ignoreCase = true) -> current
+                name.equals(TRANSFER_CATEGORY, ignoreCase = true) -> current
+                hasActualHistory -> samplesForCategory.average()
+                else -> current
+            }
+            name to value.coerceIn(0.0, 100.0)
+        }.toMutableMap()
+
+        val reserveNames = currentShares.map { it.first }
+            .filter { it.equals(RESERVE_CATEGORY, ignoreCase = true) }
+        val nonReserveTotal = shares.filterKeys { !it.equals(RESERVE_CATEGORY, ignoreCase = true) }
+            .values.sumOf { it.coerceAtLeast(0.0) }
+        if (nonReserveTotal > 100.0) {
+            val scale = 100.0 / nonReserveTotal
+            shares.keys.filterNot { it.equals(RESERVE_CATEGORY, ignoreCase = true) }
+                .forEach { name -> shares[name] = (shares[name] ?: 0.0) * scale }
+        }
+        reserveNames.firstOrNull()?.let { reserveName ->
+            val allocated = shares.filterKeys { !it.equals(RESERVE_CATEGORY, ignoreCase = true) }
+                .values.sumOf { it.coerceAtLeast(0.0) }
+            shares[reserveName] = (100.0 - allocated).coerceAtLeast(0.0)
+        }
+
+        return ReportingCycleCategoryAllocation(
+            percentages = shares,
+            periodPercentages = periodPercentages,
+            periodsUsed = samples.size
+        )
+    }
+}
+
 internal object AnalyticsBudgetCalculator {
     private data class IncomePeriod(
         val start: java.time.LocalDate,
