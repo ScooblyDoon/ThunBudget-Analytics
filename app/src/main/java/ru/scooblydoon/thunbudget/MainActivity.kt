@@ -1430,6 +1430,19 @@ private fun ThunBudgetApp() {
                             monthsToAnalyze = 6,
                             nextPeriodDays = forecastDays
                         )
+                        val forecastBacktest = remember(
+                            variableHistoryExpenses, categories, today, firstPeriodStartDay, firstPeriodEndDay
+                        ) {
+                            BudgetForecastBacktester.evaluate(
+                                categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+                                expenses = variableHistoryExpenses.mapNotNull { row ->
+                                    runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+                                },
+                                asOf = today,
+                                firstStartDay = firstPeriodStartDay,
+                                firstEndDay = firstPeriodEndDay
+                            )
+                        }
                         val forecastActualToDate = expenses.filter { row ->
                             row.date >= nextForecastRange.start.toString() && row.date <= minOf(today, nextForecastRange.end).toString() &&
                                 !row.category.equals("Перенос средств", true)
@@ -1479,6 +1492,23 @@ private fun ThunBudgetApp() {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text("Учтено периодов (завершённые + текущий неполный): ${forecast.historyPeriods}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (forecastBacktest.weightedAbsolutePercentageError != null) {
+                                        val wape = String.format(Locale("ru", "RU"), "%.1f", forecastBacktest.weightedAbsolutePercentageError)
+                                        val bias = forecastBacktest.biasPercent?.let {
+                                            String.format(Locale("ru", "RU"), "%+.1f", it)
+                                        } ?: "н/д"
+                                        Text(
+                                            "Проверка на прошлых периодах: WAPE ${wape}% · систематическое смещение ${bias}%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    } else {
+                                        Text(
+                                            "Для проверки ошибки прогноза пока недостаточно завершённых периодов с фактическими расходами",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text("Средний прогноз на месяц", style = MaterialTheme.typography.bodySmall)
