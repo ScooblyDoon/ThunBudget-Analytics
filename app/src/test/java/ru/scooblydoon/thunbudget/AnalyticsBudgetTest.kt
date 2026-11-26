@@ -135,122 +135,104 @@ class AnalyticsBudgetTest {
         assertEquals(14, result.uncoveredPastDays)
     }
 
-    @Test fun automaticCategoryAllocationAveragesFirstAndCurrentReportingPeriods() {
-        val result = ReportingCycleCategoryAllocationCalculator.calculate(
+    @Test fun cyclePlanAveragesSavedPlannedSharesAndDoesNotUseActualSpendRatios() {
+        val result = ReportingPeriodCategoryPlanCalculator.cyclePlan(
             currentShares = listOf(
                 "Продукты" to 20.0,
-                "Транспорт" to 30.0,
-                "Непредвиденные расходы" to 10.0,
-                "Резервные средства" to 40.0
+                "Транспорт" to 20.0,
+                "Резервные средства" to 60.0
             ),
-            periodIncomes = listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 100000.0),
-                PeriodIncome("2026-11-24", "2026-12-08", 100000.0)
-            ),
-            expenses = listOf(
-                Expense(1L, "Продукты 1", "Продукты", 20000.0, "2026-11-15"),
-                Expense(2L, "Продукты 2", "Продукты", 26000.0, "2026-12-02"),
-                Expense(3L, "Транспорт 1", "Транспорт", 30000.0, "2026-11-18"),
-                Expense(4L, "Транспорт 2", "Транспорт", 20000.0, "2026-12-03")
-            ),
-            month = YearMonth.of(2026, 11),
-            firstStartDay = 9,
-            firstEndDay = 23,
-            asOf = java.time.LocalDate.of(2026, 12, 8)
-        )
-
-        assertEquals(2, result.periodsUsed)
-        assertEquals(23.0, result.percentages["Продукты"]!!, 0.001)
-        assertEquals(25.0, result.percentages["Транспорт"]!!, 0.001)
-        assertEquals(20.0, result.periodPercentages["Продукты"]!![0], 0.001)
-        assertEquals(26.0, result.periodPercentages["Продукты"]!![1], 0.001)
-        assertEquals(10.0, result.percentages["Непредвиденные расходы"]!!, 0.001)
-        assertEquals(100.0, result.percentages.values.sum(), 0.001)
-    }
-
-    @Test fun automaticCategoryAllocationIgnoresFutureDatedExpensesInCurrentPeriod() {
-        val result = ReportingCycleCategoryAllocationCalculator.calculate(
-            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
-            periodIncomes = listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 100000.0),
-                PeriodIncome("2026-11-24", "2026-12-08", 100000.0)
-            ),
-            expenses = listOf(
-                Expense(1L, "Продукты 1", "Продукты", 20000.0, "2026-11-15"),
-                Expense(2L, "Продукты 2", "Продукты", 18000.0, "2026-12-02"),
-                Expense(3L, "Будущие продукты", "Продукты", 8000.0, "2026-12-08")
-            ),
-            month = YearMonth.of(2026, 11),
-            firstStartDay = 9,
-            firstEndDay = 23,
-            asOf = java.time.LocalDate.of(2026, 12, 4)
-        )
-
-        assertEquals(2, result.periodsUsed)
-        assertEquals(19.0, result.percentages["Продукты"]!!, 0.001)
-        assertEquals(18.0, result.periodPercentages["Продукты"]!![1], 0.001)
-    }
-
-    @Test fun automaticCategoryAllocationUsesOnlyPeriodsWithRecordedEarnedIncome() {
-        val result = ReportingCycleCategoryAllocationCalculator.calculate(
-            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
-            periodIncomes = listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 100000.0),
-                PeriodIncome("2026-11-24", "2026-12-08", 0.0)
-            ),
-            expenses = listOf(
-                Expense(1L, "Продукты", "Продукты", 20000.0, "2026-11-15"),
-                Expense(2L, "Продукты", "Продукты", 26000.0, "2026-12-02")
-            ),
-            month = YearMonth.of(2026, 11),
-            firstStartDay = 9,
-            firstEndDay = 23,
-            asOf = java.time.LocalDate.of(2026, 12, 8)
-        )
-
-        assertEquals(1, result.periodsUsed)
-        assertEquals(20.0, result.percentages["Продукты"]!!, 0.001)
-    }
-
-    @Test fun automaticCategoryAllocationUsesEarnedIncomeAndExcludesCarryoverFromPercentBase() {
-        val result = ReportingCycleCategoryAllocationCalculator.calculate(
-            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
-            periodIncomes = listOf(
-                PeriodIncome(
-                    start = "2026-11-09",
-                    end = "2026-11-23",
-                    amount = 120000.0,
-                    earnedAmount = 100000.0,
-                    carryoverAmount = 20000.0
+            savedPlans = mapOf(
+                ("2026-11-09" to "2026-11-23") to mapOf(
+                    "Продукты" to 20.0, "Транспорт" to 10.0, "Резервные средства" to 70.0
+                ),
+                ("2026-11-24" to "2026-12-08") to mapOf(
+                    "Продукты" to 20.0, "Транспорт" to 30.0, "Резервные средства" to 50.0
                 )
             ),
-            expenses = listOf(
-                Expense(1L, "Продукты", "Продукты", 20000.0, "2026-11-15")
-            ),
-            month = YearMonth.of(2026, 11),
-            firstStartDay = 9,
-            firstEndDay = 23,
-            asOf = java.time.LocalDate.of(2026, 11, 26)
+            firstStart = java.time.LocalDate.parse("2026-11-09"),
+            firstEnd = java.time.LocalDate.parse("2026-11-23"),
+            secondStart = java.time.LocalDate.parse("2026-11-24"),
+            secondEnd = java.time.LocalDate.parse("2026-12-08")
         )
 
-        assertEquals(1, result.periodsUsed)
-        assertEquals(20.0, result.percentages["Продукты"]!!, 0.001)
+        assertEquals(20.0, result.averagePercentages["Продукты"]!!, 0.001)
+        assertEquals(20.0, result.averagePercentages["Транспорт"]!!, 0.001)
+        assertEquals(60.0, result.averagePercentages["Резервные средства"]!!, 0.001)
+        assertEquals(10.0, result.firstPeriodPercentages["Транспорт"]!!, 0.001)
+        assertEquals(30.0, result.secondPeriodPercentages["Транспорт"]!!, 0.001)
+
+        val twoPeriodIncome = 60854.0 + 36881.0
+        assertEquals(19547.0, twoPeriodIncome * result.averagePercentages["Продукты"]!! / 100.0, 0.001)
     }
 
-    @Test fun automaticCategoryAllocationKeepsManualSharesWithoutIncomeHistory() {
-        val result = ReportingCycleCategoryAllocationCalculator.calculate(
+    @Test fun cyclePlanFallsBackToCurrentPlanWhenAnOlderSnapshotIsUnavailable() {
+        val result = ReportingPeriodCategoryPlanCalculator.cyclePlan(
             currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
-            periodIncomes = emptyList(),
-            expenses = emptyList(),
-            month = YearMonth.of(2026, 11),
-            firstStartDay = 9,
-            firstEndDay = 23,
-            asOf = java.time.LocalDate.of(2026, 11, 26)
+            savedPlans = mapOf(
+                ("2026-11-24" to "2026-12-08") to mapOf("Продукты" to 20.0, "Резервные средства" to 80.0)
+            ),
+            firstStart = java.time.LocalDate.parse("2026-11-09"),
+            firstEnd = java.time.LocalDate.parse("2026-11-23"),
+            secondStart = java.time.LocalDate.parse("2026-11-24"),
+            secondEnd = java.time.LocalDate.parse("2026-12-08")
         )
 
-        assertEquals(0, result.periodsUsed)
-        assertEquals(20.0, result.percentages["Продукты"]!!, 0.001)
-        assertEquals(80.0, result.percentages["Резервные средства"]!!, 0.001)
+        assertEquals(20.0, result.averagePercentages["Продукты"]!!, 0.001)
+        assertEquals(80.0, result.averagePercentages["Резервные средства"]!!, 0.001)
+    }
+
+    @Test fun calendarMonthIncomeUsesExactInclusiveReportingDayOverlap() {
+        val periods = listOf(
+            PeriodIncome("2026-11-09", "2026-11-23", 60854.0),
+            PeriodIncome("2026-11-24", "2026-12-08", 36881.0)
+        )
+        val result = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periods, YearMonth.of(2026, 11), java.time.LocalDate.of(2026, 11, 26)
+        )
+
+        assertEquals(78065.133333, result.totalIncome, 0.001)
+        assertEquals(22, result.coveredDays)
+        assertEquals(8, result.uncoveredPastDays)
+        assertEquals(0, result.uncoveredFutureDays)
+    }
+
+    @Test fun monthlyCategoryPlanSplitsIncomeAndUsesEachOverlappingPeriodPlan() {
+        val plans = mapOf(
+            ("2026-11-09" to "2026-11-23") to mapOf("Продукты" to 20.0),
+            ("2026-11-24" to "2026-12-08") to mapOf("Продукты" to 24.0)
+        )
+        val result = ReportingPeriodCategoryPlanCalculator.monthlyPlan(
+            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
+            periodIncomes = listOf(
+                PeriodIncome("2026-11-09", "2026-11-23", 60854.0),
+                PeriodIncome("2026-11-24", "2026-12-08", 36881.0)
+            ),
+            savedPlans = plans,
+            month = YearMonth.of(2026, 11)
+        )
+
+        val firstPeriodPlan = 60854.0 * 0.20
+        val secondPeriodNovemberIncome = 36881.0 * 7.0 / 15.0
+        val secondPeriodPlan = secondPeriodNovemberIncome * 0.24
+        assertEquals(firstPeriodPlan + secondPeriodPlan, result["Продукты"]!!, 0.001)
+    }
+
+    @Test fun monthlyCategoryPlanUsesAverageSavedSharesForForecastOnly() {
+        val result = ReportingPeriodCategoryPlanCalculator.monthlyPlan(
+            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
+            periodIncomes = listOf(
+                PeriodIncome("2026-11-09", "2026-11-23", 15000.0)
+            ),
+            savedPlans = mapOf(
+                ("2026-11-09" to "2026-11-23") to mapOf("Продукты" to 20.0),
+                ("2026-11-24" to "2026-12-08") to mapOf("Продукты" to 30.0)
+            ),
+            month = YearMonth.of(2026, 11),
+            forecastIncome = 4000.0
+        )
+
+        assertEquals(4200.0, result["Продукты"]!!, 0.001)
     }
 
     @Test fun carryoverBeforeAddsUnspentBalanceFromCompletedPeriods() {
