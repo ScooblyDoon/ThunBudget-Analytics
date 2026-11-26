@@ -1494,11 +1494,12 @@ private fun ThunBudgetApp() {
                                     Text("Учтено периодов (завершённые + текущий неполный): ${forecast.historyPeriods}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (forecastBacktest.weightedAbsolutePercentageError != null) {
                                         val wape = String.format(Locale("ru", "RU"), "%.1f", forecastBacktest.weightedAbsolutePercentageError)
+                                        val mae = forecastBacktest.meanAbsoluteError?.let { money(it) } ?: "н/д"
                                         val bias = forecastBacktest.biasPercent?.let {
                                             String.format(Locale("ru", "RU"), "%+.1f", it)
                                         } ?: "н/д"
                                         Text(
-                                            "Проверка на прошлых периодах: WAPE ${wape}% · систематическое смещение ${bias}%",
+                                            "Ретропроверка (${forecastBacktest.evaluatedPeriods} периодов): WAPE ${wape}% · MAE ${mae} · смещение ${bias}%",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
