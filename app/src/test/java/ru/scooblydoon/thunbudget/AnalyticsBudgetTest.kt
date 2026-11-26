@@ -240,6 +240,7 @@ class AnalyticsBudgetTest {
         val result = ReportingPeriodCategoryPlanCalculator.monthlyPlan(
             currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
             periodIncomes = listOf(
+                PeriodIncome("2026-11-01", "2026-11-30", 100000.0), // obsolete monthly aggregate
                 PeriodIncome("2026-11-09", "2026-11-23", 60854.0),
                 PeriodIncome("2026-11-24", "2026-12-08", 36881.0)
             ),
