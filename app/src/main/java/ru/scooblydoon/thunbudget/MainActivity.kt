@@ -1610,6 +1610,85 @@ private fun ThunBudgetApp() {
                         MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
                     }
                     item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Плановые и фактические расходы",
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = {
+                                    showPlanChart = !showPlanChart
+                                    persistUiExpanded(context, "chart_plan", showPlanChart)
+                                }
+                            ) {
+                                Text(if (showPlanChart) "Скрыть" else "Показать")
+                            }
+                        }
+                    }
+                    if (showPlanChart) {
+                        items(categories, key = { "analysis-plan-" + it.name }) { category ->
+                            val startDate = analyticsMonth.atDay(1).toString()
+                            val endDate = analyticsMonth.atEndOfMonth().toString()
+                            val actual = expenses.filter {
+                                it.category == category.name && it.date >= startDate && it.date <= endDate
+                            }.sumOf { it.amount }
+                            val plannedIncome = analyticsMonthIncome.takeIf { it > 0.0 } ?: income
+                            val planned = plannedForPeriod(
+                                plannedIncome,
+                                category.percent,
+                                startDate,
+                                endDate
+                            )
+                            Card {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            category.name,
+                                            modifier = Modifier.weight(1f),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            "${money(actual)} / ${money(planned)}",
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "Факт",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        LinearProgressIndicator(
+                                            progress = {
+                                                if (planned > 0.0) (actual / planned).coerceIn(0.0, 1.0).toFloat() else 0f
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            color = if (actual > planned) Color(0xFFC74444) else Color(0xFF168A72)
+                                        )
+                                    }
+                                    Text(
+                                        "${if (actual > planned) "Превышение" else "Остаток"}: ${money(kotlin.math.abs(planned - actual))}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (actual > planned) Color(0xFFC74444) else Color(0xFF168A72)
+                                    )
+                                    val metrics = AnalyticsBudgetCalculator.metrics(planned, actual)
+                                    Text(
+                                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    item {
                         val previousMonth = analyticsMonth.minusMonths(1)
                         val currentFrom = analyticsMonth.atDay(1)
                         val currentTo = minOf(analyticsMonth.atEndOfMonth(), if (analyticsMonth == YearMonth.now()) today else analyticsMonth.atEndOfMonth())
@@ -1783,7 +1862,7 @@ private fun ThunBudgetApp() {
                 2 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     ChartsScreen(
                         expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
-                        showPlan=showPlanChart,onShowPlanChange={showPlanChart=it; persistUiExpanded(context,"chart_plan",it)},showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
+                        showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
                         selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
                         showCategoryCharts=showCategoryCharts,onShowCategoryChartsChange={showCategoryCharts=it; persistUiExpanded(context,"chart_categories",it)},
                         fallbackIncome=income,periodIncomes=periodIncomes
@@ -2732,7 +2811,7 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
 @Composable
 private fun ChartsScreen(
     expenses:List<Expense>,categories:List<BudgetCategory>,month:YearMonth,onMonthChange:(YearMonth)->Unit,
-    showPlan:Boolean,onShowPlanChange:(Boolean)->Unit,showPie:Boolean,onShowPieChange:(Boolean)->Unit,
+    showPie:Boolean,onShowPieChange:(Boolean)->Unit,
     selectedChartCategoryNames:String,onSelectedChartCategoryNamesChange:(String)->Unit,
     showCategoryCharts:Boolean,onShowCategoryChartsChange:(Boolean)->Unit,
     fallbackIncome:Double,periodIncomes:List<PeriodIncome>
@@ -2802,27 +2881,6 @@ private fun ChartsScreen(
                 }
             }
         }
-        }
-        item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Плановые и фактические расходы",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={onShowPlanChange(!showPlan)}) { Text(if(showPlan) "Скрыть" else "Показать") } } }
-        if(showPlan) {
-            items(categories,key={"chart-plan-"+it.name}) { cat ->
-                val fact=monthExpenses.filter { it.category==cat.name }.sumOf { it.amount }
-                val plan=plannedForPeriod(monthIncome,cat.percent,from,to)
-                Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment=Alignment.CenterVertically) { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text("${money(fact)} / ${money(plan)}",fontWeight=FontWeight.SemiBold) }
-                    Row(horizontalArrangement=Arrangement.spacedBy(6.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Text("Факт",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.weight(1f),color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
-                    }
-                    Text("${if(fact>plan) "Превышение" else "Остаток"}: ${money(kotlin.math.abs(plan-fact))}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) Color(0xFFC74444) else Color(0xFF168A72))
-                    val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
-                    Text(
-                        "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } }
-            }
         }
         item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Структура расходов",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={onShowPieChange(!showPie)}) { Text(if(showPie) "Скрыть" else "Показать") } } }
         if(showPie) {
