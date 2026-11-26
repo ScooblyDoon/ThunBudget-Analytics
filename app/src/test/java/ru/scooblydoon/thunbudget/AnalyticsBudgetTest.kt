@@ -212,6 +212,31 @@ class AnalyticsBudgetTest {
         assertEquals(20.0, result.percentages["Продукты"]!!, 0.001)
     }
 
+    @Test fun automaticCategoryAllocationUsesEarnedIncomeAndExcludesCarryoverFromPercentBase() {
+        val result = ReportingCycleCategoryAllocationCalculator.calculate(
+            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
+            periodIncomes = listOf(
+                PeriodIncome(
+                    start = "2026-11-09",
+                    end = "2026-11-23",
+                    amount = 120000.0,
+                    earnedAmount = 100000.0,
+                    carryoverAmount = 20000.0
+                )
+            ),
+            expenses = listOf(
+                Expense(1L, "Продукты", "Продукты", 20000.0, "2026-11-15")
+            ),
+            month = YearMonth.of(2026, 11),
+            firstStartDay = 9,
+            firstEndDay = 23,
+            asOf = java.time.LocalDate.of(2026, 11, 26)
+        )
+
+        assertEquals(1, result.periodsUsed)
+        assertEquals(20.0, result.percentages["Продукты"]!!, 0.001)
+    }
+
     @Test fun automaticCategoryAllocationKeepsManualSharesWithoutIncomeHistory() {
         val result = ReportingCycleCategoryAllocationCalculator.calculate(
             currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
