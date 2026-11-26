@@ -90,14 +90,13 @@ internal object AnalyticsBudgetCalculator {
             }
         }
 
-        val recentDailyRates = normalized.asSequence()
+        val recentDailyRates = normalized
             .filter { !it.end.isAfter(asOf) && it.earnedAmount > 0.0 }
             .sortedBy { it.end }
             .takeLast(forecastLookbackPeriods)
             .map { it.dailyRate }
             .filter { it.isFinite() && it > 0.0 }
             .sorted()
-            .toList()
         // Require at least two completed periods so a single unusual payment
         // does not become the forecast baseline.
         val averageDailyIncome = if (recentDailyRates.size >= 2) {
@@ -144,7 +143,7 @@ internal object AnalyticsBudgetCalculator {
         fun incomeFor(start: java.time.LocalDate, end: java.time.LocalDate): Double =
             periodIncomes.asSequence()
                 .filter { it.start == start.toString() && it.end == end.toString() }
-                .sumOf { it.earnedAmount.takeIf(Double::isFinite)?.coerceAtLeast(0.0) ?: 0.0 }
+                .sumOf { if (it.earnedAmount.isFinite()) it.earnedAmount.coerceAtLeast(0.0) else 0.0 }
         return ReportingCycleIncomeEstimate(
             firstStart = proposal.first.start,
             firstEnd = proposal.first.end,
