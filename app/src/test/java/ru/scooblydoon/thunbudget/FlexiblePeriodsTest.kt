@@ -13,35 +13,111 @@ class FlexiblePeriodsTest {
         FlexiblePeriodDefinition(id, name, LocalDate.parse(start), LocalDate.parse(end))
 
     @Test
-    fun periodsAllowAnyLengthWhenTheyAreContiguous() {
-        val first = period("one", "Короткий", "2026-02-01", "2026-02-04")
-        val second = period("two", "Средний", "2026-02-05", "2026-02-18")
-        val third = period("three", "Длинный", "2026-02-19", "2026-03-31")
+    fun fifteenPlusSixteenDaysIsAllowedWhenOneTouchedMonthHasThirtyOneDays() {
+        val first = period("one", "Первая половина", "2026-11-16", "2026-11-30")
+        val second = period("two", "Вторая половина", "2026-12-01", "2026-12-16")
 
-        val ordered = FlexiblePeriodRules.validateSequence(listOf(third, first, second))
+        val ordered = FlexiblePeriodRules.add(listOf(first), second)
 
-        assertEquals(listOf("one", "two", "three"), ordered.map { it.id })
-        assertEquals(4L, ordered[0].dayCount)
-        assertEquals(14L, ordered[1].dayCount)
-        assertEquals(41L, ordered[2].dayCount)
+        assertEquals(31L, FlexiblePeriodRules.totalDays(ordered))
+        assertEquals(31L, FlexiblePeriodRules.maximumAllowedDays(first.start, second.end))
+        assertEquals("two", FlexiblePeriodRules.periodFor(ordered, LocalDate.parse("2026-12-16"))?.id)
     }
 
     @Test
-    fun addingAPeriodAtEitherEndPreservesOneToOneDateAssignment() {
-        val middle = period("middle", "Основной", "2026-05-10", "2026-05-20")
-        val before = period("before", "До", "2026-05-01", "2026-05-09")
-        val after = period("after", "После", "2026-05-21", "2026-06-03")
+    fun thirtyOneSingleDayPeriodsAreAllowedInAThirtyOneDayMonth() {
+        val start = LocalDate.parse("2026-01-01")
+        val periods = (0 until 31).map { index ->
+            val date = start.plusDays(index.toLong())
+            FlexiblePeriodDefinition("p$index", "День ${index + 1}", date, date)
+        }
 
-        val result = FlexiblePeriodRules.add(
-            FlexiblePeriodRules.add(listOf(middle), after),
-            before
+        val ordered = FlexiblePeriodRules.validateSequence(periods)
+
+        assertEquals(31, ordered.size)
+        assertEquals(31L, FlexiblePeriodRules.totalDays(ordered))
+        assertEquals(0L, FlexiblePeriodRules.remainingDays(ordered))
+    }
+
+    @Test
+    fun fifteenTwoDayPeriodsAreAllowedWhenTheyFitThirtyDays() {
+        val start = LocalDate.parse("2026-04-01")
+        val periods = (0 until 15).map { index ->
+            val periodStart = start.plusDays(index * 2L)
+            FlexiblePeriodDefinition(
+                "p$index",
+                "Период ${index + 1}",
+                periodStart,
+                periodStart.plusDays(1)
+            )
+        }
+
+        val ordered = FlexiblePeriodRules.validateSequence(periods)
+
+        assertEquals(15, ordered.size)
+        assertEquals(30L, FlexiblePeriodRules.totalDays(ordered))
+        assertEquals(0L, FlexiblePeriodRules.remainingDays(ordered))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun thirtyTwoDaysAreRejectedEvenWhenTheyTouchTwoMonths() {
+        FlexiblePeriodRules.validateSequence(
+            listOf(period("one", "Слишком длинный", "2026-02-01", "2026-03-04"))
         )
+    }
 
-        assertEquals(listOf("before", "middle", "after"), result.map { it.id })
-        assertEquals("before", FlexiblePeriodRules.periodFor(result, LocalDate.parse("2026-05-09"))?.id)
-        assertEquals("middle", FlexiblePeriodRules.periodFor(result, LocalDate.parse("2026-05-10"))?.id)
-        assertEquals("after", FlexiblePeriodRules.periodFor(result, LocalDate.parse("2026-05-21"))?.id)
-        assertNull(FlexiblePeriodRules.periodFor(result, LocalDate.parse("2026-04-30")))
+    @Test(expected = IllegalArgumentException::class)
+    fun sequenceCannotTouchThreeCalendarMonths() {
+        FlexiblePeriodRules.validateSequence(
+            listOf(period("one", "Три месяца", "2026-01-31", "2026-03-02"))
+        )
+    }
+
+    @Test
+    fun februaryOnlyUsesItsActualCalendarLength() {
+        val nonLeap = period("non-leap", "Февраль", "2026-02-01", "2026-02-28")
+        val leap = period("leap", "Февраль", "2024-02-01", "2024-02-29")
+
+        assertEquals(28L, FlexiblePeriodRules.totalDays(listOf(nonLeap)))
+        assertEquals(29L, FlexiblePeriodRules.totalDays(listOf(leap)))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun februaryCannotContainThirtySequentialDaysWithoutTouchingMarch() {
+        FlexiblePeriodRules.validateSequence(
+            listOf(period("february", "Февраль", "2026-02-01", "2026-03-02"))
+        )
+    }
+
+    @Test
+    fun addingPeriodsIsSequentialAndAutomaticallyContinuesAfterTheLastDate() {
+        val first = period("one", "Первый", "2026-05-01", "2026-05-10")
+        val second = period("two", "Второй", "2026-05-11", "2026-05-20")
+        val third = period("three", "Третий", "2026-05-21", "2026-05-30")
+
+        val ordered = FlexiblePeriodRules.add(FlexiblePeriodRules.add(listOf(first), second), third)
+
+        assertEquals(listOf("one", "two", "three"), ordered.map { it.id })
+        assertEquals("one", FlexiblePeriodRules.periodFor(ordered, LocalDate.parse("2026-05-01"))?.id)
+        assertEquals("two", FlexiblePeriodRules.periodFor(ordered, LocalDate.parse("2026-05-11"))?.id)
+        assertEquals("three", FlexiblePeriodRules.periodFor(ordered, LocalDate.parse("2026-05-30"))?.id)
+        assertNull(FlexiblePeriodRules.periodFor(ordered, LocalDate.parse("2026-04-30")))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun addingAnEarlierPeriodIsRejected() {
+        FlexiblePeriodRules.add(
+            listOf(period("one", "Первый", "2026-01-10", "2026-01-20")),
+            period("before", "До него", "2026-01-01", "2026-01-09")
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun addingANonAdjacentPeriodIsRejected() {
+        FlexiblePeriodRules.add(
+            listOf(period("one", "Первый", "2026-01-01", "2026-01-14")),
+            period("two", "Второй", "2026-01-20", "2026-02-02")
+        )
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -61,14 +137,6 @@ class FlexiblePeriodsTest {
                 period("one", "Первый", "2026-01-01", "2026-01-14"),
                 period("two", "Второй", "2026-01-16", "2026-01-31")
             )
-        )
-    }
-
-    @Test(expected = IllegalArgumentException::class)
-    fun addingANonAdjacentPeriodIsRejected() {
-        FlexiblePeriodRules.add(
-            listOf(period("one", "Первый", "2026-01-01", "2026-01-14")),
-            period("two", "Второй", "2026-01-20", "2026-02-02")
         )
     }
 
