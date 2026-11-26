@@ -13,21 +13,157 @@ internal data class DynamicAllocationProposal(
     val basedOnActuals: Boolean
 )
 
+internal data class CalendarMonthIncomeEstimate(
+    val enteredIncome: Double,
+    val forecastIncome: Double,
+    val coveredDays: Int,
+    val uncoveredPastDays: Int,
+    val forecastDays: Int,
+    val uncoveredFutureDays: Int,
+    val monthDays: Int,
+    val averageDailyIncome: Double?
+) {
+    val totalIncome: Double get() = enteredIncome + forecastIncome
+}
+
+internal data class ReportingCycleIncomeEstimate(
+    val firstStart: java.time.LocalDate,
+    val firstEnd: java.time.LocalDate,
+    val firstIncome: Double,
+    val secondStart: java.time.LocalDate,
+    val secondEnd: java.time.LocalDate,
+    val secondIncome: Double
+) {
+    val totalIncome: Double get() = firstIncome + secondIncome
+}
+
 internal object AnalyticsBudgetCalculator {
+    private data class IncomePeriod(
+        val start: java.time.LocalDate,
+        val end: java.time.LocalDate,
+        val earnedAmount: Double
+    ) {
+        val dayCount: Long
+            get() = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
+        val dailyRate: Double
+            get() = earnedAmount / dayCount.toDouble()
+    }
+
+    /**
+     * Allocates each entered reporting-period income evenly over its inclusive
+     * calendar dates, then sums only the dates intersecting the selected month.
+     * Missing days in the past are never backfilled. Only uncovered future days
+     * may be forecast, using the median daily rate of up to six completed periods.
+     */
+    fun calendarMonthIncome(
+        periodIncomes: List<PeriodIncome>,
+        month: java.time.YearMonth,
+        asOf: java.time.LocalDate,
+        forecastLookbackPeriods: Int = 6
+    ): CalendarMonthIncomeEstimate {
+        require(forecastLookbackPeriods >= 1)
+        val normalized = periodIncomes.mapNotNull { row ->
+            val start = runCatching { java.time.LocalDate.parse(row.start) }.getOrNull() ?: return@mapNotNull null
+            val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
+            val earned = row.earnedAmount
+            if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
+            IncomePeriod(start, end, earned)
+        }.groupBy { it.start to it.end }
+            .map { (range, rows) -> IncomePeriod(range.first, range.second, rows.sumOf { it.earnedAmount }) }
+            .sortedWith(compareBy<IncomePeriod> { it.start }.thenBy { it.end })
+
+        val monthStart = month.atDay(1)
+        val monthEnd = month.atEndOfMonth()
+        val coveredDates = mutableSetOf<java.time.LocalDate>()
+        var enteredIncome = 0.0
+
+        normalized.forEach { period ->
+            val from = maxOf(monthStart, period.start)
+            val to = minOf(monthEnd, period.end)
+            if (to.isBefore(from)) return@forEach
+            var date = from
+            while (!date.isAfter(to)) {
+                // A calendar day can contribute only once, even if corrupted or
+                // legacy data contains overlapping period definitions.
+                if (coveredDates.add(date)) enteredIncome += period.dailyRate
+                date = date.plusDays(1)
+            }
+        }
+
+        val recentDailyRates = normalized.asSequence()
+            .filter { !it.end.isAfter(asOf) && it.earnedAmount > 0.0 }
+            .sortedBy { it.end }
+            .takeLast(forecastLookbackPeriods)
+            .map { it.dailyRate }
+            .filter { it.isFinite() && it > 0.0 }
+            .sorted()
+            .toList()
+        // Require at least two completed periods so a single unusual payment
+        // does not become the forecast baseline.
+        val averageDailyIncome = if (recentDailyRates.size >= 2) {
+            val middle = recentDailyRates.size / 2
+            if (recentDailyRates.size % 2 == 0) {
+                (recentDailyRates[middle - 1] + recentDailyRates[middle]) / 2.0
+            } else recentDailyRates[middle]
+        } else null
+
+        var uncoveredPastDays = 0
+        var uncoveredFutureDays = 0
+        var date = monthStart
+        while (!date.isAfter(monthEnd)) {
+            if (date !in coveredDates) {
+                if (date.isAfter(asOf)) uncoveredFutureDays++ else uncoveredPastDays++
+            }
+            date = date.plusDays(1)
+        }
+        val forecastDays = if (averageDailyIncome != null) uncoveredFutureDays else 0
+        val forecastIncome = (averageDailyIncome ?: 0.0) * forecastDays
+        return CalendarMonthIncomeEstimate(
+            enteredIncome = enteredIncome,
+            forecastIncome = forecastIncome,
+            coveredDays = coveredDates.size,
+            uncoveredPastDays = uncoveredPastDays,
+            forecastDays = forecastDays,
+            uncoveredFutureDays = uncoveredFutureDays,
+            monthDays = month.lengthOfMonth(),
+            averageDailyIncome = averageDailyIncome
+        )
+    }
+
+    /**
+     * Returns the unprorated earned income for the two reporting periods in the
+     * selected reporting cycle. Carryover is excluded from earned income.
+     */
+    fun reportingCycleIncome(
+        periodIncomes: List<PeriodIncome>,
+        month: java.time.YearMonth,
+        firstStartDay: Int,
+        firstEndDay: Int
+    ): ReportingCycleIncomeEstimate {
+        val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
+        fun incomeFor(start: java.time.LocalDate, end: java.time.LocalDate): Double =
+            periodIncomes.asSequence()
+                .filter { it.start == start.toString() && it.end == end.toString() }
+                .sumOf { it.earnedAmount.takeIf(Double::isFinite)?.coerceAtLeast(0.0) ?: 0.0 }
+        return ReportingCycleIncomeEstimate(
+            firstStart = proposal.first.start,
+            firstEnd = proposal.first.end,
+            firstIncome = incomeFor(proposal.first.start, proposal.first.end),
+            secondStart = proposal.second.start,
+            secondEnd = proposal.second.end,
+            secondIncome = incomeFor(proposal.second.start, proposal.second.end)
+        )
+    }
+
     fun monthlyIncome(
         fixedMonthlyIncome: Double,
         periodIncomes: List<PeriodIncome>,
         month: java.time.YearMonth,
-        useReportingPeriods: Boolean
+        useReportingPeriods: Boolean,
+        asOf: java.time.LocalDate = java.time.LocalDate.now()
     ): Double {
         if (!useReportingPeriods) return fixedMonthlyIncome.coerceAtLeast(0.0)
-        val selected = periodIncomes.filter { row ->
-            runCatching { java.time.YearMonth.from(java.time.LocalDate.parse(row.end)) == month }.getOrDefault(false)
-        }
-        // In reporting-period mode, the month is the sum of earned income
-        // from the periods ending in that calendar month. Never extrapolate
-        // a daily average to the calendar month's length.
-        return selected.sumOf { it.earnedAmount.coerceAtLeast(0.0) }
+        return calendarMonthIncome(periodIncomes, month, asOf).totalIncome
     }
 
     fun carryoverBefore(
