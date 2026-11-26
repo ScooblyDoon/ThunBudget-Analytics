@@ -297,6 +297,7 @@ internal class BudgetStore(context: Context) {
         check(prefs.edit().putString("reporting_period_category_plans_v1", array.toString()).commit()) {
             "Не удалось сохранить план категорий за отчётный период."
         }
+        saveAutomaticBackup()
     }
 
     fun saveCategories(items: List<BudgetCategory>, planStart: String? = null, planEnd: String? = null) {
