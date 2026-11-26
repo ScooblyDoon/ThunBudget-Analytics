@@ -61,7 +61,6 @@ internal object ReportingPeriodCategoryPlanCalculator {
         secondStart: java.time.LocalDate,
         secondEnd: java.time.LocalDate
     ): ReportingCycleCategoryPlan {
-        val fallback = currentShares.associate { it.first to it.second }
         fun readPlan(start: java.time.LocalDate, end: java.time.LocalDate): Map<String, Double> {
             val stored = savedPlans[start.toString() to end.toString()].orEmpty()
             return currentShares.associate { (name, current) ->
