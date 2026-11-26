@@ -358,12 +358,13 @@ class BudgetForecastCalculatorTest {
             firstStartDay = startDay,
             firstEndDay = endDay,
             monthsToAnalyze = 6,
-            nextPeriodDays = 15
+            nextPeriodDays = 46
         )
         val category = result.categories.single()
         assertEquals("Редкие расходы", category.profile)
         // The events are two reporting periods apart: 1,000 / 2 = 500 ₽ per period.
-        assertEquals(500.0, category.forecastForPeriod, 0.01)
+        // 46 days is approximately three average reporting periods.
+        assertEquals(1500.0, category.forecastForPeriod, 0.01)
     }
 
 }
