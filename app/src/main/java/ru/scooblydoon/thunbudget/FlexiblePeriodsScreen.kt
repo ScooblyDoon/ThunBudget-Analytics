@@ -564,14 +564,7 @@ private fun buildFlexiblePeriodReport(
     )
 }
 
-internal fun parseFlexibleDate(raw: String): LocalDate? = runCatching {
-    val digits = raw.filter(Char::isDigit)
-    require(digits.length == 8)
-    LocalDate.parse(
-        digits,
-        DateTimeFormatter.ofPattern("ddMMuuuu").withResolverStyle(java.time.format.ResolverStyle.STRICT)
-    )
-}.getOrNull()
+internal fun parseFlexibleDate(raw: String): LocalDate? = parseUserDate(raw)
 
 private fun formatFlexibleMoney(value: Double): String =
     String.format(Locale("ru", "RU"), "%,.0f ₽", value)
