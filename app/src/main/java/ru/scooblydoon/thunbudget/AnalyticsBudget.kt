@@ -24,16 +24,10 @@ internal object AnalyticsBudgetCalculator {
         val selected = periodIncomes.filter { row ->
             runCatching { java.time.YearMonth.from(java.time.LocalDate.parse(row.end)) == month }.getOrDefault(false)
         }
-        val totalIncome = selected.sumOf { it.earnedAmount.coerceAtLeast(0.0) }
-        val coveredDays = selected.sumOf { row ->
-            runCatching {
-                val start = java.time.LocalDate.parse(row.start)
-                val end = java.time.LocalDate.parse(row.end)
-                if (end.isBefore(start)) 0L else java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
-            }.getOrDefault(0L)
-        }
-        if (totalIncome <= 0.0 || coveredDays <= 0L) return 0.0
-        return totalIncome / coveredDays.toDouble() * month.lengthOfMonth().toDouble()
+        // In reporting-period mode, the month is the sum of earned income
+        // from the periods ending in that calendar month. Never extrapolate
+        // a daily average to the calendar month's length.
+        return selected.sumOf { it.earnedAmount.coerceAtLeast(0.0) }
     }
 
     fun carryoverBefore(
