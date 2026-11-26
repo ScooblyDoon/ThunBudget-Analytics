@@ -153,7 +153,9 @@ class AnalyticsBudgetTest {
             firstStart = java.time.LocalDate.parse("2026-11-09"),
             firstEnd = java.time.LocalDate.parse("2026-11-23"),
             secondStart = java.time.LocalDate.parse("2026-11-24"),
-            secondEnd = java.time.LocalDate.parse("2026-12-08")
+            secondEnd = java.time.LocalDate.parse("2026-12-08"),
+            firstIncome = 60854.0,
+            secondIncome = 36881.0
         )
 
         assertEquals(20.0, result.averagePercentages["Продукты"]!!, 0.001)
@@ -164,6 +166,27 @@ class AnalyticsBudgetTest {
 
         val twoPeriodIncome = 60854.0 + 36881.0
         assertEquals(19547.0, twoPeriodIncome * result.averagePercentages["Продукты"]!! / 100.0, 0.001)
+    }
+
+    @Test fun cyclePlanWeightsDifferentPeriodPlansByTheirIncomeAmounts() {
+        val result = ReportingPeriodCategoryPlanCalculator.cyclePlan(
+            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
+            savedPlans = mapOf(
+                ("2026-11-09" to "2026-11-23") to mapOf("Продукты" to 15.0, "Резервные средства" to 85.0),
+                ("2026-11-24" to "2026-12-08") to mapOf("Продукты" to 25.0, "Резервные средства" to 75.0)
+            ),
+            firstStart = java.time.LocalDate.parse("2026-11-09"),
+            firstEnd = java.time.LocalDate.parse("2026-11-23"),
+            secondStart = java.time.LocalDate.parse("2026-11-24"),
+            secondEnd = java.time.LocalDate.parse("2026-12-08"),
+            firstIncome = 60000.0,
+            secondIncome = 40000.0
+        )
+
+        val expectedPlannedAmount = 60000.0 * 0.15 + 40000.0 * 0.25
+        val actualPlan = 100000.0 * result.averagePercentages["Продукты"]!! / 100.0
+        assertEquals(19.0, result.averagePercentages["Продукты"]!!, 0.001)
+        assertEquals(expectedPlannedAmount, actualPlan, 0.001)
     }
 
     @Test fun cyclePlanFallsBackToCurrentPlanWhenAnOlderSnapshotIsUnavailable() {
