@@ -19,7 +19,16 @@ data class CategoryForecast(
     val forecastForPeriod: Double,
     val historyPeriods: Int,
     val hasHistory: Boolean,
-    val averagePeriodSpend: Double
+    val averagePeriodSpend: Double,
+    val profile: String = "Недостаточно данных",
+    val forecastLowForPeriod: Double = forecastForPeriod,
+    val forecastHighForPeriod: Double = forecastForPeriod,
+    val trendPercent: Double = 0.0,
+    val volatilityPercent: Double = 0.0,
+    val evidenceQuality: String = "Низкая",
+    val positiveHistoryPeriods: Int = 0,
+    val currentPeriodAnomaly: Boolean = false,
+    val explanation: String = ""
 ) {
     val historyMonths: Int get() = historyPeriods
 }
@@ -112,13 +121,30 @@ object BudgetForecastCalculator {
                     .sumOf { it.amount }
                 spent / daysIn(period).toDouble()
             }
-            val hasCompletedHistory = completedPeriods.isNotEmpty() &&
-                completedExpenses.any { it.category.equals(category, ignoreCase = true) }
-            val historicalRate = if (completedPeriods.isEmpty()) 0.0 else {
-                val cappedRates = capHighOutliers(periodRates)
-                weightedAverage(cappedRates)
+            val positiveRates = periodRates.filter { it > 0.0 }
+            val recentRates = periodRates.takeLast(12)
+            val positiveFrequency = if (recentRates.isEmpty()) 0.0
+                else recentRates.count { it > 0.0 }.toDouble() / recentRates.size.toDouble()
+            val hasCompletedHistory = positiveRates.isNotEmpty()
+            val historicalRateRaw = if (completedPeriods.isEmpty()) 0.0 else {
+                weightedAverage(capHighOutliers(periodRates))
             }
-
+            val typicalPositiveRate = median(positiveRates)
+            val profile = when {
+                periodRates.isEmpty() || positiveRates.size < 2 -> "Недостаточно данных"
+                positiveFrequency <= 0.35 -> "Редкие расходы"
+                positiveFrequency >= 0.70 -> "Регулярные расходы"
+                else -> "Переменные расходы"
+            }
+            // For intermittent categories, estimate expected spend as
+            // typical event size multiplied by the probability of an event.
+            val historicalRate = if (
+                profile == "Редкие расходы" && positiveRates.size >= 2
+            ) {
+                typicalPositiveRate * positiveFrequency
+            } else historicalRateRaw
+            val trendFactor = dampedTrendFactor(periodRates)
+            val trendAdjustedRate = historicalRate * trendFactor
             val currentCategoryExpenses = activeExpenses.filter {
                 it.category.equals(category, ignoreCase = true)
             }
@@ -127,11 +153,8 @@ object BudgetForecastCalculator {
                 currentCategoryExpenses.sumOf { it.amount } / activeElapsedDays.toDouble()
             } else 0.0
 
-            // A single unusually large purchase must not be extrapolated as if it
-            // were a new daily habit. Existing categories may accelerate, but the
-            // observed pace is capped at 2x their historical baseline and blended
-            // in gradually. New categories need repeated evidence or at least half
-            // a reporting period before their current pace is extrapolated.
+            // The current pace is a secondary signal. A single unusually large
+            // purchase is kept in actuals but cannot become the new baseline.
             val cappedCurrentRate = if (hasCompletedHistory && historicalRate > 0.0) {
                 minOf(currentRate, historicalRate * MAX_CURRENT_PACE_MULTIPLIER)
             } else currentRate
@@ -139,16 +162,56 @@ object BudgetForecastCalculator {
                 (activeTotalDays > 0L && activeElapsedDays.toDouble() / activeTotalDays.toDouble() >= 0.5)
             val dailyRate = when {
                 hasCompletedHistory && hasCurrentData ->
-                    historicalRate * (1.0 - activeWeight) + cappedCurrentRate * activeWeight
-                hasCompletedHistory -> historicalRate
+                    trendAdjustedRate * (1.0 - activeWeight) + cappedCurrentRate * activeWeight
+                hasCompletedHistory -> trendAdjustedRate
                 hasCurrentData && enoughNewCategoryEvidence -> currentRate
                 else -> 0.0
             }.coerceAtLeast(0.0)
 
+            val volatility = robustVolatility(periodRates)
+            val volatilityPercent = volatility * 100.0
+            val evidenceQuality = when {
+                periodRates.size >= 12 && positiveRates.size >= 8 && volatility <= 0.45 -> "Высокая"
+                periodRates.size >= 6 && positiveRates.size >= 4 -> "Средняя"
+                else -> "Низкая"
+            }
+            // A transparent planning range, not a statistically calibrated
+            // confidence interval. It widens when history is short or unstable.
+            var uncertainty = (0.15 + volatility * 0.45 +
+                if (periodRates.size < 6) 0.25 else 0.0).coerceIn(0.15, 0.85)
+            if (profile == "Редкие расходы") {
+                uncertainty = maxOf(uncertainty, (1.0 - positiveFrequency) * 0.65)
+            }
             val monthlyForecast = dailyRate * monthDays
             val periodForecast = dailyRate * targetDays
-            val historicalPeriodAverage = if (completedPeriods.isNotEmpty()) historicalRate * averagePeriodDays else dailyRate * averagePeriodDays
-            val hasHistory = hasCompletedHistory || (hasCurrentData && enoughNewCategoryEvidence)
+            val forecastLow = periodForecast * (1.0 - uncertainty).coerceAtLeast(0.0)
+            val forecastHigh = periodForecast * (1.0 + uncertainty)
+            val historicalPeriodAverage = if (completedPeriods.isNotEmpty()) {
+                historicalRate * averagePeriodDays
+            } else dailyRate * averagePeriodDays
+
+            val enoughNewCategoryHistory = hasCurrentData && enoughNewCategoryEvidence
+            val hasHistory = hasCompletedHistory || enoughNewCategoryHistory
+            val positiveMedian = median(positiveRates)
+            val positiveMad = median(positiveRates.map { kotlin.math.abs(it - positiveMedian) })
+            val anomalyThreshold = if (positiveMedian > 0.0) {
+                positiveMedian + maxOf(positiveMedian * 0.8, positiveMad * 3.0 * 1.4826)
+            } else Double.POSITIVE_INFINITY
+            val currentPeriodAnomaly = hasCompletedHistory && hasCurrentData &&
+                currentRate > anomalyThreshold
+            val trendPercent = (trendFactor - 1.0) * 100.0
+            val trendText = when {
+                trendPercent >= 5.0 -> "последние периоды растут примерно на ${trendPercent.toInt()}%"
+                trendPercent <= -5.0 -> "последние периоды снижаются примерно на ${kotlin.math.abs(trendPercent).toInt()}%"
+                else -> "выраженного тренда нет"
+            }
+            val frequencyText = "${(positiveFrequency * 100.0).toInt()}% последних периодов с расходами"
+            val explanation = when {
+                !hasHistory -> "Недостаточно повторяющихся данных для прогноза"
+                currentPeriodAnomaly -> "Трата в текущем периоде заметно выше обычного темпа; она учтена в факте, но ограниченно влияет на прогноз"
+                profile == "Редкие расходы" -> "Редкие траты: учтены частота появления и типичный размер; $frequencyText"
+                else -> "Профиль: $profile; $trendText; $frequencyText"
+            }
 
             CategoryForecast(
                 category = category,
@@ -157,7 +220,16 @@ object BudgetForecastCalculator {
                 forecastForPeriod = periodForecast,
                 historyPeriods = observedPeriods,
                 hasHistory = hasHistory,
-                averagePeriodSpend = historicalPeriodAverage
+                averagePeriodSpend = historicalPeriodAverage,
+                profile = profile,
+                forecastLowForPeriod = forecastLow,
+                forecastHighForPeriod = forecastHigh,
+                trendPercent = trendPercent,
+                volatilityPercent = volatilityPercent,
+                evidenceQuality = evidenceQuality,
+                positiveHistoryPeriods = positiveRates.size,
+                currentPeriodAnomaly = currentPeriodAnomaly,
+                explanation = explanation
             )
         }
 
@@ -170,6 +242,40 @@ object BudgetForecastCalculator {
             totalPeriodForecast = forecasts.sumOf { it.forecastForPeriod },
             reportingPeriods = completedPeriods
         )
+    }
+
+
+    private fun median(values: List<Double>): Double {
+        if (values.isEmpty()) return 0.0
+        val sorted = values.sorted()
+        val middle = sorted.size / 2
+        return if (sorted.size % 2 == 0) {
+            (sorted[middle - 1] + sorted[middle]) / 2.0
+        } else sorted[middle]
+    }
+
+    private fun robustVolatility(rates: List<Double>): Double {
+        if (rates.size < 2) return 1.0
+        val center = median(rates)
+        if (center <= 0.0) return 1.0
+        val mad = median(rates.map { kotlin.math.abs(it - center) })
+        return (1.4826 * mad / center).coerceIn(0.0, 2.0)
+    }
+
+    /**
+     * Compare the last three observations with the preceding three and damp
+     * the difference before projecting it forward. This deliberately avoids
+     * fitting an aggressive line through a handful of volatile transactions.
+     */
+    private fun dampedTrendFactor(rates: List<Double>): Double {
+        if (rates.size < 6) return 1.0
+        val prior = rates.dropLast(3).takeLast(3)
+        val recent = rates.takeLast(3)
+        if (prior.isEmpty() || recent.isEmpty()) return 1.0
+        val priorAverage = prior.average()
+        if (priorAverage <= 0.0) return 1.0
+        val change = (recent.average() - priorAverage) / priorAverage
+        return (1.0 + change * 0.35).coerceIn(0.85, 1.15)
     }
 
     private fun capHighOutliers(rates: List<Double>): List<Double> {
