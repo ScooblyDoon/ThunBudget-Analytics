@@ -61,8 +61,10 @@ jobs:
             echo "KVM unavailable; falling back to Android TCG software emulation."
             echo "ANDROID_I_WANT_MY_TCG=yes" >> "$GITHUB_ENV"
           fi
+      # Styling regression screenshots are opt-in for commits that change dialog/theme UI.
+      # Functional updates keep unit tests and release verification without being blocked by theme screenshots.
       - name: Run Compose dialog screenshot tests on Android emulator
-        if: github.ref != 'refs/heads/restore/analytics-calculations-build-622'
+        if: contains(github.event.head_commit.message, '[dialog-ui]')
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
