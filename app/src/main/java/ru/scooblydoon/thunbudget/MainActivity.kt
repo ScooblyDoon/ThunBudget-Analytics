@@ -855,9 +855,10 @@ private fun ThunBudgetApp() {
         category.name to if (autoAllocationEnabled && manualShare != null) manualShare else category.percent
     }
     val reportingPeriodCategoryPlans = store.loadReportingPeriodCategoryPlans()
+    val plansForAnalytics = if (autoAllocationEnabled) reportingPeriodCategoryPlans else emptyMap()
     val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
         currentShares = currentCategoryShares,
-        savedPlans = reportingPeriodCategoryPlans,
+        savedPlans = plansForAnalytics,
         firstStart = analyticsCycleIncome.firstStart,
         firstEnd = analyticsCycleIncome.firstEnd,
         secondStart = analyticsCycleIncome.secondStart,
@@ -879,7 +880,7 @@ private fun ThunBudgetApp() {
         ReportingPeriodCategoryPlanCalculator.monthlyPlan(
             currentShares = currentCategoryShares,
             periodIncomes = periodIncomes,
-            savedPlans = reportingPeriodCategoryPlans,
+            savedPlans = plansForAnalytics,
             month = analyticsMonth,
             forecastIncome = analyticsMonthIncomeEstimate.forecastIncome,
             firstStartDay = firstPeriodStartDay,
@@ -1913,7 +1914,7 @@ private fun ThunBudgetApp() {
                         val pIncome=periodIncomes.firstOrNull { it.start==pStart.toString() && it.end==pEnd.toString() }?.amount ?: 0.0
                         val pCarryover=AnalyticsBudgetCalculator.carryoverBefore(pStart.toString(), periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
                         val pEffectiveIncome=pIncome+pCarryover
-                        val savedPeriodPlan = reportingPeriodCategoryPlans[pStart.toString() to pEnd.toString()].orEmpty()
+                        val savedPeriodPlan = plansForAnalytics[pStart.toString() to pEnd.toString()].orEmpty()
                         val pPlanPercent = savedPeriodPlan.entries.firstOrNull { it.key.equals(cat.name, true) }?.value
                             ?: currentCategoryShares.firstOrNull { it.first.equals(cat.name, true) }?.second
                             ?: cat.percent
