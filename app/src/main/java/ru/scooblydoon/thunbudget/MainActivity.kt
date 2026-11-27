@@ -871,7 +871,8 @@ private fun ThunBudgetApp() {
     val analyticsMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(
         periodIncomes, analyticsMonth, today,
         firstStartDay = firstPeriodStartDay,
-        firstEndDay = firstPeriodEndDay
+        firstEndDay = firstPeriodEndDay,
+        incomeEntries = incomeEntries
     )
     val analyticsCycleIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
         periodIncomes, analyticsMonth, firstPeriodStartDay, firstPeriodEndDay
@@ -936,7 +937,8 @@ private fun ThunBudgetApp() {
             month = analyticsMonth,
             forecastIncome = analyticsMonthIncomeEstimate.forecastIncome,
             firstStartDay = firstPeriodStartDay,
-            firstEndDay = firstPeriodEndDay
+            firstEndDay = firstPeriodEndDay,
+            incomeEntries = incomeEntries
         )
     } else {
         currentCategoryShares.associate { (name, percent) ->
@@ -956,8 +958,10 @@ private fun ThunBudgetApp() {
     val dailyDaysRemaining = dailyLimit.daysRemaining
     val dailySpendingLimit = dailyLimit.amountPerDay
     val spentToday = expenses.filter { it.date == today.toString() }.sumOf { it.amount }
-    val monthExpenses=expenses.filter { it.date.startsWith(LocalDate.now().toString().take(7)) }
-    val monthTotal=monthExpenses.sumOf { it.amount }
+    val monthExpenses = AnalyticsBudgetCalculator.calendarMonthCashExpenses(
+        expenses, YearMonth.from(today), today
+    )
+    val monthTotal = monthExpenses.sumOf { it.amount }
 
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
@@ -2269,19 +2273,20 @@ private fun ThunBudgetApp() {
                             Text(analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU")).withLocale(Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
                             TextButton(onClick={if(analyticsMonth<YearMonth.now()) analyticsMonth=analyticsMonth.plusMonths(1)}) { Text("›") }
                         }
-                        val from=analyticsMonth.atDay(1).toString()
-                        val to=AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today).toString()
-                        val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
+                        val monthTotal = AnalyticsBudgetCalculator.calendarMonthCashExpenseTotal(
+                            expenses, analyticsMonth, today
+                        )
                         MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
                     }
                     item {
                         val currentFrom = analyticsMonth.atDay(1)
                         val currentTo = AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today)
-                        val currentTotal = expenses.filter { it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount }
+                        val monthCashExpenses = AnalyticsBudgetCalculator.cashExpensesInRange(expenses, currentFrom, currentTo)
+                        val currentTotal = monthCashExpenses.sumOf { it.amount }
                         val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(currentFrom, currentTo) + 1
                         val dailyAverage = if (elapsedDays > 0) currentTotal / elapsedDays else 0.0
-                        val topCategory = categories.map { cat ->
-                            cat.name to expenses.filter { it.category == cat.name && it.date >= currentFrom.toString() && it.date <= currentTo.toString() }.sumOf { it.amount }
+                        val topCategory = categories.filterNot { it.name.equals("Перенос средств", true) }.map { cat ->
+                            cat.name to monthCashExpenses.filter { it.category == cat.name }.sumOf { it.amount }
                         }.maxByOrNull { it.second }
                         Card(shape = RoundedCornerShape(20.dp)) {
                             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2295,9 +2300,10 @@ private fun ThunBudgetApp() {
                     }
                     item { TextButton(onClick={showMonthCategories=!showMonthCategories; persistUiExpanded(context,"month_categories",showMonthCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showMonthCategories) items(categories.filterNot { it.name.equals("Перенос средств", true) },key={ "month-"+it.name }) { cat ->
-                        val from=analyticsMonth.atDay(1).toString()
-                        val to=AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today).toString()
-                        val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
+                        val from=analyticsMonth.atDay(1)
+                        val to=AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today)
+                        val fact=AnalyticsBudgetCalculator.cashExpensesInRange(expenses, from, to)
+                            .filter { it.category == cat.name }.sumOf { it.amount }
                         val plan=analyticsMonthPlanAmounts[cat.name] ?: 0.0
                         Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
@@ -2308,12 +2314,18 @@ private fun ThunBudgetApp() {
                         } }
                     }
                     item { Divider(); Text("Расходы за год",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
-                    item { MetricCard("Всего с начала года",money(expenses.filter { it.date>=LocalDate.of(today.year,1,1).toString() && it.date<=today.toString() }.sumOf { it.amount }),Modifier.fillMaxWidth()) }
+                    item {
+                        val yearCashTotal = AnalyticsBudgetCalculator.cashExpenseTotalInRange(
+                            expenses, LocalDate.of(today.year, 1, 1), today
+                        )
+                        MetricCard("Всего с начала года",money(yearCashTotal),Modifier.fillMaxWidth())
+                    }
                     item { TextButton(onClick={showYearCategories=!showYearCategories; persistUiExpanded(context,"year_categories",showYearCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showYearCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showYearCategories) items(categories.filterNot { it.name.equals("Перенос средств", true) },key={ "year-"+it.name }) { cat ->
-                        val yearStart=LocalDate.of(today.year,1,1).toString()
-                        val fact=expenses.filter { it.category==cat.name && it.date>=yearStart && it.date<=today.toString() }.sumOf { it.amount }
-                        val plan=plannedForPeriod(income,cat.percent,yearStart,today.toString())
+                        val yearStart=LocalDate.of(today.year,1,1)
+                        val fact=AnalyticsBudgetCalculator.cashExpensesInRange(expenses, yearStart, today)
+                            .filter { it.category == cat.name }.sumOf { it.amount }
+                        val plan=plannedForPeriod(income,cat.percent,yearStart.toString(),today.toString())
                         Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) MaterialTheme.colorScheme.error else visualPalette.positive)
@@ -3542,9 +3554,7 @@ private fun ChartsScreen(
     val today = LocalDate.now()
     val monthStart = month.atDay(1)
     val monthEnd = AnalyticsBudgetCalculator.calendarMonthExpenseEnd(month, today)
-    val monthExpenses = if (monthEnd.isBefore(monthStart)) emptyList() else expenses.filter {
-        it.date >= monthStart.toString() && it.date <= monthEnd.toString()
-    }
+    val monthExpenses = AnalyticsBudgetCalculator.cashExpensesInRange(expenses, monthStart, monthEnd)
     val monthTotal = monthExpenses.sumOf { it.amount }
 
     val proposal = ReportingPeriodCalculator.propose(month, firstPeriodStartDay, firstPeriodEndDay)
