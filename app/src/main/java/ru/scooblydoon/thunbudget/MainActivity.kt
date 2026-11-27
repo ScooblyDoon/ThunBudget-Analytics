@@ -789,9 +789,7 @@ private fun ThunBudgetApp() {
     var showSavingsInfo by rememberUiExpanded(context, "savings_info")
     var showPlanChart by rememberUiExpanded(context, "chart_plan")
     var showPieChart by rememberUiExpanded(context, "chart_pie")
-    var showCategoryCharts by rememberUiExpanded(context, "chart_categories")
     var showAnnualCategoryCharts by rememberUiExpanded(context, "annual_category_charts")
-    var selectedChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var chartsPeriodType by rememberSaveable {
         mutableIntStateOf(if (LocalDate.now().dayOfMonth in firstPeriodStartDay..firstPeriodEndDay) 0 else 1)
     }
@@ -2160,11 +2158,6 @@ private fun ThunBudgetApp() {
                         onShowMonthBreakdownPickerChange = { showMonthBreakdownPicker = it; persistUiExpanded(context, "chart_month_breakdown_picker", it) },
                         showPie = showPieChart,
                         onShowPieChange = { showPieChart = it; persistUiExpanded(context, "chart_pie", it) },
-                        selectedChartCategoryNames = selectedChartCategoryNames,
-                        onSelectedChartCategoryNamesChange = { selectedChartCategoryNames = it },
-                        showCategoryCharts = showCategoryCharts,
-                        onShowCategoryChartsChange = { showCategoryCharts = it; persistUiExpanded(context, "chart_categories", it) },
-                        monthlyPlanAmounts = analyticsMonthPlanAmounts,
                         annualYear = annualChartYear,
                         onAnnualYearChange = { annualChartYear = it },
                         selectedAnnualCategoryNames = selectedAnnualChartCategoryNames,
@@ -3153,11 +3146,6 @@ private fun ChartsScreen(
     onShowMonthBreakdownPickerChange: (Boolean) -> Unit,
     showPie: Boolean,
     onShowPieChange: (Boolean) -> Unit,
-    selectedChartCategoryNames: String,
-    onSelectedChartCategoryNamesChange: (String) -> Unit,
-    showCategoryCharts: Boolean,
-    onShowCategoryChartsChange: (Boolean) -> Unit,
-    monthlyPlanAmounts: Map<String, Double>,
     annualYear: Int,
     onAnnualYearChange: (Int) -> Unit,
     selectedAnnualCategoryNames: String,
@@ -3188,12 +3176,6 @@ private fun ChartsScreen(
         expenses.filter { it.date >= selectedPeriod.start.toString() && it.date <= periodVisibleEnd.toString() }
     }
     val periodTotal = periodExpenses.sumOf { it.amount }
-    val selectedDailyCategories = when {
-        selectedMonthBreakdownCategoryNames == "__NONE__" -> emptySet()
-        selectedMonthBreakdownCategoryNames.isBlank() -> categories.map { it.name }.toSet()
-        else -> selectedMonthBreakdownCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
-    }
-    val monthDaysVisible = if (monthEnd.isBefore(monthStart)) 0 else monthEnd.dayOfMonth
 
     LazyColumn(
         Modifier.fillMaxSize().padding(16.dp),
@@ -3254,49 +3236,6 @@ private fun ChartsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             MetricCard("Фактические расходы за месяц", money(monthTotal), Modifier.fillMaxWidth())
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Графики по категориям", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { onShowCategoryChartsChange(!showCategoryCharts) }) {
-                    Text(if (showCategoryCharts) "Свернуть ▲" else "Развернуть ▼")
-                }
-            }
-        }
-        if (showCategoryCharts) {
-            items(
-                selectedDailyCategories.filter { name -> categories.any { it.name == name } }.toList(),
-                key = { "category-daily-" + it }
-            ) { categoryName ->
-                val dailyValues = (1..monthDaysVisible).map { day ->
-                    val date = month.atDay(day).toString()
-                    monthExpenses.filter { it.category.equals(categoryName, true) && it.date == date }.sumOf { it.amount }
-                }
-                val categoryPlan = monthlyPlanAmounts[categoryName] ?: 0.0
-                val fact = dailyValues.sum()
-                val metrics = AnalyticsBudgetCalculator.metrics(categoryPlan, fact)
-                Card {
-                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(categoryName, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                            Text(money(fact), fontWeight = FontWeight.Bold)
-                            TextButton(onClick = { onSelectedChartCategoryNamesChange((selectedDailyCategories - categoryName).joinToString("|")) }) { Text("Убрать") }
-                        }
-                        if (dailyValues.isEmpty()) {
-                            Text("За выбранный месяц расходов пока нет.", style = MaterialTheme.typography.bodySmall)
-                        } else {
-                            val ticks = listOf(1, 5, 10, 15, 20, 25, monthDaysVisible).distinct().filter { it in 1..monthDaysVisible }
-                            ScaledBarChart(values = dailyValues, xLabels = ticks.map { it.toString() }, color = Color(0xFF6556D9), height = 112.dp)
-                        }
-                        Text("План: ${money(categoryPlan)} · Факт: ${money(fact)}", style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
         }
         item {
             CategoryDonutBreakdown(
