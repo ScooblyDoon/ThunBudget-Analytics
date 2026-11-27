@@ -56,6 +56,24 @@ object ReportingPeriodCalculator {
         )
     }
 
+    /**
+     * Returns the configured reporting period containing [date].
+     * Days before the first period's start belong to the previous month's second period.
+     */
+    fun periodFor(
+        date: LocalDate,
+        firstStartDay: Int,
+        firstEndDay: Int
+    ): ReportingDateRange {
+        val month = YearMonth.from(date)
+        val current = propose(month, firstStartDay, firstEndDay)
+        return when {
+            !date.isBefore(current.first.start) && !date.isAfter(current.first.end) -> current.first
+            date.isAfter(current.first.end) -> current.second
+            else -> propose(month.minusMonths(1), firstStartDay, firstEndDay).second
+        }
+    }
+
     /** Builds a proposal for the month containing the supplied first-period start. */
     fun propose(firstStart: LocalDate, firstEnd: LocalDate): ReportingPeriodProposal {
         require(!firstEnd.isBefore(firstStart))

@@ -117,4 +117,37 @@ class XlsxExporterTest {
             )
         }
     }
+
+    @Test
+    fun incomeSheetExportsPrimaryAdditionalAndCarryoverAsSeparateTypes() {
+        val rows = XlsxExporter.incomes(
+            listOf(
+                IncomeEntry(
+                    id = "main", title = "Основной доход", amount = 36000.0,
+                    date = "2026-11-23", periodStart = "2026-11-09", periodEnd = "2026-11-23"
+                ),
+                IncomeEntry(
+                    id = "bonus", title = "Премия", amount = 5000.0,
+                    date = "2026-11-15", periodStart = "2026-11-09", periodEnd = "2026-11-23",
+                    isAdditional = true
+                ),
+                IncomeEntry(
+                    id = "carry", title = "Перенос средств", amount = 2000.0,
+                    date = "2026-11-24", periodStart = "2026-11-24", periodEnd = "2026-12-08",
+                    isCarryover = true
+                )
+            )
+        )
+
+        assertEquals("Дата", rows.first()[0])
+        assertEquals("Тип дохода", rows.first()[2])
+        val entriesByType = rows.drop(1).dropLast(1).associateBy { it[2].toString() }
+        assertEquals(setOf("Основной доход", "Дополнительный доход", "Перенос средств"), entriesByType.keys)
+        assertEquals(36000.0, entriesByType["Основной доход"]!![3] as Double, 0.001)
+        assertEquals(5000.0, entriesByType["Дополнительный доход"]!![3] as Double, 0.001)
+        assertEquals(2000.0, entriesByType["Перенос средств"]!![3] as Double, 0.001)
+        assertEquals("ИТОГО", rows.last()[0])
+        assertTrue(rows.last()[3].toString().contains("SUM(D2:D4)"))
+    }
+
 }

@@ -19,8 +19,46 @@ data class IncomeEntry(
     val periodEnd: String,
     val isLegacyAggregate: Boolean = false,
     val isCarryover: Boolean = false,
-    val linkedExpenseId: Long? = null
+    val linkedExpenseId: Long? = null,
+    val isAdditional: Boolean = false
 )
+
+/**
+ * Replaces only the regular/base income for one reporting period.
+ * Additional one-off receipts and explicitly linked carryover entries are
+ * retained so editing the base amount cannot silently delete them.
+ */
+internal object IncomeLedgerRules {
+    fun replacePrimaryIncome(
+        entries: List<IncomeEntry>,
+        start: String,
+        end: String,
+        amount: Double
+    ): List<IncomeEntry> {
+        require(amount.isFinite() && amount >= 0.0)
+        val periodStart = LocalDate.parse(start)
+        val periodEnd = LocalDate.parse(end)
+        require(!periodEnd.isBefore(periodStart))
+        val periodEntries = entries.filter { it.periodStart == start && it.periodEnd == end }
+        val preserved = periodEntries.filter { it.isCarryover || it.isAdditional }
+        val retained = entries.filterNot { it.periodStart == start && it.periodEnd == end }
+        val primary = if (amount > 0.0) {
+            listOf(
+                IncomeEntry(
+                    id = "manual-$start-$end",
+                    title = "Доход за период",
+                    amount = amount,
+                    date = end,
+                    periodStart = start,
+                    periodEnd = end
+                )
+            )
+        } else {
+            emptyList()
+        }
+        return retained + preserved + primary
+    }
+}
 
 data class LegacyPeriodIncome(
     val start: String,
@@ -145,7 +183,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
         periodStart: LocalDate,
         periodEnd: LocalDate,
         isCarryover: Boolean = false,
-        linkedExpenseId: Long? = null
+        linkedExpenseId: Long? = null,
+        isAdditional: Boolean = false
     ): IncomeEntry {
         require(title.isNotBlank())
         require(amount.isFinite() && amount > 0.0)
@@ -159,7 +198,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
             periodStart = periodStart.toString(),
             periodEnd = periodEnd.toString(),
             isCarryover = isCarryover,
-            linkedExpenseId = linkedExpenseId
+            linkedExpenseId = linkedExpenseId,
+            isAdditional = isAdditional
         )
         check(save(load() + entry)) { "Не удалось сохранить доход." }
         return entry
@@ -186,6 +226,7 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
             require(it.id.isNotBlank() && it.title.isNotBlank())
             require(it.amount.isFinite() && it.amount > 0.0)
             require(it.linkedExpenseId == null || (it.isCarryover && it.linkedExpenseId > 0L))
+            require(!it.isAdditional || !it.isCarryover) { "Дополнительный доход не может одновременно быть переносом." }
             val date = LocalDate.parse(it.date)
             val start = LocalDate.parse(it.periodStart)
             val end = LocalDate.parse(it.periodEnd)
@@ -206,7 +247,13 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 periodEnd = item.getString("periodEnd"),
                 isLegacyAggregate = item.optBoolean("isLegacyAggregate", false),
                 isCarryover = item.optBoolean("isCarryover", false),
-                linkedExpenseId = if (item.has("linkedExpenseId") && !item.isNull("linkedExpenseId")) item.optLong("linkedExpenseId").takeIf { it > 0L } else null
+                linkedExpenseId = if (item.has("linkedExpenseId") && !item.isNull("linkedExpenseId")) item.optLong("linkedExpenseId").takeIf { it > 0L } else null,
+                // Previous app versions stored one-off assistant receipts as "Голосовой доход"
+                // before the explicit additional-income flag existed.
+                isAdditional = item.optBoolean(
+                    "isAdditional",
+                    item.optString("title").equals("Голосовой доход", ignoreCase = true)
+                )
             )
         }.also(::validate)
     }
@@ -224,7 +271,8 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 .put("periodEnd", entry.periodEnd)
                 .put("isLegacyAggregate", entry.isLegacyAggregate)
                 .put("isCarryover", entry.isCarryover)
-                .put("linkedExpenseId", entry.linkedExpenseId))
+                .put("linkedExpenseId", entry.linkedExpenseId)
+                .put("isAdditional", entry.isAdditional))
         }
         return array.toString()
     }

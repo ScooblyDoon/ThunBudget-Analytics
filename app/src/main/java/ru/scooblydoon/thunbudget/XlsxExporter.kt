@@ -23,13 +23,15 @@ object XlsxExporter {
         periodStart: String,
         periodEnd: String,
         periodIncome: Double,
-        monthlyIncomes: Map<String, Double>
+        monthlyIncomes: Map<String, Double>,
+        incomeEntries: List<IncomeEntry> = emptyList()
     ) {
         val from = LocalDate.parse(periodStart)
         val to = LocalDate.parse(periodEnd)
         require(!to.isBefore(from)) { "Некорректные даты отчётного периода." }
         val sheets = listOf(
             "Операции" to operations(expenses),
+            "Доходы" to incomes(incomeEntries),
             "Отчётный период" to periods(expenses, categories, income, from, to, periodIncome),
             "Месяцы" to months(expenses, categories, income, year, monthlyIncomes),
             "Год по категориям" to annual(expenses, categories, income, year),
@@ -52,6 +54,24 @@ object XlsxExporter {
     private fun operations(expenses: List<Expense>): List<List<Any>> {
         val rows = listOf(listOf<Any>("Дата", "Описание", "Категория", "Сумма, ₽")) +
             expenses.sortedBy { it.date }.map { listOf(it.date, it.title, it.category, it.amount) }
+        return withTotals(rows, listOf(3))
+    }
+
+    internal fun incomes(entries: List<IncomeEntry>): List<List<Any>> {
+        val rows = listOf(
+            listOf<Any>("Дата", "Поступление", "Тип дохода", "Сумма, ₽", "Начало периода", "Окончание периода")
+        ) + entries.sortedBy { it.date }.map { entry ->
+            val type = when {
+                entry.isCarryover -> "Перенос средств"
+                entry.isAdditional -> "Дополнительный доход"
+                entry.isLegacyAggregate -> "Перенесённый старый доход"
+                else -> "Основной доход"
+            }
+            listOf(
+                entry.date, entry.title, type, entry.amount,
+                entry.periodStart, entry.periodEnd
+            )
+        }
         return withTotals(rows, listOf(3))
     }
 

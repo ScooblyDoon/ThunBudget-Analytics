@@ -187,7 +187,8 @@ data class FlexiblePeriodExpense(
 data class FlexiblePeriodIncome(
     val amount: Double,
     val date: LocalDate,
-    val isCarryover: Boolean = false
+    val isCarryover: Boolean = false,
+    val isAdditional: Boolean = false
 )
 
 data class FlexiblePeriodCategoryPlan(
@@ -247,7 +248,8 @@ data class FlexiblePeriodReport(
     val remainingToPlan: Double,
     val averageActualPerElapsedDay: Double?,
     val requiredPerRemainingDay: Double?,
-    val categories: List<FlexiblePeriodCategoryResult>
+    val categories: List<FlexiblePeriodCategoryResult>,
+    val additionalIncome: Double = 0.0
 )
 
 object FlexiblePeriodAnalyticsCalculator {
@@ -276,7 +278,11 @@ object FlexiblePeriodAnalyticsCalculator {
                 it.amount.isFinite() && it.amount > 0.0
         }
 
+        require(periodIncomes.none { it.isCarryover && it.isAdditional }) {
+            "Перенос не может одновременно считаться дополнительным доходом."
+        }
         val earnedIncome = periodIncomes.filterNot { it.isCarryover }.sumOf { it.amount }
+        val additionalIncome = periodIncomes.filter { it.isAdditional }.sumOf { it.amount }
         val carryoverIncome = periodIncomes.filter { it.isCarryover }.sumOf { it.amount }
         val ledgerIncome = earnedIncome + carryoverIncome
         val budgetCategories = categories.filterNot {
@@ -371,7 +377,8 @@ object FlexiblePeriodAnalyticsCalculator {
             requiredPerRemainingDay = if (remainingDays > 0L) {
                 (plannedTotal - actualTotal).coerceAtLeast(0.0) / remainingDays
             } else null,
-            categories = categoryResults
+            categories = categoryResults,
+            additionalIncome = additionalIncome
         )
     }
 

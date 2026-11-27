@@ -121,4 +121,69 @@ class IncomeLedgerMigrationTest {
             listOf(LegacyPeriodIncome("2026-11-01", "2026-11-30", Double.NaN))
         )
     }
+
+    @Test
+    fun replacingPrimaryIncomePreservesAdditionalIncomeAndCarryover() {
+        val start = "2026-11-09"
+        val end = "2026-11-23"
+        val entries = listOf(
+            IncomeEntry(
+                id = "main", title = "Доход за период", amount = 30000.0,
+                date = end, periodStart = start, periodEnd = end
+            ),
+            IncomeEntry(
+                id = "bonus", title = "Премия", amount = 5000.0,
+                date = "2026-11-15", periodStart = start, periodEnd = end,
+                isAdditional = true
+            ),
+            IncomeEntry(
+                id = "carry", title = "Перенос средств", amount = 2000.0,
+                date = start, periodStart = start, periodEnd = end,
+                isCarryover = true
+            ),
+            IncomeEntry(
+                id = "next", title = "Дополнительный доход другого периода", amount = 1000.0,
+                date = "2026-12-01", periodStart = "2026-11-24", periodEnd = "2026-12-08",
+                isAdditional = true
+            )
+        )
+
+        val updated = IncomeLedgerRules.replacePrimaryIncome(entries, start, end, 40000.0)
+
+        assertEquals(4, updated.size)
+        assertEquals(40000.0, updated.single { it.id.startsWith("manual-") }.amount, 0.001)
+        assertEquals(5000.0, updated.single { it.id == "bonus" }.amount, 0.001)
+        assertTrue(updated.single { it.id == "bonus" }.isAdditional)
+        assertEquals(2000.0, updated.single { it.id == "carry" }.amount, 0.001)
+        assertTrue(updated.single { it.id == "carry" }.isCarryover)
+        assertEquals(1000.0, updated.single { it.id == "next" }.amount, 0.001)
+    }
+
+    @Test
+    fun clearingPrimaryIncomeDoesNotDeleteAdditionalOrCarryoverEntries() {
+        val start = "2026-11-09"
+        val end = "2026-11-23"
+        val entries = listOf(
+            IncomeEntry(
+                id = "main", title = "Доход за период", amount = 30000.0,
+                date = end, periodStart = start, periodEnd = end
+            ),
+            IncomeEntry(
+                id = "bonus", title = "Премия", amount = 5000.0,
+                date = "2026-11-15", periodStart = start, periodEnd = end,
+                isAdditional = true
+            ),
+            IncomeEntry(
+                id = "carry", title = "Перенос средств", amount = 2000.0,
+                date = start, periodStart = start, periodEnd = end,
+                isCarryover = true
+            )
+        )
+
+        val updated = IncomeLedgerRules.replacePrimaryIncome(entries, start, end, 0.0)
+
+        assertEquals(2, updated.size)
+        assertEquals(listOf("bonus", "carry"), updated.map { it.id }.sorted())
+    }
+
 }
