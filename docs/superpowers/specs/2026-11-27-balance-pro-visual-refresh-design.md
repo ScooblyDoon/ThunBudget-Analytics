@@ -22,6 +22,7 @@ Apply the approved Balance Pro presentation to ThunBudget Analytics as a visual-
 - Background: #F5F2F8
 - Surface: #FFFDFF; card surface: #EEE8F4
 - Primary muted violet: #6F5B89; primary container: #E7DFEE
+- Selected controls / filters: #E8DEF8 with dark plum text #2F2540
 - Positive / remaining: #168974
 - Warning: #DFA44B
 - Overspend / error: #D36F83
@@ -34,6 +35,9 @@ Apply the approved Balance Pro presentation to ThunBudget Analytics as a visual-
 - Surface: #17141F; purple-tinted card surface: #2B2536
 - Surface containers progress from #1D1926 to #383045
 - Primary calm violet: #A58EC6; primary container: #473A57
+- Selected controls / navigation: #3C344B; rose income action: #563746
+- Neutral category-card surface: #36343C
+- Actual-spend fill: #168A72; track: #383548
 - Main text: #F3F0F7; secondary text: #BDB3C9
 - Modal surface remains graphite #21222D; modal inputs remain #343440.
 - Positive/negative financial states remain semantic green/red, not the lavender accent.
@@ -51,8 +55,9 @@ Apply the approved Balance Pro presentation to ThunBudget Analytics as a visual-
 - Flexible Periods, History, Recurring Payments, Assistant, Settings, backup/restore and Excel flows remain present and behave as today.
 
 ## Charts
-- Reuse a single muted multi-series palette across period/month/year views, starting with violet #A58EC6.
-- Spending execution bars use the primary violet; overspend remains semantic red.
+- Reuse the established distinct multi-series palette for category donut charts (blue, teal, amber, violet, red, cyan, olive and gray).
+- Single-series monthly bars use the theme's primary violet accent.
+- Spending execution bars use teal #168A72 with a muted plum track #383548; overspend remains semantic red.
 - Keep the same data sources, date filters, category selection rules and values.
 - Preserve money amounts and percentages in the legend.
 - Retain labeled Y-axis units in thousands of rubles and month/date labels.
@@ -70,7 +75,9 @@ Use the existing Jetpack Compose Material 3 theme and composables. First central
 
 ## Acceptance
 - Existing navigation destinations, ordering behavior, overview block IDs/order, values, formulas and event handlers are unchanged.
-- Budget-card text and progress fill remain readable in dark mode; category and analytics progress bars use the muted violet accent.
+- Budget-card text and progress fill remain readable in dark mode.
+- Mic/voice actions and selected navigation/filter states use violet; income quick action uses dusty rose.
+- Category statistic cards use neutral graphite; positive expense execution remains teal, distinct from the violet controls.
 - New palette unit tests pass.
 - Existing dialog screenshot tests remain green and dark modal surface/field colors remain graphite.
 - GitHub Actions unit tests, signed Release APK build and signature verification pass.
