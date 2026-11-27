@@ -2171,13 +2171,13 @@ private fun ThunBudgetApp() {
                     }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text("Источник дохода для расчёта бюджета", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Период в графике план/факт", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                                 SegmentedButton(selected = analyticsIncomeMode == 0, onClick = { analyticsIncomeMode = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
-                                    Text("Отчётный месяц")
+                                    Text("Отчётный цикл")
                                 }
                                 SegmentedButton(selected = analyticsIncomeMode == 1, onClick = { analyticsIncomeMode = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) {
-                                    Text("Календарный")
+                                    Text("Календарный месяц")
                                 }
                             }
                             if (analyticsIncomeMode == 0) {
