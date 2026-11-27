@@ -141,10 +141,11 @@ class XlsxExporterTest {
 
         assertEquals("Дата", rows.first()[0])
         assertEquals("Тип дохода", rows.first()[2])
-        assertEquals("Основной доход", rows[1][2])
-        assertEquals("Дополнительный доход", rows[2][2])
-        assertEquals("Перенос средств", rows[3][2])
-        assertEquals(5000.0, rows[2][3] as Double, 0.001)
+        val entriesByType = rows.drop(1).dropLast(1).associateBy { it[2].toString() }
+        assertEquals(setOf("Основной доход", "Дополнительный доход", "Перенос средств"), entriesByType.keys)
+        assertEquals(36000.0, entriesByType["Основной доход"]!![3] as Double, 0.001)
+        assertEquals(5000.0, entriesByType["Дополнительный доход"]!![3] as Double, 0.001)
+        assertEquals(2000.0, entriesByType["Перенос средств"]!![3] as Double, 0.001)
         assertEquals("ИТОГО", rows.last()[0])
         assertTrue(rows.last()[3].toString().contains("SUM(D2:D4)"))
     }
