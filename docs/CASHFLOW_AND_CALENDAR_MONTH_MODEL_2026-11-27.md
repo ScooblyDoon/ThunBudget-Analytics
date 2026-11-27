@@ -37,9 +37,11 @@ For the selected two-period cycle:
 
 `reportingMonthEarnedIncome = earned(P1) + earned(P2)`
 
-`reportingMonthAvailableBudget = available(P1) + available(P2)`
+`reportingMonthPlanFunding = available(P1) + earned(P2)`
 
-The primary income figure reports earned income. Carryover is shown separately and affects category plan amounts because it is money available to spend in the receiving period. A configured fixed monthly income is used as a plan fallback only when neither reporting period has an entered income amount; a missing second period is not fabricated when the first period is already recorded.
+Do **not** use `available(P1) + available(P2)` as the combined cycle total: carryover from P1 is already part of P1's available funds. Adding it again from P2 would double-count the same money. Carryover entering P1 from the preceding cycle is included once in `available(P1)`; carryover from P1 into P2 remains part of P2's own period budget but is not new cycle funding.
+
+The primary income figure reports earned income. Carryover is shown separately and affects the receiving period's category budget. A configured fixed monthly income is used as a plan fallback only when neither period provides cycle funding; a missing second period is not fabricated when the first period is already recorded.
 
 ## 3. Category budget plans
 
@@ -47,11 +49,11 @@ Each period uses its own saved category-share snapshot. The two periods must not
 
 For category C:
 
-`cyclePlan(C) = available(P1) × share(P1,C) + available(P2) × share(P2,C)`
+`cyclePlan(C) = available(P1) × share(P1,C) + earned(P2) × share(P2,C)`
 
-This is equivalent to weighting the two period percentages by their available budgets. It is not an unweighted average and is not a calendar-day prorating operation.
+This counts the opening funds for P1 once and only new income in P2. P2's own period budget still includes its carryover; the cycle aggregate excludes that same transferred balance because it was already included in P1. The period percentages remain individually saved and are weighted by the respective funding amounts. This is not an unweighted average and is not a calendar-day prorating operation.
 
-If one period's income has not been entered, its contribution is zero. If both periods have no income, the configured fixed monthly income is used as a fallback with the current category setup.
+If one period's income has not been entered, its new-income contribution is zero. If the whole cycle has no funding, the configured fixed monthly income is used as a fallback with the current category setup.
 
 ## 4. Actual expenses and daily average
 
