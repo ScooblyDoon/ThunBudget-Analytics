@@ -51,8 +51,8 @@ internal object AssistantRecognitionDictionary {
     fun parseTeachingCommand(phrase: String): AssistantAliasTeaching? {
         val normalized = phrase.trim()
         val patterns = listOf(
-            Regex("""^(?:запомни|сохрани|добавь в словарь)\\s+(?:синоним\\s+)?["«']?(.+?)["»']?\\s+(?:для категории|к категории|как категорию)\\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE),
-            Regex("""^(?:запомни|считай)\\s+["«']?(.+?)["»']?\\s+(?:это|— это)\\s+категори[яи]\\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE)
+            Regex("""^(?:запомни|сохрани|добавь в словарь)\s+(?:синоним\s+)?["«']?(.+?)["»']?\s+(?:для категории|к категории|как категорию)\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE),
+            Regex("""^(?:запомни|считай)\s+["«']?(.+?)["»']?\s+(?:это|— это)\s+категори[яи]\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE)
         )
         val match = patterns.firstNotNullOfOrNull { it.find(normalized) } ?: return null
         val alias = cleanQuoted(match.groupValues[1])
@@ -63,14 +63,14 @@ internal object AssistantRecognitionDictionary {
 
     fun parseAliasRemovalCommand(phrase: String): String? {
         val match = Regex(
-            """^(?:удали|забудь)\\s+(?:синоним|слово)\\s+["«']?(.+?)["»']?[.!]?$""",
+            """^(?:удали|забудь)\s+(?:синоним|слово)\s+["«']?(.+?)["»']?[.!]?$""",
             RegexOption.IGNORE_CASE
         ).find(phrase.trim()) ?: return null
         return cleanQuoted(match.groupValues[1]).takeIf { normalize(it).isNotBlank() }
     }
 
     private fun cleanQuoted(value: String): String =
-        value.trim().trim('"', '\\'', '«', '»', '“', '”').trim().trimEnd('.', '!', '?').trim()
+        value.trim().trim('"', '«', '»', '“', '”').trim().trimEnd('.', '!', '?').trim()
 
     fun normalize(value: String): String = value
         .lowercase(Locale("ru", "RU"))
