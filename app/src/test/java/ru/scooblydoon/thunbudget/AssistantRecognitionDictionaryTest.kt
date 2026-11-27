@@ -92,7 +92,7 @@ class AssistantRecognitionDictionaryTest {
     fun doesNotLearnVeryShortAlias() {
         assertNull(
             AssistantRecognitionDictionary.parseTeachingCommand(
-                "Запомни синоним «ко» для категории «Кафе и развлечения»"
+                "Запомни синоним «к» для категории «Кафе и развлечения»"
             )
         )
     }
