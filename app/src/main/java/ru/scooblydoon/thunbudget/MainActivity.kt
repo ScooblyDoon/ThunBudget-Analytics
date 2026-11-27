@@ -1327,7 +1327,9 @@ private fun ThunBudgetApp() {
                         voiceMessage = if (values.isEmpty()) "Нет данных для построения графика." else "Построен график: ${values.size} показателей. Общая сумма: ${money(values.sumOf { it.second })}."
                     }
                     AssistantIntent.QUERY_OVERSPENDING -> {
-                        val exceeded = categories.mapNotNull { category ->
+                        val exceeded = categories
+                            .filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
+                            .mapNotNull { category ->
                             val cap = if (from == periodStart && to == periodEnd) {
                                 if (effectivePeriodIncome > 0.0) effectivePeriodIncome * category.percent / 100.0
                                 else plannedForPeriod(income, category.percent, from, to)
