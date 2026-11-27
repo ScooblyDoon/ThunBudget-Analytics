@@ -610,4 +610,22 @@ class AnalyticsBudgetTest {
         assertEquals(19000.0, expenses.sumOf { it.amount }, 0.001)
     }
 
+    @Test
+    fun reportingCycleExpenseRangeUsesBothFullPeriodsAndCutsAtToday() {
+        val active = AnalyticsBudgetCalculator.reportingCycleExpenseRange(
+            java.time.YearMonth.of(2026, 11), java.time.LocalDate.parse("2026-11-27")
+        )
+        assertEquals("2026-11-09", active.start.toString())
+        assertEquals("2026-12-08", active.end.toString())
+        assertEquals("2026-11-27", active.visibleEnd.toString())
+        assertEquals(19, active.elapsedDays)
+
+        val completed = AnalyticsBudgetCalculator.reportingCycleExpenseRange(
+            java.time.YearMonth.of(2026, 10), java.time.LocalDate.parse("2026-11-27")
+        )
+        assertEquals("2026-10-09", completed.start.toString())
+        assertEquals("2026-11-08", completed.end.toString())
+        assertEquals("2026-11-08", completed.visibleEnd.toString())
+        assertEquals(31, completed.elapsedDays)
+    }
 }
