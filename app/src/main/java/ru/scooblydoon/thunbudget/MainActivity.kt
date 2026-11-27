@@ -697,6 +697,10 @@ private fun ThunBudgetApp() {
     val compactLayout = configuration.screenWidthDp < 400 ||
         configuration.screenHeightDp < 700 || density.fontScale >= 1.12f
     val store= remember { BudgetStore(context) }
+    val assistantMemoryRepository = remember(context) {
+        AssistantMemoryRepository(context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE))
+    }
+    var assistantMemory by remember { mutableStateOf(assistantMemoryRepository.load()) }
     var income by remember { mutableDoubleStateOf(store.loadIncome()) }
     var savingsGoal by remember { mutableDoubleStateOf(store.loadSavingsGoal()) }
     var categories by remember { mutableStateOf(store.loadCategories()) }
@@ -956,16 +960,36 @@ private fun ThunBudgetApp() {
 
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
-        if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
-            voiceMessage = "Я умею добавлять доходы и расходы, искать операции, считать остаток до зарплаты, находить самый затратный день и день недели, сравнивать категории по сумме и частоте, показывать крупнейшие и средние траты, строить графики и давать рекомендации по экономии. Например: «В какой день было больше всего трат за месяц?», «Какая категория съедает больше всего денег?», «Что урезать, чтобы хватило до зарплаты?», «Сколько потратил на транспорт за неделю?»."
+        if (listOf("очисти память помощника", "сбрось контекст помощника", "забудь предыдущий период").any { normalizedPhrase.contains(it) }) {
+            assistantMemoryRepository.clear()
+            assistantMemory = AssistantMemoryState()
+            voiceMessage = "Контекст помощника очищен. Следующий запрос начнётся без привязки к предыдущему периоду или категории."
             return
         }
-        val parsed = AssistantLocalParser.parse(phrase, categories.map { it.name }, today)
+        if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
+            voiceMessage = "Я умею добавлять доходы и расходы, искать операции, считать остаток до зарплаты, находить самые затратные дни и категории, показывать крупнейшие и средние траты, строить графики и давать рекомендации. Также могу формировать полный отчёт, пересчитывать доход и строить графики по сохранённым свободным периодам. Например: «Покажи отчёт за Отпуск», «А теперь только доход», «Построй график по категориям», «Сравни этот период с предыдущим»."
+            return
+        }
+        val rememberedPeriodName = assistantMemory.lastPeriodId
+            ?.let { savedId -> flexiblePeriods.firstOrNull { it.id == savedId }?.name }
+            ?: assistantMemory.lastPeriodName?.takeIf { savedName -> flexiblePeriods.any { it.name.equals(savedName, true) } }
+        val parsed = AssistantLocalParser.parse(
+            phrase,
+            categories.map { it.name },
+            today,
+            availablePeriods = flexiblePeriods,
+            memoryPeriodName = rememberedPeriodName
+        )
         if (parsed == null) {
             voiceMessage = "Пока не удалось понять запрос. Попробуй: «Сколько осталось до зарплаты?», «Сколько потратил на продукты в этом месяце?» или «Вчера потратил две тысячи на продукты»."
             return
         }
-        when (val validation = AssistantCommandValidator.validate(parsed, categories.map { it.name }, today)) {
+        when (val validation = AssistantCommandValidator.validate(
+            parsed,
+            categories.map { it.name },
+            today,
+            availablePeriodNames = flexiblePeriods.map { it.name }
+        )) {
             is AssistantCommandValidation.NeedsClarification -> {
                 voiceMessage = validation.reason
                 return
@@ -976,6 +1000,155 @@ private fun ThunBudgetApp() {
             }
             is AssistantCommandValidation.Valid -> {
                 val command = validation.command
+                if (command.intent == AssistantIntent.QUERY_FLEXIBLE_PERIOD_LIST) {
+                    voiceMessage = if (flexiblePeriods.isEmpty()) {
+                        "Свободные периоды ещё не созданы. Создай их во вкладке «Периоды»."
+                    } else {
+                        "Сохранённые свободные периоды:\\n" + flexiblePeriods.sortedBy { it.start }.joinToString("\\n") { period ->
+                            val status = when {
+                                period.end.isBefore(today) -> "завершён"
+                                period.start.isAfter(today) -> "будущий"
+                                else -> "текущий"
+                            }
+                            "• ${period.name}: ${period.start.format(formatter)} — ${period.end.format(formatter)} (${status})"
+                        }
+                    }
+                    return
+                }
+
+                val flexibleQueryIntents = setOf(
+                    AssistantIntent.QUERY_FLEXIBLE_PERIOD_REPORT,
+                    AssistantIntent.QUERY_FLEXIBLE_PERIOD_INCOME,
+                    AssistantIntent.QUERY_FLEXIBLE_PERIOD_CHART,
+                    AssistantIntent.QUERY_FLEXIBLE_PERIOD_COMPARE
+                )
+                if (command.intent in flexibleQueryIntents) {
+                    val orderedPeriods = flexiblePeriods.sortedBy { it.start }
+                    val remembered = assistantMemory.lastPeriodId?.let { id -> orderedPeriods.firstOrNull { it.id == id } }
+                    val chosenPeriod = command.periodName?.let { name -> orderedPeriods.firstOrNull { it.name.equals(name, true) } }
+                        ?: remembered
+                        ?: orderedPeriods.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
+                        ?: orderedPeriods.lastOrNull()
+                    if (chosenPeriod == null) {
+                        voiceMessage = "Свободных периодов пока нет. Создай период во вкладке «Периоды», после этого я смогу сформировать по нему отчёт."
+                        return
+                    }
+                    val report = buildFlexiblePeriodReport(
+                        period = chosenPeriod,
+                        expenses = expenses,
+                        incomeEntries = incomeEntries,
+                        categories = categories,
+                        monthlyIncome = income,
+                        recurringPayments = recurringPayments,
+                        today = today,
+                        firstPeriodStartDay = firstPeriodStartDay,
+                        firstPeriodEndDay = firstPeriodEndDay
+                    )
+                    val periodRows = expenses.filter { it.date >= chosenPeriod.start.toString() && it.date <= chosenPeriod.end.toString() }
+                    val periodLabel = "${chosenPeriod.start.format(formatter)} — ${chosenPeriod.end.format(formatter)}"
+                    when (command.intent) {
+                        AssistantIntent.QUERY_FLEXIBLE_PERIOD_INCOME -> {
+                            val hasDatedIncome = report.earnedIncome + report.carryoverIncome > 0.0
+                            voiceMessage = "Доход за свободный период «${chosenPeriod.name}» ($periodLabel):\\n" +
+                                "Фактические поступления: ${money(report.earnedIncome)}.\\n" +
+                                "Перенос из предыдущего периода: ${money(report.carryoverIncome)}.\\n" +
+                                "Доход, использованный для расчёта бюджета: ${money(report.budgetIncome)}." +
+                                if (hasDatedIncome) "" else "\\nФактических поступлений за эти даты нет: использован расчёт по месячному доходу пропорционально календарным дням."
+                        }
+                        AssistantIntent.QUERY_FLEXIBLE_PERIOD_CHART -> {
+                            val dailyChart = normalizedPhrase.contains("по дням") || normalizedPhrase.contains("динамик") || normalizedPhrase.contains("по датам")
+                            val values = if (dailyChart) {
+                                periodRows.filter { !LocalDate.parse(it.date).isAfter(today) }
+                                    .groupBy { it.date }
+                                    .toSortedMap()
+                                    .map { (date, rows) -> LocalDate.parse(date).format(DateTimeFormatter.ofPattern("dd.MM")) to rows.sumOf { it.amount } }
+                            } else {
+                                report.categories.map { category ->
+                                    val value = when {
+                                        normalizedPhrase.contains("план") -> category.planned
+                                        normalizedPhrase.contains("факт") -> category.actualToDate
+                                        else -> category.projectedTotal
+                                    }
+                                    category.category to value
+                                }.sortedByDescending { it.second }.take(12)
+                            }
+                            assistantChartTitle = when {
+                                dailyChart -> "Расходы по дням — ${chosenPeriod.name}"
+                                normalizedPhrase.contains("план") -> "План по категориям — ${chosenPeriod.name}"
+                                normalizedPhrase.contains("факт") -> "Фактические расходы по категориям — ${chosenPeriod.name}"
+                                else -> "Прогноз расходов по категориям — ${chosenPeriod.name}"
+                            }
+                            assistantChartData = values
+                            voiceMessage = if (values.isEmpty()) {
+                                "За период «${chosenPeriod.name}» пока нет данных для графика."
+                            } else {
+                                "График для периода «${chosenPeriod.name}» построен. Даты: $periodLabel. Показано показателей: ${values.size}. Сумма значений: ${money(values.sumOf { it.second })}."
+                            }
+                        }
+                        AssistantIntent.QUERY_FLEXIBLE_PERIOD_COMPARE -> {
+                            val explicitlyCompared = command.comparePeriodName?.let { name -> orderedPeriods.firstOrNull { it.name.equals(name, true) } }
+                            val previous = explicitlyCompared ?: orderedPeriods.takeWhile { it.id != chosenPeriod.id }.lastOrNull()
+                            if (previous == null) {
+                                voiceMessage = "Для сравнения с «${chosenPeriod.name}» нужен предыдущий свободный период. Создай или выбери ещё один период."
+                            } else {
+                                val previousReport = buildFlexiblePeriodReport(
+                                    period = previous,
+                                    expenses = expenses,
+                                    incomeEntries = incomeEntries,
+                                    categories = categories,
+                                    monthlyIncome = income,
+                                    recurringPayments = recurringPayments,
+                                    today = today,
+                                    firstPeriodStartDay = firstPeriodStartDay,
+                                    firstPeriodEndDay = firstPeriodEndDay
+                                )
+                                val expenseDelta = report.actualTotal - previousReport.actualTotal
+                                val incomeDelta = report.budgetIncome - previousReport.budgetIncome
+                                voiceMessage = "Сравнение свободных периодов:\\n" +
+                                    "${previous.name} (${previous.start.format(formatter)} — ${previous.end.format(formatter)}): доход ${money(previousReport.budgetIncome)}, расходы ${money(previousReport.actualTotal)}.\\n" +
+                                    "${chosenPeriod.name} ($periodLabel): доход ${money(report.budgetIncome)}, расходы ${money(report.actualTotal)}.\\n" +
+                                    "Изменение расходов: ${if (expenseDelta >= 0) "+" else ""}${money(expenseDelta)}. Изменение дохода: ${if (incomeDelta >= 0) "+" else ""}${money(incomeDelta)}."
+                            }
+                        }
+                        else -> {
+                            val categoriesSummary = report.categories.sortedByDescending { it.projectedTotal }.take(5)
+                                .joinToString("\\n") { category ->
+                                    "• ${category.category}: факт ${money(category.actualToDate)}, план ${money(category.planned)}, прогноз ${money(category.projectedTotal)}"
+                                }
+                            voiceMessage = "Полный отчёт по свободному периоду «${chosenPeriod.name}» ($periodLabel):\\n" +
+                                "Доход: ${money(report.budgetIncome)} (поступления ${money(report.earnedIncome)}; перенос ${money(report.carryoverIncome)}).\\n" +
+                                "План расходов: ${money(report.plannedTotal)}.\\n" +
+                                "Фактические расходы: ${money(report.actualTotal)}; операций: ${periodRows.count { !LocalDate.parse(it.date).isAfter(today) }}.\\n" +
+                                "Будущие внесённые расходы: ${money(report.futureEnteredTotal)}.\\n" +
+                                "Переменный прогноз: ${money(report.variableForecastTotal)}. Регулярные платежи: ${money(report.recurringForecastTotal)}.\\n" +
+                                "Ожидаемые расходы: ${money(report.projectedTotal)} (диапазон ${money(report.projectedLow)} — ${money(report.projectedHigh)}).\\n" +
+                                "Остаток плана по факту: ${money(report.remainingToPlan)}." +
+                                (report.averageActualPerElapsedDay?.let { "\\nСредний фактический расход в день: ${money(it)}." } ?: "") +
+                                (report.requiredPerRemainingDay?.let { "\\nОриентир на оставшиеся дни: ${money(it)} в день." } ?: "") +
+                                (if (categoriesSummary.isNotBlank()) "\\nКатегории:\\n$categoriesSummary" else "")
+                        }
+                    }
+                    assistantMemory = assistantMemoryRepository.remember(
+                        current = assistantMemory,
+                        intent = command.intent.wireValue,
+                        period = chosenPeriod,
+                        category = command.category
+                    )
+                    return
+                }
+
+                if (command.periodName != null) {
+                    val namedPeriod = flexiblePeriods.firstOrNull { it.name.equals(command.periodName, true) }
+                    if (namedPeriod != null) {
+                        assistantMemory = assistantMemoryRepository.remember(
+                            current = assistantMemory,
+                            intent = command.intent.wireValue,
+                            period = namedPeriod,
+                            category = command.category
+                        )
+                    }
+                }
+
                 val from = command.periodStart ?: periodStart
                 val to = command.periodEnd ?: periodEnd
                 val rangeExpenses = expenses.filter { it.date >= from && it.date <= to }
@@ -1183,7 +1356,13 @@ private fun ThunBudgetApp() {
                 isListening = false
                 showAssistantDialog = false
                 val interpreted = alternatives.sortedByDescending { voiceRecognitionScore(it, categories) }.firstNotNullOfOrNull { phrase ->
-                    AssistantLocalParser.parse(phrase, categories.map { it.name }, today)?.let { phrase to it }
+                    AssistantLocalParser.parse(
+                        phrase,
+                        categories.map { it.name },
+                        today,
+                        availablePeriods = flexiblePeriods,
+                        memoryPeriodName = rememberedPeriodName
+                    )?.let { phrase to it }
                 }
                 if (interpreted != null) {
                     handleAssistantPhrase(interpreted.first)
