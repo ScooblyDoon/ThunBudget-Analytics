@@ -88,6 +88,12 @@ Redistribution recommendations apply to the explicitly selected reporting period
 
 The user confirms a proposed redistribution before the app changes category shares.
 
+The dynamic share proposal uses an income-weighted ratio across completed reporting periods:
+
+`dynamicShare(C) = sum(actualSpend(P,C)) / sum(availableIncome(P)) × 100`
+
+It does not use the unweighted average of per-period percentages, because that would give a low-income period the same influence as a high-income period. The proposal dialog is opened by the dynamic-allocation control; dismissing it leaves the current shares unchanged.
+
 ## 6. Secondary calendar and annual views
 
 The calendar-month mode keeps its separate 1st–last-day calculations and forecast. The calendar view must not be used to populate the primary reporting-month cards.
