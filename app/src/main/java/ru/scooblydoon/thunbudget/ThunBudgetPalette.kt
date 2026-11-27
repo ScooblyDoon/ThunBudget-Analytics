@@ -1,6 +1,9 @@
 package ru.scooblydoon.thunbudget
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.luminance
 
 /** Shared Balance Pro palette for light/dark surfaces, controls, progress and charts. */
 internal data class ThunBudgetThemePalette(
@@ -133,3 +136,13 @@ internal object ThunBudgetPalette {
         Color(0xFF7A8290)
     )
 }
+
+
+/** Neutral gray card surface used for category statistics and expense breakdowns. */
+@Composable
+internal fun thunBudgetCategoryCardSurface(): Color =
+    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+        ThunBudgetPalette.Dark.categoryCardSurface
+    } else {
+        ThunBudgetPalette.Light.categoryCardSurface
+    }
