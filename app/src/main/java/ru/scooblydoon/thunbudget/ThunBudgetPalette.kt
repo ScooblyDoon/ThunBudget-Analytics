@@ -2,11 +2,16 @@ package ru.scooblydoon.thunbudget
 
 import androidx.compose.ui.graphics.Color
 
-/** Shared Balance Pro palette for the light and dark application surfaces. */
+/** Shared Balance Pro palette for light/dark surfaces, controls, progress and charts. */
 internal data class ThunBudgetThemePalette(
     val background: Color,
     val surface: Color,
     val surfaceVariant: Color,
+    val surfaceContainerLowest: Color,
+    val surfaceContainerLow: Color,
+    val surfaceContainer: Color,
+    val surfaceContainerHigh: Color,
+    val surfaceContainerHighest: Color,
     val primary: Color,
     val onPrimary: Color,
     val primaryContainer: Color,
@@ -27,73 +32,89 @@ internal data class ThunBudgetThemePalette(
     val dialogField: Color,
     val dialogOutline: Color,
     val budgetCardSurface: Color,
-    val budgetCardContent: Color
+    val budgetCardContent: Color,
+    val budgetCardProgress: Color,
+    val budgetCardProgressTrack: Color
 )
 
 internal object ThunBudgetPalette {
     val Light = ThunBudgetThemePalette(
-        background = Color(0xFFF4F6F8),
-        surface = Color(0xFFFFFFFF),
-        surfaceVariant = Color(0xFFE6E0E9),
-        primary = Color(0xFF445365),
+        background = Color(0xFFF5F2F8),
+        surface = Color(0xFFFFFDFF),
+        surfaceVariant = Color(0xFFEEE8F4),
+        surfaceContainerLowest = Color(0xFFFFFFFF),
+        surfaceContainerLow = Color(0xFFFAF7FC),
+        surfaceContainer = Color(0xFFF2EDF6),
+        surfaceContainerHigh = Color(0xFFEBE4F0),
+        surfaceContainerHighest = Color(0xFFE4DCEB),
+        primary = Color(0xFF6F5B89),
         onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFFE6E0E9),
-        onPrimaryContainer = Color(0xFF445365),
+        primaryContainer = Color(0xFFE7DFEE),
+        onPrimaryContainer = Color(0xFF352940),
         secondary = Color(0xFF168974),
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFE6E0E9),
-        onSecondaryContainer = Color(0xFF445365),
+        secondaryContainer = Color(0xFFE2EEE8),
+        onSecondaryContainer = Color(0xFF23463B),
         tertiary = Color(0xFFDFA44B),
         onTertiary = Color(0xFF1F2937),
         positive = Color(0xFF168974),
         warning = Color(0xFFDFA44B),
-        danger = Color(0xFFD96B76),
-        outline = Color(0xFFD9DEE5),
-        onSurface = Color(0xFF1F2937),
-        onSurfaceVariant = Color(0xFF6B7280),
+        danger = Color(0xFFD36F83),
+        outline = Color(0xFFDDD5E5),
+        onSurface = Color(0xFF241F2A),
+        onSurfaceVariant = Color(0xFF6D6575),
         dialogSurface = Color(0xFFFFFFFF),
         dialogField = Color(0xFFF0F2F5),
         dialogOutline = Color(0xFFD9DEE5),
-        budgetCardSurface = Color(0xFF445365),
-        budgetCardContent = Color(0xFFFFFFFF)
+        budgetCardSurface = Color(0xFF6F5B89),
+        budgetCardContent = Color(0xFFFFFFFF),
+        budgetCardProgress = Color(0xFFF4EDF9),
+        budgetCardProgressTrack = Color(0xFFBDAEC9)
     )
 
     val Dark = ThunBudgetThemePalette(
         background = Color(0xFF090A10),
-        surface = Color(0xFF171821),
-        surfaceVariant = Color(0xFF242631),
-        primary = Color(0xFF89849A),
-        onPrimary = Color(0xFF171821),
-        primaryContainer = Color(0xFF343440),
-        onPrimaryContainer = Color(0xFFF3F2F8),
+        surface = Color(0xFF17141F),
+        surfaceVariant = Color(0xFF2B2536),
+        surfaceContainerLowest = Color(0xFF100D15),
+        surfaceContainerLow = Color(0xFF1D1926),
+        surfaceContainer = Color(0xFF25202F),
+        surfaceContainerHigh = Color(0xFF2F293B),
+        surfaceContainerHighest = Color(0xFF383045),
+        primary = Color(0xFFA58EC6),
+        onPrimary = Color(0xFF1A1421),
+        primaryContainer = Color(0xFF473A57),
+        onPrimaryContainer = Color(0xFFF4EFF8),
         secondary = Color(0xFF6BA88E),
         onSecondary = Color(0xFF10251D),
-        secondaryContainer = Color(0xFF343440),
-        onSecondaryContainer = Color(0xFFF3F2F8),
+        secondaryContainer = Color(0xFF2E3A35),
+        onSecondaryContainer = Color(0xFFE7F1EB),
         tertiary = Color(0xFFDFA44B),
         onTertiary = Color(0xFF171821),
         positive = Color(0xFF6BA88E),
         warning = Color(0xFFDFA44B),
         danger = Color(0xFFFF817A),
-        outline = Color(0xFF50535F),
-        onSurface = Color(0xFFF3F2F8),
-        onSurfaceVariant = Color(0xFFB4B7C2),
+        outline = Color(0xFF5A5067),
+        onSurface = Color(0xFFF3F0F7),
+        onSurfaceVariant = Color(0xFFBDB3C9),
         dialogSurface = Color(0xFF21222D),
         dialogField = Color(0xFF343440),
-        dialogOutline = Color(0xFF50535F),
-        budgetCardSurface = Color(0xFF242631),
-        budgetCardContent = Color(0xFFF3F2F8)
+        dialogOutline = Color(0xFF585364),
+        budgetCardSurface = Color(0xFF30283B),
+        budgetCardContent = Color(0xFFF3F0F7),
+        budgetCardProgress = Color(0xFFB9A4D5),
+        budgetCardProgressTrack = Color(0xFF675B78)
     )
 
-    /** One stable category palette reused by period, month, year and flexible-period charts. */
+    /** Muted but distinguishable category colors; violet is the primary chart accent. */
     val ChartSeries = listOf(
-        Color(0xFF445365),
-        Color(0xFF7189A3),
-        Color(0xFF168974),
-        Color(0xFFDFA44B),
-        Color(0xFFD96B76),
-        Color(0xFF5C9DB8),
-        Color(0xFF8B9A45),
-        Color(0xFF7A8290)
+        Color(0xFFA58EC6),
+        Color(0xFF7F9DB8),
+        Color(0xFF70A58F),
+        Color(0xFFD6A55F),
+        Color(0xFFCE7D8F),
+        Color(0xFF9585C3),
+        Color(0xFFA3AA75),
+        Color(0xFF8791A7)
     )
 }
