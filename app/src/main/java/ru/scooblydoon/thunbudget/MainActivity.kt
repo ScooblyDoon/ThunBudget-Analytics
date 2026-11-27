@@ -2376,13 +2376,6 @@ private fun ThunBudgetApp() {
                         val elapsedDays = if (currentTo.isBefore(currentFrom)) 0L
                             else java.time.temporal.ChronoUnit.DAYS.between(currentFrom, currentTo) + 1L
                         val dailyAverage = if (elapsedDays > 0) currentTotal / elapsedDays else 0.0
-                    item {
-                        val currentFrom = analyticsMonth.atDay(1)
-                        val currentTo = AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today)
-                        val monthCashExpenses = AnalyticsBudgetCalculator.cashExpensesInRange(expenses, currentFrom, currentTo)
-                        val currentTotal = monthCashExpenses.sumOf { it.amount }
-                        val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(currentFrom, currentTo) + 1
-                        val dailyAverage = if (elapsedDays > 0) currentTotal / elapsedDays else 0.0
                         val topCategory = categories.filterNot { it.name.equals("Перенос средств", true) }.map { cat ->
                             cat.name to monthCashExpenses.filter { it.category == cat.name }.sumOf { it.amount }
                         }.maxByOrNull { it.second }
