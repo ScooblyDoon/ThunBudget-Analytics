@@ -144,6 +144,107 @@ class AssistantLocalParserTest {
         assertEquals("Продукты", command?.category)
     }
 
+
+    private val customPeriods = listOf(
+        FlexiblePeriodDefinition(
+            "vacation",
+            "Отпуск",
+            LocalDate.parse("2026-07-01"),
+            LocalDate.parse("2026-07-14")
+        ),
+        FlexiblePeriodDefinition(
+            "home",
+            "Дом",
+            LocalDate.parse("2026-07-15"),
+            LocalDate.parse("2026-07-31")
+        )
+    )
+
+    @Test fun parsesFullReportForNamedFlexiblePeriod() {
+        val command = AssistantLocalParser.parse(
+            "Покажи полный отчёт за Отпуск",
+            categories,
+            today,
+            availablePeriods = customPeriods
+        )
+        assertEquals(AssistantIntent.QUERY_FLEXIBLE_PERIOD_REPORT, command?.intent)
+        assertEquals("Отпуск", command?.periodName)
+        assertEquals("2026-07-01", command?.periodStart)
+        assertEquals("2026-07-14", command?.periodEnd)
+    }
+
+    @Test fun parsesIncomeRecalculationForNamedFlexiblePeriod() {
+        val command = AssistantLocalParser.parse(
+            "Пересчитай доход за Отпуск",
+            categories,
+            today,
+            availablePeriods = customPeriods
+        )
+        assertEquals(AssistantIntent.QUERY_FLEXIBLE_PERIOD_INCOME, command?.intent)
+        assertEquals("Отпуск", command?.periodName)
+    }
+
+    @Test fun parsesChartForNamedFlexiblePeriod() {
+        val command = AssistantLocalParser.parse(
+            "Построй график по категориям за Отпуск",
+            categories,
+            today,
+            availablePeriods = customPeriods
+        )
+        assertEquals(AssistantIntent.QUERY_FLEXIBLE_PERIOD_CHART, command?.intent)
+        assertEquals("Отпуск", command?.periodName)
+    }
+
+    @Test fun parsesComparisonBetweenTwoNamedFlexiblePeriods() {
+        val command = AssistantLocalParser.parse(
+            "Сравни Отпуск и Дом",
+            categories,
+            today,
+            availablePeriods = customPeriods
+        )
+        assertEquals(AssistantIntent.QUERY_FLEXIBLE_PERIOD_COMPARE, command?.intent)
+        assertEquals("Отпуск", command?.periodName)
+        assertEquals("Дом", command?.comparePeriodName)
+    }
+
+    @Test fun resolvesFollowUpIncomeQuestionFromLocalMemoryContext() {
+        val command = AssistantLocalParser.parse(
+            "А теперь только доход",
+            categories,
+            today,
+            availablePeriods = customPeriods,
+            memoryPeriodName = "Отпуск"
+        )
+        assertEquals(AssistantIntent.QUERY_FLEXIBLE_PERIOD_INCOME, command?.intent)
+        assertEquals("Отпуск", command?.periodName)
+        assertEquals("2026-07-01", command?.periodStart)
+        assertEquals("2026-07-14", command?.periodEnd)
+    }
+
+    @Test fun resolvesCategoryFollowUpWithinRememberedFlexiblePeriod() {
+        val command = AssistantLocalParser.parse(
+            "А транспорт?",
+            categories,
+            today,
+            availablePeriods = customPeriods,
+            memoryPeriodName = "Отпуск"
+        )
+        assertEquals(AssistantIntent.QUERY_CATEGORY_SPENDING, command?.intent)
+        assertEquals("Транспорт", command?.category)
+        assertEquals("Отпуск", command?.periodName)
+        assertEquals("2026-07-01", command?.periodStart)
+    }
+
+    @Test fun parsesListOfFlexiblePeriods() {
+        val command = AssistantLocalParser.parse(
+            "Покажи список периодов",
+            categories,
+            today,
+            availablePeriods = customPeriods
+        )
+        assertEquals(AssistantIntent.QUERY_FLEXIBLE_PERIOD_LIST, command?.intent)
+    }
+
     @Test fun unknownPhraseDoesNotProduceCommand() {
         assertNull(AssistantLocalParser.parse("Расскажи анекдот", categories, today))
     }
