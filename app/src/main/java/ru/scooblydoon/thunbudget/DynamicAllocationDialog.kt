@@ -48,7 +48,9 @@ internal fun DynamicAllocationDialog(
             periodIncomeByRange[key]?.takeIf { it.isFinite() && it > 0.0 }?.let { range to it }
         }
     }
-    val forecastPercentages = remember(forecast, pairedIncomePeriods, expenses, fallbackPeriodIncome) {
+    val forecastPercentages = remember(
+        forecast, pairedIncomePeriods, periodEarnedIncomeByRange, expenses, fallbackPeriodIncome, categories
+    ) {
         regular.associate { category ->
             val spendAndIncomeByPeriod = pairedIncomePeriods.mapIndexed { index, (range, openingAvailableIncome) ->
                 val spent = expenses.asSequence()
