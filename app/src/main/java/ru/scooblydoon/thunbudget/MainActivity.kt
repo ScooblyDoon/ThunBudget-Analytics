@@ -1004,7 +1004,7 @@ private fun ThunBudgetApp() {
                     voiceMessage = if (flexiblePeriods.isEmpty()) {
                         "Свободные периоды ещё не созданы. Создай их во вкладке «Периоды»."
                     } else {
-                        "Сохранённые свободные периоды:\\n" + flexiblePeriods.sortedBy { it.start }.joinToString("\\n") { period ->
+                        "Сохранённые свободные периоды:\n" + flexiblePeriods.sortedBy { it.start }.joinToString("\n") { period ->
                             val status = when {
                                 period.end.isBefore(today) -> "завершён"
                                 period.start.isAfter(today) -> "будущий"
@@ -1049,11 +1049,11 @@ private fun ThunBudgetApp() {
                     when (command.intent) {
                         AssistantIntent.QUERY_FLEXIBLE_PERIOD_INCOME -> {
                             val hasDatedIncome = report.earnedIncome + report.carryoverIncome > 0.0
-                            voiceMessage = "Доход за свободный период «${chosenPeriod.name}» ($periodLabel):\\n" +
-                                "Фактические поступления: ${money(report.earnedIncome)}.\\n" +
-                                "Перенос из предыдущего периода: ${money(report.carryoverIncome)}.\\n" +
+                            voiceMessage = "Доход за свободный период «${chosenPeriod.name}» ($periodLabel):\n" +
+                                "Фактические поступления: ${money(report.earnedIncome)}.\n" +
+                                "Перенос из предыдущего периода: ${money(report.carryoverIncome)}.\n" +
                                 "Доход, использованный для расчёта бюджета: ${money(report.budgetIncome)}." +
-                                if (hasDatedIncome) "" else "\\nФактических поступлений за эти даты нет: использован расчёт по месячному доходу пропорционально календарным дням."
+                                if (hasDatedIncome) "" else "\nФактических поступлений за эти даты нет: использован расчёт по месячному доходу пропорционально календарным дням."
                         }
                         AssistantIntent.QUERY_FLEXIBLE_PERIOD_CHART -> {
                             val dailyChart = normalizedPhrase.contains("по дням") || normalizedPhrase.contains("динамик") || normalizedPhrase.contains("по датам")
@@ -1104,28 +1104,28 @@ private fun ThunBudgetApp() {
                                 )
                                 val expenseDelta = report.actualTotal - previousReport.actualTotal
                                 val incomeDelta = report.budgetIncome - previousReport.budgetIncome
-                                voiceMessage = "Сравнение свободных периодов:\\n" +
-                                    "${previous.name} (${previous.start.format(formatter)} — ${previous.end.format(formatter)}): доход ${money(previousReport.budgetIncome)}, расходы ${money(previousReport.actualTotal)}.\\n" +
-                                    "${chosenPeriod.name} ($periodLabel): доход ${money(report.budgetIncome)}, расходы ${money(report.actualTotal)}.\\n" +
+                                voiceMessage = "Сравнение свободных периодов:\n" +
+                                    "${previous.name} (${previous.start.format(formatter)} — ${previous.end.format(formatter)}): доход ${money(previousReport.budgetIncome)}, расходы ${money(previousReport.actualTotal)}.\n" +
+                                    "${chosenPeriod.name} ($periodLabel): доход ${money(report.budgetIncome)}, расходы ${money(report.actualTotal)}.\n" +
                                     "Изменение расходов: ${if (expenseDelta >= 0) "+" else ""}${money(expenseDelta)}. Изменение дохода: ${if (incomeDelta >= 0) "+" else ""}${money(incomeDelta)}."
                             }
                         }
                         else -> {
                             val categoriesSummary = report.categories.sortedByDescending { it.projectedTotal }.take(5)
-                                .joinToString("\\n") { category ->
+                                .joinToString("\n") { category ->
                                     "• ${category.category}: факт ${money(category.actualToDate)}, план ${money(category.planned)}, прогноз ${money(category.projectedTotal)}"
                                 }
-                            voiceMessage = "Полный отчёт по свободному периоду «${chosenPeriod.name}» ($periodLabel):\\n" +
-                                "Доход: ${money(report.budgetIncome)} (поступления ${money(report.earnedIncome)}; перенос ${money(report.carryoverIncome)}).\\n" +
-                                "План расходов: ${money(report.plannedTotal)}.\\n" +
-                                "Фактические расходы: ${money(report.actualTotal)}; операций: ${periodRows.count { !LocalDate.parse(it.date).isAfter(today) }}.\\n" +
-                                "Будущие внесённые расходы: ${money(report.futureEnteredTotal)}.\\n" +
-                                "Переменный прогноз: ${money(report.variableForecastTotal)}. Регулярные платежи: ${money(report.recurringForecastTotal)}.\\n" +
-                                "Ожидаемые расходы: ${money(report.projectedTotal)} (диапазон ${money(report.projectedLow)} — ${money(report.projectedHigh)}).\\n" +
+                            voiceMessage = "Полный отчёт по свободному периоду «${chosenPeriod.name}» ($periodLabel):\n" +
+                                "Доход: ${money(report.budgetIncome)} (поступления ${money(report.earnedIncome)}; перенос ${money(report.carryoverIncome)}).\n" +
+                                "План расходов: ${money(report.plannedTotal)}.\n" +
+                                "Фактические расходы: ${money(report.actualTotal)}; операций: ${periodRows.count { !LocalDate.parse(it.date).isAfter(today) && !it.category.equals("Перенос средств", true) }}.\n" +
+                                "Будущие внесённые расходы: ${money(report.futureEnteredTotal)}.\n" +
+                                "Переменный прогноз: ${money(report.variableForecastTotal)}. Регулярные платежи: ${money(report.recurringForecastTotal)}.\n" +
+                                "Ожидаемые расходы: ${money(report.projectedTotal)} (диапазон ${money(report.projectedLow)} — ${money(report.projectedHigh)}).\n" +
                                 "Остаток плана по факту: ${money(report.remainingToPlan)}." +
-                                (report.averageActualPerElapsedDay?.let { "\\nСредний фактический расход в день: ${money(it)}." } ?: "") +
-                                (report.requiredPerRemainingDay?.let { "\\nОриентир на оставшиеся дни: ${money(it)} в день." } ?: "") +
-                                (if (categoriesSummary.isNotBlank()) "\\nКатегории:\\n$categoriesSummary" else "")
+                                (report.averageActualPerElapsedDay?.let { "\nСредний фактический расход в день: ${money(it)}." } ?: "") +
+                                (report.requiredPerRemainingDay?.let { "\nОриентир на оставшиеся дни: ${money(it)} в день." } ?: "") +
+                                (if (categoriesSummary.isNotBlank()) "\nКатегории:\n$categoriesSummary" else "")
                         }
                     }
                     assistantMemory = assistantMemoryRepository.remember(
@@ -1361,7 +1361,9 @@ private fun ThunBudgetApp() {
                         categories.map { it.name },
                         today,
                         availablePeriods = flexiblePeriods,
-                        memoryPeriodName = rememberedPeriodName
+                        memoryPeriodName = assistantMemory.lastPeriodId
+                            ?.let { savedId -> flexiblePeriods.firstOrNull { it.id == savedId }?.name }
+                            ?: assistantMemory.lastPeriodName
                     )?.let { phrase to it }
                 }
                 if (interpreted != null) {
