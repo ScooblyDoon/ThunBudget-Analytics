@@ -37,6 +37,16 @@ internal data class ReportingCycleIncomeEstimate(
     val totalIncome: Double get() = firstIncome + secondIncome
 }
 
+internal data class ReportingCycleExpenseRange(
+    val start: java.time.LocalDate,
+    val end: java.time.LocalDate,
+    val visibleEnd: java.time.LocalDate
+) {
+    val elapsedDays: Int
+        get() = if (visibleEnd.isBefore(start)) 0
+        else (java.time.temporal.ChronoUnit.DAYS.between(start, visibleEnd) + 1L).toInt()
+}
+
 
 internal data class ReportingCycleCategoryPlan(
     val averagePercentages: Map<String, Double>,
@@ -332,6 +342,45 @@ internal object AnalyticsBudgetCalculator {
         month: java.time.YearMonth,
         today: java.time.LocalDate
     ): Double = calendarMonthCashExpenses(expenses, month, today).sumOf { it.amount.coerceAtLeast(0.0) }
+
+    /** Reporting month = first reporting-period start through second period end. */
+    fun reportingCycleExpenseRange(
+        month: java.time.YearMonth,
+        today: java.time.LocalDate,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
+    ): ReportingCycleExpenseRange {
+        val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
+        val start = proposal.first.start
+        val end = proposal.second.end
+        val visibleEnd = when {
+            start.isAfter(today) -> start.minusDays(1)
+            end.isBefore(today) -> end
+            else -> today
+        }
+        return ReportingCycleExpenseRange(start, end, visibleEnd)
+    }
+
+    fun reportingCycleCashExpenses(
+        expenses: List<Expense>,
+        month: java.time.YearMonth,
+        today: java.time.LocalDate,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
+    ): List<Expense> {
+        val range = reportingCycleExpenseRange(month, today, firstStartDay, firstEndDay)
+        return cashExpensesInRange(expenses, range.start, range.visibleEnd)
+    }
+
+    fun reportingCycleCashExpenseTotal(
+        expenses: List<Expense>,
+        month: java.time.YearMonth,
+        today: java.time.LocalDate,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
+    ): Double = reportingCycleCashExpenses(
+        expenses, month, today, firstStartDay, firstEndDay
+    ).sumOf { it.amount.coerceAtLeast(0.0) }
 
 
     private data class IncomePeriod(
