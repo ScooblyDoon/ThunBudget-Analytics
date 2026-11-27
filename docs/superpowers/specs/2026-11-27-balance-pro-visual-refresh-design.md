@@ -19,30 +19,29 @@ Apply the approved Balance Pro presentation to ThunBudget Analytics as a visual-
 
 ## Accepted visual system
 ### Light theme
-- Background: #F4F6F8
-- Surface: #FFFFFF
-- Card surface: #E6E0E9
-- Primary slate: #445365
+- Background: #F5F2F8
+- Surface: #FFFDFF; card surface: #EEE8F4
+- Primary muted violet: #6F5B89; primary container: #E7DFEE
 - Positive / remaining: #168974
 - Warning: #DFA44B
-- Overspend / error: #D96B76
-- Outline: #D9DEE5
-- Text: #1F2937; secondary text: #6B7280
+- Overspend / error: #D36F83
+- Outline: #DDD5E5
+- Text: #241F2A; secondary text: #6D6575
 - Modal surface: #FFFFFF; input surface: #F0F2F5
 
 ### Dark theme
 - Background: #090A10
-- Surface: #171821
-- Secondary surface: #242631
-- Muted gray-lavender accent: #89849A
-- Main text: #F3F2F8; secondary text: #B4B7C2
+- Surface: #17141F; purple-tinted card surface: #2B2536
+- Surface containers progress from #1D1926 to #383045
+- Primary calm violet: #A58EC6; primary container: #473A57
+- Main text: #F3F0F7; secondary text: #BDB3C9
 - Modal surface remains graphite #21222D; modal inputs remain #343440.
 - Positive/negative financial states remain semantic green/red, not the lavender accent.
 
 ### Icons and components
 - Use one outlined Material icon family for navigation, header actions, quick actions, search and editing affordances.
 - Maintain the six existing destinations and their current IDs/order: Overview, Analysis, Charts, Flexible Periods, History, Recurring Payments.
-- Keep the existing top actions and quick-action behavior.
+- Keep all existing top actions and quick-action behavior; on compact widths show header actions as icon-only controls so the app title and subtitle stay on one line.
 - Apply the same shape, spacing, outline and state language to existing cards and dialogs.
 
 ## Existing screen content that must remain
@@ -52,10 +51,12 @@ Apply the approved Balance Pro presentation to ThunBudget Analytics as a visual-
 - Flexible Periods, History, Recurring Payments, Assistant, Settings, backup/restore and Excel flows remain present and behave as today.
 
 ## Charts
-- Reuse a single semantic category palette across period/month/year views.
+- Reuse a single muted multi-series palette across period/month/year views, starting with violet #A58EC6.
+- Spending execution bars use the primary violet; overspend remains semantic red.
 - Keep the same data sources, date filters, category selection rules and values.
 - Preserve money amounts and percentages in the legend.
 - Retain labeled Y-axis units in thousands of rubles and month/date labels.
+- Give all card/container levels an explicit theme tint so charts do not fall back to neutral gray surfaces.
 - Improve grid contrast, bar corner treatment and card hierarchy only; no new calculation or alternate denominator.
 
 ## Dialogs
@@ -69,6 +70,7 @@ Use the existing Jetpack Compose Material 3 theme and composables. First central
 
 ## Acceptance
 - Existing navigation destinations, ordering behavior, overview block IDs/order, values, formulas and event handlers are unchanged.
+- Budget-card text and progress fill remain readable in dark mode; category and analytics progress bars use the muted violet accent.
 - New palette unit tests pass.
 - Existing dialog screenshot tests remain green and dark modal surface/field colors remain graphite.
 - GitHub Actions unit tests, signed Release APK build and signature verification pass.
