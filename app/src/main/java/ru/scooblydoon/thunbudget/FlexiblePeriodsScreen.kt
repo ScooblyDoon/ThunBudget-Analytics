@@ -224,7 +224,8 @@ internal fun FlexiblePeriodsScreen(
                         LinearProgressIndicator(
                             progress = { execution.toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
-                            color = if (execution > 1.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            color = if (execution > 1.0) MaterialTheme.colorScheme.error else ThunBudgetPalette.Dark.positive,
+                            trackColor = thunBudgetCategoryCardSurface()
                         )
                         Text(
                             "Ожидаемое исполнение бюджета: " + formatFlexiblePercent(if (report.plannedTotal > 0.0) execution * 100.0 else null),
@@ -335,7 +336,8 @@ internal fun FlexiblePeriodsScreen(
                         LinearProgressIndicator(
                             progress = { (actualPercent / 100.0).toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
-                            color = if (actualPercent > 100.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            color = if (actualPercent > 100.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                            trackColor = thunBudgetCategoryCardSurface()
                         )
                         Text(
                             "Факт: " + formatFlexiblePercent(category.actualExecutionPercent) +
