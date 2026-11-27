@@ -89,42 +89,46 @@ object BudgetAllocationCalculator {
         if (budgetPerPercent <= 0.0) return Redistribution(emptyList(), categories.toMap())
 
         fun isReserve(name: String): Boolean =
-            name.equals(RESERVE_CATEGORY, ignoreCase = true) ||
-                name.equals("Непредвиденные расходы", ignoreCase = true) ||
-                name.equals("Перенос средств", ignoreCase = true)
+            name.equals(RESERVE_CATEGORY, ignoreCase = true)
 
+        fun isTechnicalCarryover(name: String): Boolean =
+            name.equals("Перенос средств", ignoreCase = true)
+
+        val eligibleCategories = categories.filterNot { isTechnicalCarryover(it.first) }
         val updated = categories.toMap().toMutableMap()
-        val caps = categories.associate { it.first to it.second.coerceAtLeast(0.0) * budgetPerPercent }
-        val actual = categories.associate { (name, _) -> name to (spentByCategory[name] ?: 0.0).coerceAtLeast(0.0) }
-        val projected = categories.associate { (name, _) ->
+        val caps = eligibleCategories.associate { it.first to it.second.coerceAtLeast(0.0) * budgetPerPercent }
+        val actual = eligibleCategories.associate { (name, _) -> name to (spentByCategory[name] ?: 0.0).coerceAtLeast(0.0) }
+        val projected = eligibleCategories.associate { (name, _) ->
             name to maxOf(actual[name] ?: 0.0, (forecastSpentByCategory[name] ?: actual[name] ?: 0.0).coerceAtLeast(0.0))
         }
-        val remaining = caps.mapValues { (name, cap) -> cap - (actual[name] ?: 0.0) }.toMutableMap()
 
-        val deficits = categories.mapNotNull { (name, _) ->
+        // Every real expense category can be a target, including reserve and savings.
+        // The technical period carryover is never a spending target or a donor.
+        val deficits = eligibleCategories.mapNotNull { (name, _) ->
             val deficit = (actual[name] ?: 0.0) - (caps[name] ?: 0.0)
-            if (deficit > 0.0001 && !isReserve(name)) name to deficit else null
+            if (deficit > 0.0001) name to deficit else null
         }.sortedByDescending { it.second }
 
         val bufferAmount = safetyBufferPercent.coerceAtLeast(0.0) * budgetPerPercent
-        val donors = categories.mapNotNull { (name, _) ->
+        val donors = eligibleCategories.mapNotNull { (name, _) ->
             val cap = caps[name] ?: 0.0
             val actualSpent = actual[name] ?: 0.0
             val projectedSpend = projected[name] ?: actualSpent
             val effectiveFreePercent = freePercent(cap, projectedSpend)
             val reserve = isReserve(name)
             val available = if (reserve) {
-                (cap - actualSpent).coerceAtLeast(0.0)
+                (cap - projectedSpend).coerceAtLeast(0.0)
             } else {
                 (cap - projectedSpend - bufferAmount).coerceAtLeast(0.0)
             }
+            // Keep categories with 5% or less projected headroom untouched.
+            // Remaining categories are prioritized in the established 20/15/10 tiers.
             val eligible = cap > 0.0 && available > 0.0001 &&
-                (reserve || (effectiveFreePercent != null && effectiveFreePercent >= 10.0)) &&
-                !name.equals("Накопления", ignoreCase = true)
-            if (eligible) Triple(name, available, effectiveFreePercent ?: 100.0) else null
+                effectiveFreePercent != null && effectiveFreePercent > 5.0
+            if (eligible) Triple(name, available, effectiveFreePercent) else null
         }.sortedWith(
             compareByDescending<Triple<String, Double, Double>> { isReserve(it.first) }
-                .thenByDescending { if (isReserve(it.first)) Int.MAX_VALUE else donorTier(it.third) }
+                .thenByDescending { donorTier(it.third) }
                 .thenByDescending { it.third }
                 .thenByDescending { it.second }
         )
@@ -156,7 +160,8 @@ object BudgetAllocationCalculator {
         freePercent >= 20.0 -> 3
         freePercent >= 15.0 -> 2
         freePercent >= 10.0 -> 1
-        else -> 0
+        freePercent > 5.0 -> 0
+        else -> -1
     }
 
     /** The reserve always absorbs the unallocated remainder and is hidden at exactly 100%. */
