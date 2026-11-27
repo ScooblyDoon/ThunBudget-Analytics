@@ -84,7 +84,7 @@ object BudgetAllocationCalculator {
         spentByCategory: Map<String, Double>,
         budgetPerPercent: Double,
         forecastSpentByCategory: Map<String, Double> = emptyMap(),
-        safetyBufferPercent: Double = 2.0
+        safetyBufferPercent: Double = 0.0
     ): Redistribution {
         if (budgetPerPercent <= 0.0) return Redistribution(emptyList(), categories.toMap())
 
