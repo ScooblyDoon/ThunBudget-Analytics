@@ -16,20 +16,26 @@ internal data class SpendingAverage(
 )
 
 internal object AssistantAnalytics {
+    private const val TRANSFER_CATEGORY = "Перенос средств"
+
+    /** General spending analytics excludes the internal reporting-period carryover row. */
+    private fun spendingRows(expenses: List<Expense>): List<Expense> =
+        expenses.filterNot { it.category.equals(TRANSFER_CATEGORY, ignoreCase = true) }
+
     fun topCategoryByFrequency(expenses: List<Expense>): Pair<String, Int>? =
-        expenses.groupingBy { it.category }.eachCount().entries
+        spendingRows(expenses).groupingBy { it.category }.eachCount().entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .firstOrNull()?.let { it.key to it.value }
 
     fun topCategoryByAmount(expenses: List<Expense>): Pair<String, Double>? =
-        expenses.groupBy { it.category }
+        spendingRows(expenses).groupBy { it.category }
             .mapValues { (_, rows) -> rows.sumOf { it.amount.coerceAtLeast(0.0) } }
             .entries
             .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
             .firstOrNull()?.let { it.key to it.value }
 
     fun topSpendingWeekday(expenses: List<Expense>): Pair<DayOfWeek, Double>? =
-        expenses.mapNotNull { expense ->
+        spendingRows(expenses).mapNotNull { expense ->
             val day = runCatching { LocalDate.parse(expense.date).dayOfWeek }.getOrNull() ?: return@mapNotNull null
             day to expense.amount.coerceAtLeast(0.0)
         }.groupBy({ it.first }, { it.second })
@@ -39,15 +45,15 @@ internal object AssistantAnalytics {
             .firstOrNull()?.let { it.key to it.value }
 
     fun topTitleByFrequency(expenses: List<Expense>): Pair<String, Int>? =
-        expenses.groupingBy { it.title.trim().ifBlank { "Без названия" } }.eachCount().entries
+        spendingRows(expenses).groupingBy { it.title.trim().ifBlank { "Без названия" } }.eachCount().entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
             .firstOrNull()?.let { it.key to it.value }
 
-    fun largest(expenses: List<Expense>): Expense? = expenses.maxWithOrNull(
+    fun largest(expenses: List<Expense>): Expense? = spendingRows(expenses).maxWithOrNull(
         compareBy<Expense> { it.amount }.thenBy { it.date }.thenBy { it.id }
     )
 
-    fun smallest(expenses: List<Expense>): Expense? = expenses.filter { it.amount > 0.0 }.minWithOrNull(
+    fun smallest(expenses: List<Expense>): Expense? = spendingRows(expenses).filter { it.amount > 0.0 }.minWithOrNull(
         compareBy<Expense> { it.amount }.thenBy { it.date }.thenBy { it.id }
     )
 
@@ -56,7 +62,7 @@ internal object AssistantAnalytics {
         bucket: SpendingBucket,
         category: String? = null
     ): SpendingAverage? {
-        val rows = expenses.filter { it.amount > 0.0 && (category == null || it.category.equals(category, true)) }
+        val rows = spendingRows(expenses).filter { it.amount > 0.0 && (category == null || it.category.equals(category, true)) }
             .mapNotNull { e -> runCatching { LocalDate.parse(e.date) to e.amount }.getOrNull() }
         if (rows.isEmpty()) return null
         val first = rows.minOf { it.first }
@@ -77,7 +83,7 @@ internal object AssistantAnalytics {
     }
 
     fun topSpendingDay(expenses: List<Expense>): Pair<LocalDate, Double>? =
-        expenses.mapNotNull { expense ->
+        spendingRows(expenses).mapNotNull { expense ->
             val date = runCatching { LocalDate.parse(expense.date) }.getOrNull() ?: return@mapNotNull null
             date to expense.amount.coerceAtLeast(0.0)
         }.groupBy({ it.first }, { it.second })
@@ -102,7 +108,7 @@ internal object AssistantAnalytics {
     ): List<SavingRecommendation> {
         if (expenses.isEmpty()) return emptyList()
         val protected = setOf("жилье", "жильё", "жкх", "ипотека", "аренда", "лекарства", "здоровье", "накопления")
-        val totals = expenses.groupBy { it.category }
+        val totals = spendingRows(expenses).groupBy { it.category }
             .mapValues { (_, rows) -> rows.sumOf { it.amount.coerceAtLeast(0.0) } }
         val deficit = if (remainingBudget < 0.0) -remainingBudget else 0.0
         val candidates = totals.mapNotNull { (category, spent) ->
@@ -134,7 +140,7 @@ internal object AssistantAnalytics {
     }
 
     fun monthlyTotals(expenses: List<Expense>): List<Pair<String, Double>> =
-        expenses.mapNotNull { e ->
+        spendingRows(expenses).mapNotNull { e ->
             runCatching { YearMonth.from(LocalDate.parse(e.date)).toString() to e.amount }.getOrNull()
         }.groupBy({ it.first }, { it.second })
             .toSortedMap()
@@ -145,6 +151,6 @@ internal object AssistantAnalytics {
             }
 
     fun categoryTotals(expenses: List<Expense>): List<Pair<String, Double>> =
-        expenses.groupBy { it.category }.map { (category, rows) -> category to rows.sumOf { it.amount } }
+        spendingRows(expenses).groupBy { it.category }.map { (category, rows) -> category to rows.sumOf { it.amount } }
             .sortedByDescending { it.second }
 }
