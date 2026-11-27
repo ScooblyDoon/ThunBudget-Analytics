@@ -1,6 +1,7 @@
 package ru.scooblydoon.thunbudget
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,8 +25,29 @@ class ThunBudgetPaletteTest {
         assertEquals(Color(0xFF171821), ThunBudgetPalette.Dark.surface)
         assertEquals(Color(0xFF242631), ThunBudgetPalette.Dark.surfaceVariant)
         assertEquals(Color(0xFF89849A), ThunBudgetPalette.Dark.primary)
+        assertEquals(Color(0xFF171821), ThunBudgetPalette.Dark.onPrimary)
         assertEquals(Color(0xFF21222D), ThunBudgetPalette.Dark.dialogSurface)
         assertEquals(Color(0xFF343440), ThunBudgetPalette.Dark.dialogField)
+    }
+
+    @Test
+    fun primaryButtonTextHasAccessibleContrastInBothThemes() {
+        fun contrast(foreground: Color, background: Color): Double {
+            val first = foreground.luminance().toDouble()
+            val second = background.luminance().toDouble()
+            val lighter = maxOf(first, second)
+            val darker = minOf(first, second)
+            return (lighter + 0.05) / (darker + 0.05)
+        }
+
+        assertTrue(
+            "Light primary button contrast must be at least 4.5:1",
+            contrast(ThunBudgetPalette.Light.onPrimary, ThunBudgetPalette.Light.primary) >= 4.5
+        )
+        assertTrue(
+            "Dark primary button contrast must be at least 4.5:1",
+            contrast(ThunBudgetPalette.Dark.onPrimary, ThunBudgetPalette.Dark.primary) >= 4.5
+        )
     }
 
     @Test

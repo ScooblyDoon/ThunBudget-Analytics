@@ -63,7 +63,7 @@ internal object ThunBudgetPalette {
         surface = Color(0xFF171821),
         surfaceVariant = Color(0xFF242631),
         primary = Color(0xFF89849A),
-        onPrimary = Color(0xFFF3F2F8),
+        onPrimary = Color(0xFF171821),
         primaryContainer = Color(0xFF343440),
         onPrimaryContainer = Color(0xFFF3F2F8),
         secondary = Color(0xFF6BA88E),
