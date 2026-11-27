@@ -870,6 +870,9 @@ private fun ThunBudgetApp() {
         periodIncomes, LocalDate.parse(periodStart), LocalDate.parse(periodEnd),
         expenses, firstPeriodStartDay, firstPeriodEndDay
     )
+    val carryoverIncome = (
+        effectivePeriodIncome - (periodIncomeRow?.earnedAmount ?: 0.0)
+    ).coerceAtLeast(0.0)
     val analyticsMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(
         periodIncomes, analyticsMonth, today,
         firstStartDay = firstPeriodStartDay,
