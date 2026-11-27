@@ -31,9 +31,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -1607,7 +1604,7 @@ private fun ThunBudgetApp() {
                                 onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer
                             ) {
-                                Icon(Icons.Filled.Mic, contentDescription = "Голосовой ввод")
+                                Icon(Icons.Outlined.Mic, contentDescription = "Голосовой ввод")
                             }
                             Spacer(Modifier.width(8.dp))
                             SmallFloatingActionButton(
@@ -2805,7 +2802,7 @@ private fun ThunBudgetApp() {
                             enabled = !isListening,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Filled.Mic, contentDescription = null)
+                            Icon(Icons.Outlined.Mic, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(if (isListening) "Слушаю…" else "Сказать голосом")
                         }
@@ -4194,7 +4191,7 @@ private fun CategoryManagerDialog(
                                     modifier = Modifier.size(36.dp)
                                 ) {
                                     Icon(
-                                        Icons.Filled.Edit,
+                                        Icons.Outlined.Edit,
                                         contentDescription = "Изменить категорию",
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(19.dp)
@@ -4205,7 +4202,7 @@ private fun CategoryManagerDialog(
                                     modifier = Modifier.size(36.dp)
                                 ) {
                                     Icon(
-                                        Icons.Filled.Close,
+                                        Icons.Outlined.Close,
                                         contentDescription = "Удалить категорию",
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(19.dp)
