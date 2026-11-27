@@ -25,7 +25,10 @@ internal fun DynamicAllocationDialog(
     onDismiss: () -> Unit,
     onSave: (List<BudgetCategory>) -> Unit
 ) {
-    val regular = categories.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
+    val regular = categories.filterNot {
+        it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) ||
+            it.name.equals("Перенос средств", true)
+    }
     val forecast = remember(expenses, categories, firstPeriodStartDay, firstPeriodEndDay) {
         BudgetForecastCalculator.calculate(
             categories = regular.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
@@ -66,8 +69,7 @@ internal fun DynamicAllocationDialog(
     }
     val rawRecommendations = regular.associate { category ->
         val predicted = forecastPercentages[category.name]
-        val protectedReserve = category.name.equals("Непредвиденные расходы", true) ||
-            category.name.equals("Перенос средств", true)
+        val protectedReserve = category.name.equals("Непредвиденные расходы", true)
         val suggested = when {
             protectedReserve || predicted == null -> category.percent
             predicted < category.percent -> minOf(category.percent, predicted + 2.0)
@@ -110,7 +112,7 @@ internal fun DynamicAllocationDialog(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "Проценты рассчитываются относительно фактического дохода за соответствующие периоды. Для категорий с запасом сохраняется дополнительный резерв 2% дохода.",
+                    "Доли рассчитываются относительно доступного бюджета каждого отчётного периода. Если расходы ниже текущей доли, предложение сохраняет запас в 2 процентных пункта.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -154,7 +156,10 @@ internal fun DynamicAllocationDialog(
                 val withReserve = BudgetAllocationCalculator.withReserve(updated.map { it.name to it.percent })
                 val reserve = withReserve.firstOrNull { it.first == BudgetAllocationCalculator.RESERVE_CATEGORY }
                     ?.let { BudgetCategory(it.first, it.second) }
-                onSave(updated + listOfNotNull(reserve))
+                val technicalCarryover = categories.firstOrNull {
+                    it.name.equals("Перенос средств", true)
+                }
+                onSave(updated + listOfNotNull(reserve, technicalCarryover))
             }) { Text("Применить выбранные") }
         },
         dismissButton = {
