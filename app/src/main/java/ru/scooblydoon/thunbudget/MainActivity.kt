@@ -908,9 +908,6 @@ private fun ThunBudgetApp() {
             end = LocalDate.parse(periodEnd),
             periodIncomeIsDefined = periodIncomeRow != null || carryoverIncome != 0.0
         )
-    val analyticsCycleBudgetIncome = AnalyticsBudgetCalculator.reportingCycleBudgetIncome(
-        analyticsCycleIncome, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay
-    )
     val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
         currentShares = currentCategoryShares,
         savedPlans = plansForAnalytics,
@@ -918,13 +915,11 @@ private fun ThunBudgetApp() {
         firstEnd = analyticsCycleIncome.firstEnd,
         secondStart = analyticsCycleIncome.secondStart,
         secondEnd = analyticsCycleIncome.secondEnd,
-        firstIncome = analyticsCycleBudgetIncome.firstPeriodBudget,
-        secondIncome = analyticsCycleBudgetIncome.secondPeriodBudget
+        firstIncome = analyticsCycleIncome.firstIncome,
+        secondIncome = analyticsCycleIncome.secondIncome
     )
-    val analyticsCyclePlanBudget = analyticsCycleBudgetIncome.totalBudget
-        .takeIf { it > 0.0 } ?: calculatedMonthlyIncome
     val analyticsCyclePlanAmounts = currentCategoryShares.associate { (name, _) ->
-        name to analyticsCyclePlanBudget.coerceAtLeast(0.0) *
+        name to calculatedMonthlyIncome.coerceAtLeast(0.0) *
             (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0
     }
     // All reporting-month category views use the same two-period plan.
@@ -1457,9 +1452,6 @@ private fun ThunBudgetApp() {
                     val cycleIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
                         periodIncomes, month, firstPeriodStartDay, firstPeriodEndDay
                     )
-                    val cycleBudgetIncome = AnalyticsBudgetCalculator.reportingCycleBudgetIncome(
-                        cycleIncome, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay
-                    )
                     val cyclePlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
                         currentShares = currentCategoryShares,
                         savedPlans = plansForAnalytics,
@@ -1467,10 +1459,10 @@ private fun ThunBudgetApp() {
                         firstEnd = cycleIncome.firstEnd,
                         secondStart = cycleIncome.secondStart,
                         secondEnd = cycleIncome.secondEnd,
-                        firstIncome = cycleBudgetIncome.firstPeriodBudget,
-                        secondIncome = cycleBudgetIncome.secondPeriodBudget
+                        firstIncome = cycleIncome.firstIncome,
+                        secondIncome = cycleIncome.secondIncome
                     )
-                    val planIncome = cycleBudgetIncome.totalBudget.takeIf { it > 0.0 } ?: income
+                    val planIncome = cycleIncome.totalIncome.takeIf { it > 0.0 } ?: income
                     month.toString() to currentCategoryShares.associate { (name, _) ->
                         name to planIncome.coerceAtLeast(0.0) *
                             (cyclePlan.averagePercentages[name] ?: 0.0) / 100.0
