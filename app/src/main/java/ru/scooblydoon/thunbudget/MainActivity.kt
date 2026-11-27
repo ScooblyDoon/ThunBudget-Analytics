@@ -2191,7 +2191,7 @@ private fun ThunBudgetApp() {
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Text(
-                                        "Перенос остатка в цикле: ${money(analyticsCycleCarryover)}",
+                                        "Переносы, доступные в цикле: ${money(analyticsCycleCarryover)}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -2917,7 +2917,7 @@ private fun ThunBudgetApp() {
             periodEarnedIncomeByRange = periodIncomes.associate {
                 (it.start to it.end) to it.earnedAmount.coerceAtLeast(0.0)
             },
-            fallbackPeriodIncome = if (periodEarnedIncome > 0.0) periodIncomeRow?.earnedAmount ?: periodEarnedIncome else income / 2.0,
+            fallbackPeriodIncome = periodIncomeRow?.earnedAmount?.takeIf { it.isFinite() && it > 0.0 } ?: income / 2.0,
             onDismiss = { showDynamicAllocationDialog = false },
             onSave = { updated ->
                 store.prepareUndoSnapshot()
