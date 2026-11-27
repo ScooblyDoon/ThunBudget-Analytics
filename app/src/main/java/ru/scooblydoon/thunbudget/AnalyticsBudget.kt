@@ -584,12 +584,19 @@ internal object AnalyticsBudgetCalculator {
         firstStartDay: Int = 9,
         firstEndDay: Int = 23
     ): Double {
-        val recorded = periodIncomes.asSequence()
-            .filter { it.start == start.toString() && it.end == end.toString() }
-            .sumOf { if (it.amount.isFinite()) it.amount.coerceAtLeast(0.0) else 0.0 }
-        return recorded + carryoverBefore(
+        val periodRows = periodIncomes.filter {
+            it.start == start.toString() && it.end == end.toString()
+        }
+        val recorded = periodRows.sumOf {
+            if (it.amount.isFinite()) it.amount.coerceAtLeast(0.0) else 0.0
+        }
+        val hasExplicitCarryover = periodRows.any {
+            it.carryoverAmount.isFinite() && it.carryoverAmount > 0.0
+        }
+        val legacyCarryover = if (hasExplicitCarryover) 0.0 else carryoverBefore(
             start.toString(), periodIncomes, expenses, firstStartDay, firstEndDay
         )
+        return recorded + legacyCarryover
     }
 
     fun carryoverBefore(
