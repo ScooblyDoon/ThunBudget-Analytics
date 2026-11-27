@@ -224,8 +224,8 @@ internal fun FlexiblePeriodsScreen(
                         LinearProgressIndicator(
                             progress = { execution.toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
-                            color = if (execution > 1.0) MaterialTheme.colorScheme.error else ThunBudgetPalette.Dark.positive,
-                            trackColor = thunBudgetCategoryCardSurface()
+                            color = if (execution > 1.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                            trackColor = thunBudgetProgressTrackColor()
                         )
                         Text(
                             "Ожидаемое исполнение бюджета: " + formatFlexiblePercent(if (report.plannedTotal > 0.0) execution * 100.0 else null),
@@ -327,7 +327,7 @@ internal fun FlexiblePeriodsScreen(
             items(report.categories, key = { "flex-" + selected.id + "-" + it.category }) { category ->
                 val actualPercent = category.actualExecutionPercent ?: 0.0
                 val projectedPercent = category.projectedExecutionPercent ?: 0.0
-                Card(shape = RoundedCornerShape(16.dp)) {
+                Card(colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = thunBudgetCategoryCardSurface()), shape = RoundedCornerShape(16.dp)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(category.category, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
@@ -337,7 +337,7 @@ internal fun FlexiblePeriodsScreen(
                             progress = { (actualPercent / 100.0).toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
                             color = if (actualPercent > 100.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
-                            trackColor = thunBudgetCategoryCardSurface()
+                            trackColor = thunBudgetProgressTrackColor()
                         )
                         Text(
                             "Факт: " + formatFlexiblePercent(category.actualExecutionPercent) +
@@ -349,7 +349,7 @@ internal fun FlexiblePeriodsScreen(
                             if (category.remainingToPlan >= 0.0) "Остаток плана: " + formatFlexibleMoney(category.remainingToPlan)
                             else "Превышение факта: " + formatFlexibleMoney(-category.remainingToPlan),
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (category.remainingToPlan < 0.0) Color(0xFFC74444) else Color(0xFF168A72)
+                            color = if (category.remainingToPlan < 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
                         )
                         if (!report.isCompleted && projectedPercent > 100.0) {
                             Text(
