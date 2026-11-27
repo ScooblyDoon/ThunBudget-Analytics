@@ -1458,15 +1458,23 @@ private fun ThunBudgetApp() {
     val exportLauncher= rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri ->
         if (uri != null) {
             backupMessage = runCatching {
-                XlsxExporter.write(context, uri, expenses, categories, income, LocalDate.now().year, periodStart, periodEnd, effectivePeriodIncome, periodIncomes.groupBy { it.end.take(7) }.mapValues { (monthKey, entries) ->
-                            runCatching { AnalyticsBudgetCalculator.monthlyIncome(
-                                income, periodIncomes, YearMonth.parse(monthKey), true,
-                                firstStartDay = firstPeriodStartDay,
-                                firstEndDay = firstPeriodEndDay,
-                                incomeEntries = incomeEntries
-                            ) }
-                                .getOrDefault(entries.sumOf { it.earnedAmount })
-                        }, incomeEntries)
+                val exportYear = LocalDate.now().year
+                val exportMonthlyIncomes = (1..12).associate { monthNumber ->
+                    val month = YearMonth.of(exportYear, monthNumber)
+                    month.toString() to runCatching {
+                        AnalyticsBudgetCalculator.monthlyIncome(
+                            income, periodIncomes, month, true,
+                            firstStartDay = firstPeriodStartDay,
+                            firstEndDay = firstPeriodEndDay,
+                            incomeEntries = incomeEntries
+                        )
+                    }.getOrDefault(income)
+                }
+                XlsxExporter.write(
+                    context, uri, expenses, categories, income, exportYear,
+                    periodStart, periodEnd, effectivePeriodIncome,
+                    exportMonthlyIncomes, incomeEntries
+                )
                 "Excel-отчёт успешно сохранён."
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
         }
