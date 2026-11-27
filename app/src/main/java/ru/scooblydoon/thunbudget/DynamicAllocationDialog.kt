@@ -21,6 +21,7 @@ internal fun DynamicAllocationDialog(
     firstPeriodStartDay: Int = 9,
     firstPeriodEndDay: Int = 23,
     periodIncomeByRange: Map<Pair<String, String>, Double> = emptyMap(),
+    periodEarnedIncomeByRange: Map<Pair<String, String>, Double> = emptyMap(),
     fallbackPeriodIncome: Double = 0.0,
     onDismiss: () -> Unit,
     onSave: (List<BudgetCategory>) -> Unit
@@ -49,12 +50,17 @@ internal fun DynamicAllocationDialog(
     }
     val forecastPercentages = remember(forecast, pairedIncomePeriods, expenses, fallbackPeriodIncome) {
         regular.associate { category ->
-            val spendAndIncomeByPeriod = pairedIncomePeriods.map { (range, income) ->
+            val spendAndIncomeByPeriod = pairedIncomePeriods.mapIndexed { index, (range, openingAvailableIncome) ->
                 val spent = expenses.asSequence()
                     .filter { it.category.equals(category.name, ignoreCase = true) }
                     .filter { it.date >= range.start.toString() && it.date <= range.end.toString() }
                     .sumOf { it.amount.coerceAtLeast(0.0) }
-                spent to income
+                val periodEarnedIncome = periodEarnedIncomeByRange[
+                    range.start.toString() to range.end.toString()
+                ]?.takeIf { it.isFinite() && it >= 0.0 }
+                val countedIncome = if (index == 0) openingAvailableIncome
+                    else periodEarnedIncome ?: openingAvailableIncome
+                spent to countedIncome
             }
             val weightedPercent = BudgetAllocationCalculator.weightedPercentOfIncome(spendAndIncomeByPeriod)
             val categoryForecast = forecast.categories.firstOrNull { it.category == category.name }
