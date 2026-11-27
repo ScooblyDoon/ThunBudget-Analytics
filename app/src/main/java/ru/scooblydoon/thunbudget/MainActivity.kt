@@ -1000,7 +1000,7 @@ private fun ThunBudgetApp() {
             voiceMessage = if (aliases.isEmpty()) {
                 "Пользовательских синонимов пока нет. Можно добавить командой: «Запомни синоним кофейня для категории Кафе и развлечения»."
             } else {
-                "Сохранённые синонимы:\\n" + aliases.toSortedMap().entries.joinToString("\\n") { (alias, category) -> "• $alias → $category" }
+                "Сохранённые синонимы:\n" + aliases.toSortedMap().entries.joinToString("\n") { (alias, category) -> "• $alias → $category" }
             }
             return
         }
