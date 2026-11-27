@@ -610,4 +610,60 @@ class AnalyticsBudgetTest {
         assertEquals(19000.0, expenses.sumOf { it.amount }, 0.001)
     }
 
+    @Test
+    fun reportingCycleExpenseRangeUsesBothFullPeriodsAndCutsAtToday() {
+        val active = AnalyticsBudgetCalculator.reportingCycleExpenseRange(
+            java.time.YearMonth.of(2026, 11), java.time.LocalDate.parse("2026-11-27")
+        )
+        assertEquals("2026-11-09", active.start.toString())
+        assertEquals("2026-12-08", active.end.toString())
+        assertEquals("2026-11-27", active.visibleEnd.toString())
+        assertEquals(19, active.elapsedDays)
+
+        val completed = AnalyticsBudgetCalculator.reportingCycleExpenseRange(
+            java.time.YearMonth.of(2026, 10), java.time.LocalDate.parse("2026-11-27")
+        )
+        assertEquals("2026-10-09", completed.start.toString())
+        assertEquals("2026-11-08", completed.end.toString())
+        assertEquals("2026-11-08", completed.visibleEnd.toString())
+        assertEquals(31, completed.elapsedDays)
+    }
+    @Test
+    fun carryoverBeforeKeepsNegativeDeficitForTheNextPeriod() {
+        val result = AnalyticsBudgetCalculator.carryoverBefore(
+            "2026-11-24",
+            listOf(PeriodIncome("2026-11-09", "2026-11-23", 10000.0)),
+            listOf(Expense(1, "Перерасход", "Продукты", 12000.0, "2026-11-20"))
+        )
+        assertEquals(-2000.0, result, 0.001)
+    }
+
+    @Test
+    fun explicitCarryoverExpenseAndIncomePairDoesNotLeaveAnOldBalanceBehind() {
+        val result = AnalyticsBudgetCalculator.carryoverBefore(
+            "2026-11-24",
+            listOf(
+                PeriodIncome("2026-11-09", "2026-11-23", 10000.0),
+                PeriodIncome("2026-11-24", "2026-12-08", 12000.0, earnedAmount = 10000.0, carryoverAmount = 2000.0)
+            ),
+            listOf(
+                Expense(2, "Обычные расходы", "Продукты", 8000.0, "2026-11-20"),
+                Expense(3, "Перенос остатка", "Перенос средств", 2000.0, "2026-11-23")
+            )
+        )
+        assertEquals(0.0, result, 0.001)
+    }
+
+    @Test
+    fun negativePeriodIncomeDoesNotFallBackToTheFixedMonthlyBudget() {
+        val result = AnalyticsBudgetCalculator.periodCategoryBudget(
+            periodIncome = -2000.0,
+            monthlyIncomeFallback = 100000.0,
+            categoryPercent = 25.0,
+            start = java.time.LocalDate.parse("2026-11-24"),
+            end = java.time.LocalDate.parse("2026-12-08"),
+            periodIncomeIsDefined = true
+        )
+        assertEquals(0.0, result, 0.001)
+    }
 }

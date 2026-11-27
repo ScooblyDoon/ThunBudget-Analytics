@@ -88,26 +88,30 @@ object BudgetAllocationCalculator {
     ): Redistribution {
         if (budgetPerPercent <= 0.0) return Redistribution(emptyList(), categories.toMap())
 
+        // "Перенос средств" is a technical period-closing entry, never a
+        // spending category, deficit, reserve or donor in redistribution.
+        val budgetCategories = categories.filterNot {
+            it.first.equals("Перенос средств", ignoreCase = true)
+        }
+
         fun isReserve(name: String): Boolean =
             name.equals(RESERVE_CATEGORY, ignoreCase = true) ||
-                name.equals("Непредвиденные расходы", ignoreCase = true) ||
-                name.equals("Перенос средств", ignoreCase = true)
+                name.equals("Непредвиденные расходы", ignoreCase = true)
 
         val updated = categories.toMap().toMutableMap()
-        val caps = categories.associate { it.first to it.second.coerceAtLeast(0.0) * budgetPerPercent }
-        val actual = categories.associate { (name, _) -> name to (spentByCategory[name] ?: 0.0).coerceAtLeast(0.0) }
-        val projected = categories.associate { (name, _) ->
+        val caps = budgetCategories.associate { it.first to it.second.coerceAtLeast(0.0) * budgetPerPercent }
+        val actual = budgetCategories.associate { (name, _) -> name to (spentByCategory[name] ?: 0.0).coerceAtLeast(0.0) }
+        val projected = budgetCategories.associate { (name, _) ->
             name to maxOf(actual[name] ?: 0.0, (forecastSpentByCategory[name] ?: actual[name] ?: 0.0).coerceAtLeast(0.0))
         }
-        val remaining = caps.mapValues { (name, cap) -> cap - (actual[name] ?: 0.0) }.toMutableMap()
 
-        val deficits = categories.mapNotNull { (name, _) ->
+        val deficits = budgetCategories.mapNotNull { (name, _) ->
             val deficit = (actual[name] ?: 0.0) - (caps[name] ?: 0.0)
             if (deficit > 0.0001 && !isReserve(name)) name to deficit else null
         }.sortedByDescending { it.second }
 
         val bufferAmount = safetyBufferPercent.coerceAtLeast(0.0) * budgetPerPercent
-        val donors = categories.mapNotNull { (name, _) ->
+        val donors = budgetCategories.mapNotNull { (name, _) ->
             val cap = caps[name] ?: 0.0
             val actualSpent = actual[name] ?: 0.0
             val projectedSpend = projected[name] ?: actualSpent
@@ -119,7 +123,7 @@ object BudgetAllocationCalculator {
                 (cap - projectedSpend - bufferAmount).coerceAtLeast(0.0)
             }
             val eligible = cap > 0.0 && available > 0.0001 &&
-                (reserve || (effectiveFreePercent != null && effectiveFreePercent >= 10.0)) &&
+                (reserve || (effectiveFreePercent != null && effectiveFreePercent > 5.0)) &&
                 !name.equals("Накопления", ignoreCase = true)
             if (eligible) Triple(name, available, effectiveFreePercent ?: 100.0) else null
         }.sortedWith(
