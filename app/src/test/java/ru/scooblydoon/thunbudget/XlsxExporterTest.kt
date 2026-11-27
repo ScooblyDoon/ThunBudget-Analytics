@@ -150,4 +150,36 @@ class XlsxExporterTest {
         assertTrue(rows.last()[3].toString().contains("SUM(D2:D4)"))
     }
 
+
+    @Test
+    fun monthlyExcelKeepsSavingsOutflowsAndExcludesInternalPeriodCarryover() {
+        val expenses = listOf(
+            Expense(1, "Покупка", "Продукты", 1000.0, "2026-11-10"),
+            Expense(2, "На накопительный счёт", "Накопления", 10000.0, "2026-11-11"),
+            Expense(3, "В резерв", "Резервные средства", 3000.0, "2026-11-12"),
+            Expense(4, "Перенос остатка", "Перенос средств", 5000.0, "2026-11-23")
+        )
+        val rows = XlsxExporter.months(
+            expenses = expenses,
+            cats = listOf(
+                BudgetCategory("Продукты", 20.0),
+                BudgetCategory("Накопления", 10.0),
+                BudgetCategory("Резервные средства", 10.0),
+                BudgetCategory("Перенос средств", 0.0)
+            ),
+            income = 100000.0,
+            year = 2026,
+            monthlyIncomes = mapOf("2026-11" to 100000.0)
+        )
+        val november = rows.drop(1).dropLast(1)
+            .filter { it[0] == "2026-11" }
+            .associateBy { it[1].toString() }
+
+        assertEquals(setOf("Продукты", "Накопления", "Резервные средства"), november.keys)
+        assertEquals(1000.0, november["Продукты"]!![3] as Double, 0.001)
+        assertEquals(10000.0, november["Накопления"]!![3] as Double, 0.001)
+        assertEquals(3000.0, november["Резервные средства"]!![3] as Double, 0.001)
+        assertEquals(14000.0, november.values.sumOf { it[3] as Double }, 0.001)
+    }
+
 }
