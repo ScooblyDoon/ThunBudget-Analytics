@@ -3845,9 +3845,9 @@ private fun AnnualChartsSection(
     val today = LocalDate.now()
     val yearStart = LocalDate.of(year, 1, 1)
     val yearEnd = if (year == today.year) today else YearMonth.of(year, 12).atEndOfMonth()
-    val yearExpenses = if (yearEnd.isBefore(yearStart)) emptyList() else expenses.filter {
-        it.date >= yearStart.toString() && it.date <= yearEnd.toString()
-    }
+    val yearExpenses = AnalyticsBudgetCalculator.cashExpensesInRange(
+        expenses, yearStart, yearEnd
+    )
     val totals=(1..12).map { month ->
         yearExpenses.filter { runCatching { LocalDate.parse(it.date).monthValue==month }.getOrDefault(false) }.sumOf { it.amount }
     }
@@ -3934,7 +3934,9 @@ private fun AnnualChartsSection(
 @Composable
 private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCategory>,year:Int,onYearChange:(Int)->Unit,selectedCategoryNames:String,onSelectedCategoryNamesChange:(String)->Unit,showCategoryCharts:Boolean,onShowCategoryChartsChange:(Boolean)->Unit) {
     val selected=selectedCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
-    val yearExpenses=expenses.filter { it.date.startsWith("$year-") }
+    val yearStart = LocalDate.of(year, 1, 1)
+    val yearEnd = if (year == LocalDate.now().year) LocalDate.now() else YearMonth.of(year, 12).atEndOfMonth()
+    val yearExpenses = AnalyticsBudgetCalculator.cashExpensesInRange(expenses, yearStart, yearEnd)
     val totals=(1..12).map { m -> yearExpenses.filter { runCatching { LocalDate.parse(it.date).monthValue==m }.getOrDefault(false) }.sumOf { it.amount } }
     val total=totals.sum()
     val labels=listOf("Я","Ф","М","А","М","И","И","А","С","О","Н","Д")
