@@ -19,10 +19,11 @@ Apply the approved Balance Pro presentation to ThunBudget Analytics as a visual-
 
 ## Accepted visual system
 ### Light theme
-- Background: #F5F2F8
-- Surface: #FFFDFF; card surface: #EEE8F4
-- Primary muted violet: #6F5B89; primary container: #E7DFEE
-- Selected controls / filters: #E8DEF8 with dark plum text #2F2540
+- Background: #F4F6F8
+- Surface: #FFFFFF; neutral card surface: #E6E0E9
+- Primary slate: #445365; primary container: #E6E0E9
+- Selected controls / filters: #E6E0E9 with slate text #445365
+- Budget highlight card: #445365 with white text
 - Positive / remaining: #168974
 - Warning: #DFA44B
 - Overspend / error: #D36F83
@@ -31,14 +32,14 @@ Apply the approved Balance Pro presentation to ThunBudget Analytics as a visual-
 - Modal surface: #FFFFFF; input surface: #F0F2F5
 
 ### Dark theme
-- Background: #090A10
-- Surface: #17141F; purple-tinted card surface: #2B2536
-- Surface containers progress from #1D1926 to #383045
-- Primary calm violet: #A58EC6; primary container: #473A57
-- Selected controls / navigation: #3C344B; rose income action: #563746
-- Neutral category-card surface: #36343C
+- Background: #090A11
+- Surface: #171821; neutral card surface: #36343C
+- Surface containers progress from #171821 to #36343C
+- Primary violet: #B49BFE; on-primary ink: #1B1220
+- Selected controls / navigation and microphone action: #3C344B; rose income action: #623B48
+- Budget highlight card: #B49BFE with dark text #1B1220
 - Actual-spend fill: #168A72; track: #383548
-- Main text: #F3F0F7; secondary text: #BDB3C9
+- Main text: #F3F2F9; secondary text: #B8B6C0
 - Modal surface remains graphite #21222D; modal inputs remain #343440.
 - Positive/negative financial states remain semantic green/red, not the lavender accent.
 
@@ -76,8 +77,9 @@ Use the existing Jetpack Compose Material 3 theme and composables. First central
 ## Acceptance
 - Existing navigation destinations, ordering behavior, overview block IDs/order, values, formulas and event handlers are unchanged.
 - Budget-card text and progress fill remain readable in dark mode.
-- Mic/voice actions and selected navigation/filter states use violet; income quick action uses dusty rose.
-- Category statistic cards use neutral graphite; positive expense execution remains teal, distinct from the violet controls.
+- Mic/voice actions and selected navigation/filter states use muted violet; income quick action uses dusty rose.
+- Dark budget card is bright violet #B49BFE with dark text; light budget card is slate #445365 with white text.
+- Income and category cards use reference gray #36343C in dark mode and #E6E0E9 in light mode; positive expense execution remains teal, distinct from the violet controls.
 - New palette unit tests pass.
 - Existing dialog screenshot tests remain green and dark modal surface/field colors remain graphite.
 - GitHub Actions unit tests, signed Release APK build and signature verification pass.
