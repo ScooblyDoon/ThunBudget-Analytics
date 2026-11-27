@@ -629,59 +629,29 @@ class AnalyticsBudgetTest {
         assertEquals(31, completed.elapsedDays)
     }
     @Test
-    fun reportingCycleBudgetCarriesPositiveRemainderWithoutDoubleCountingAndCarriesDeficitForward() {
-        val cycle = AnalyticsBudgetCalculator.reportingCycleIncome(
-            listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 10000.0),
-                PeriodIncome("2026-11-24", "2026-12-08", 10000.0)
-            ),
-            java.time.YearMonth.of(2026, 11), 9, 23
+    fun carryoverBeforeKeepsNegativeDeficitForTheNextPeriod() {
+        val result = AnalyticsBudgetCalculator.carryoverBefore(
+            "2026-11-24",
+            listOf(PeriodIncome("2026-11-09", "2026-11-23", 10000.0)),
+            listOf(Expense(1, "Перерасход", "Продукты", 12000.0, "2026-11-20"))
         )
-
-        val positiveCarry = AnalyticsBudgetCalculator.reportingCycleBudgetIncome(
-            cycle,
-            listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 10000.0),
-                PeriodIncome("2026-11-24", "2026-12-08", 10000.0)
-            ),
-            listOf(Expense(1, "Покупки", "Продукты", 8000.0, "2026-11-20"))
-        )
-        assertEquals(8000.0, positiveCarry.firstPeriodBudget, 0.001)
-        assertEquals(12000.0, positiveCarry.secondPeriodBudget, 0.001)
-        assertEquals(20000.0, positiveCarry.totalBudget, 0.001)
-
-        val negativeCarry = AnalyticsBudgetCalculator.reportingCycleBudgetIncome(
-            cycle,
-            listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 10000.0),
-                PeriodIncome("2026-11-24", "2026-12-08", 10000.0)
-            ),
-            listOf(Expense(2, "Перерасход", "Продукты", 12000.0, "2026-11-20"))
-        )
-        assertEquals(10000.0, negativeCarry.firstPeriodBudget, 0.001)
-        assertEquals(8000.0, negativeCarry.secondPeriodBudget, 0.001)
-        assertEquals(18000.0, negativeCarry.totalBudget, 0.001)
+        assertEquals(-2000.0, result, 0.001)
     }
 
     @Test
-    fun explicitCarryoverIncomeAndExpenseAreNeutralAcrossTheReportingCycle() {
-        val cycle = AnalyticsBudgetCalculator.reportingCycleIncome(
+    fun explicitCarryoverExpenseAndIncomePairDoesNotLeaveAnOldBalanceBehind() {
+        val result = AnalyticsBudgetCalculator.carryoverBefore(
+            "2026-11-24",
             listOf(
                 PeriodIncome("2026-11-09", "2026-11-23", 10000.0),
                 PeriodIncome("2026-11-24", "2026-12-08", 12000.0, earnedAmount = 10000.0, carryoverAmount = 2000.0)
             ),
-            java.time.YearMonth.of(2026, 11), 9, 23
-        )
-        val budget = AnalyticsBudgetCalculator.reportingCycleBudgetIncome(
-            cycle,
             listOf(
-                PeriodIncome("2026-11-09", "2026-11-23", 10000.0),
-                PeriodIncome("2026-11-24", "2026-12-08", 12000.0, earnedAmount = 10000.0, carryoverAmount = 2000.0)
-            ),
-            listOf(Expense(3, "Перенос остатка", "Перенос средств", 2000.0, "2026-11-23"))
+                Expense(2, "Обычные расходы", "Продукты", 8000.0, "2026-11-20"),
+                Expense(3, "Перенос остатка", "Перенос средств", 2000.0, "2026-11-23")
+            )
         )
-        assertEquals(8000.0, budget.firstPeriodBudget, 0.001)
-        assertEquals(12000.0, budget.secondPeriodBudget, 0.001)
-        assertEquals(20000.0, budget.totalBudget, 0.001)
+        assertEquals(0.0, result, 0.001)
     }
+
 }
