@@ -548,6 +548,23 @@ internal object AnalyticsBudgetCalculator {
     }
 
     /**
+     * Combined cycle plan funding counts the funds entering period 1 plus new
+     * earned income in period 2. Any carryover from period 1 into period 2 is
+     * the same money already counted in period 1 and must not be added again.
+     */
+    fun reportingCyclePlanIncome(
+        firstPeriodAvailableIncome: Double,
+        secondPeriodEarnedIncome: Double,
+        fallbackIncome: Double = 0.0
+    ): Double {
+        val first = firstPeriodAvailableIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val second = secondPeriodEarnedIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val combined = first + second
+        return combined.takeIf { it > 0.0 }
+            ?: (fallbackIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0)
+    }
+
+    /**
      * "Monthly income" in the primary budget model means the sum of the two
      * configured reporting periods for the selected cycle, not a calendar-day
      * allocation across the 1st..last day of a month. Carryover is excluded
