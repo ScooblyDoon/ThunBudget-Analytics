@@ -492,7 +492,7 @@ private fun FlexiblePeriodEditorDialog(
     )
 }
 
-private fun buildFlexiblePeriodReport(
+internal fun buildFlexiblePeriodReport(
     period: FlexiblePeriodDefinition,
     expenses: List<Expense>,
     incomeEntries: List<IncomeEntry>,
