@@ -3629,17 +3629,17 @@ private fun ChartsScreen(
         // 2. Calendar month: actuals share the exact date window with the Analysis tab.
         item {
             Divider()
-            Text("Расходы за месяц", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Расходы за календарный месяц", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
                 month.format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru", "RU"))),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            MetricCard("Фактические расходы за месяц", money(monthTotal), Modifier.fillMaxWidth())
+            MetricCard("Фактические расходы за календарный месяц", money(monthTotal), Modifier.fillMaxWidth())
         }
         item {
             CategoryDonutBreakdown(
-                title = "Структура расходов за месяц",
+                title = "Структура расходов за календарный месяц",
                 categories = categories,
                 amounts = categories.associate { category ->
                     category.name to monthExpenses.filter { it.category.equals(category.name, ignoreCase = true) }.sumOf { it.amount }
