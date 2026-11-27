@@ -5,6 +5,58 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class BudgetAllocationReportingCycleTest {
+
+    @Test
+    fun projectedOverspendIsProposedBeforeActualSpendingCrossesTheLimit() {
+        val categories = listOf(
+            "Продукты" to 20.0,
+            "Кафе" to 30.0,
+            "Одежда" to 50.0
+        )
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = categories,
+            spentByCategory = mapOf(
+                "Продукты" to 18000.0,
+                "Кафе" to 8000.0,
+                "Одежда" to 12000.0
+            ),
+            budgetPerPercent = 1000.0,
+            forecastSpentByCategory = mapOf(
+                "Продукты" to 25000.0,
+                "Кафе" to 10000.0,
+                "Одежда" to 15000.0
+            ),
+            safetyBufferPercent = 2.0
+        )
+
+        assertEquals(1, result.deficits.size)
+        assertEquals("Продукты", result.deficits.single().category)
+        assertEquals(18000.0, result.deficits.single().actualSpend, 0.001)
+        assertEquals(25000.0, result.deficits.single().projectedSpend, 0.001)
+        assertEquals(5000.0, result.deficits.single().amount, 0.001)
+        assertEquals(1, result.transfers.size)
+        assertEquals("Одежда", result.transfers.single().fromCategory)
+        assertEquals("Продукты", result.transfers.single().toCategory)
+        assertEquals(5000.0, result.transfers.single().amount, 0.001)
+        assertEquals(0.0, result.totalUncovered, 0.001)
+    }
+
+    @Test
+    fun reportsUncoveredForecastDeficitWhenAllRemainingFundsAreProtected() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf("Покупки" to 50.0, "Накопления" to 50.0),
+            spentByCategory = mapOf("Покупки" to 0.0, "Накопления" to 0.0),
+            budgetPerPercent = 1000.0,
+            forecastSpentByCategory = mapOf("Покупки" to 60000.0, "Накопления" to 0.0),
+            safetyBufferPercent = 2.0
+        )
+
+        assertEquals(1, result.deficits.size)
+        assertTrue(result.transfers.isEmpty())
+        assertEquals(10000.0, result.totalUncovered, 0.001)
+        assertEquals(10000.0, result.uncoveredByCategory["Покупки"]!!, 0.001)
+    }
+
     @Test
     fun redistributionUsesTwentyFifteenTenAndAboveFivePercentDonorTiers() {
         val categories = listOf(
