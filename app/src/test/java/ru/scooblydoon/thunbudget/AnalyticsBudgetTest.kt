@@ -812,4 +812,16 @@ class AnalyticsBudgetTest {
         assertEquals(20.0, weighted!!, 0.001)
     }
 
+
+    @Test
+    fun dynamicShareIncludesSpendInCarryoverOnlyPeriodWithoutAddingNewIncome() {
+        val weighted = BudgetAllocationCalculator.weightedPercentOfIncome(
+            listOf(
+                10000.0 to 50000.0,
+                5000.0 to 0.0
+            )
+        )
+        assertEquals(30.0, weighted!!, 0.001)
+    }
+
 }
