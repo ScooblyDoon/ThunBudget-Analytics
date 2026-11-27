@@ -52,7 +52,7 @@ internal object AssistantRecognitionDictionary {
         val normalized = phrase.trim()
         val patterns = listOf(
             Regex("""^(?:запомни|сохрани|добавь в словарь)\s+(?:синоним\s+)?["«']?(.+?)["»']?\s+(?:для категории|к категории|как категорию)\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE),
-            Regex("""^(?:запомни|считай)\s+["«']?(.+?)["»']?\s+(?:это|— это)\s+категори[яи]\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE)
+            Regex("""^(?:запомни(?:,?\s+что)?|считай)\s+["«']?(.+?)["»']?\s+(?:это|— это)\s+категори[яи]\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE)
         )
         val match = patterns.firstNotNullOfOrNull { it.find(normalized) } ?: return null
         val alias = cleanQuoted(match.groupValues[1])
