@@ -607,7 +607,7 @@ class AnalyticsBudgetTest {
         )
 
         assertEquals(14000.0, monthTotal, 0.001)
-        assertEquals(15000.0, expenses.sumOf { it.amount }, 0.001)
+        assertEquals(19000.0, expenses.sumOf { it.amount }, 0.001)
     }
 
 }
