@@ -1908,18 +1908,12 @@ private fun ThunBudgetApp() {
                             Card {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
-                                        Text("Учитывать сохранённые доли периодов", fontWeight = FontWeight.SemiBold)
-                                        Text("Для отчётного месяца планы двух периодов объединяются с учётом дохода каждого периода.", style = MaterialTheme.typography.bodySmall)
+                                        Text("Динамическое распределение долей", fontWeight = FontWeight.SemiBold)
+                                        Text("Предложит доли по фактическим расходам за завершённые отчётные периоды. Изменения применяются только после подтверждения.", style = MaterialTheme.typography.bodySmall)
                                     }
                                     Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
                                         if (enabled) {
-                                            val snapshot = categories.map { it.copy() }
-                                            manualAllocationSnapshot = snapshot
-                                            store.saveManualAllocationSnapshot(snapshot)
-                                            autoAllocationEnabled = true
-                                            store.saveAutoAllocationEnabled(true)
-                                            showAdvice = true
-                                            persistUiExpanded(context, "analytics_advice", true)
+                                            showDynamicAllocationDialog = true
                                         } else {
                                             val restored = manualAllocationSnapshot.map { it.copy() }
                                             store.restoreCategoriesExactly(restored, periodStart, periodEnd)
@@ -2920,10 +2914,12 @@ private fun ThunBudgetApp() {
             onSave = { updated ->
                 store.prepareUndoSnapshot()
                 canUndo = true
-                manualAllocationSnapshot = categories
-                store.saveManualAllocationSnapshot(categories)
+                manualAllocationSnapshot = categories.map { it.copy() }
+                store.saveManualAllocationSnapshot(manualAllocationSnapshot)
                 categories = updated
                 store.saveCategories(categories, periodStart, periodEnd)
+                autoAllocationEnabled = true
+                store.saveAutoAllocationEnabled(true)
                 showDynamicAllocationDialog = false
             }
         )
