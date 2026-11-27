@@ -2830,7 +2830,13 @@ private fun ThunBudgetApp() {
                         FilledTonalButton(
                             onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
                             enabled = !isListening,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = visualPalette.secondaryContainer,
+                                contentColor = visualPalette.onSecondaryContainer,
+                                disabledContainerColor = visualPalette.secondaryContainer.copy(alpha = 0.38f),
+                                disabledContentColor = visualPalette.onSecondaryContainer.copy(alpha = 0.60f)
+                            )
                         ) {
                             Icon(Icons.Outlined.Mic, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
