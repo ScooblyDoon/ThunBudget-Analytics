@@ -2445,8 +2445,12 @@ private fun ThunBudgetApp() {
                             val periodAllocationPlan = selectedOverviewPeriodCategoryPlan.entries
                                 .filterNot { it.key.equals("Перенос средств", true) }
                                 .map { it.key to it.value }
-                            val budgetPerPercent = if (effectivePeriodIncome > 0.0) effectivePeriodIncome / 100.0
-                                else plannedForPeriod(income, 1.0, periodStart, periodEnd)
+                            val budgetPerPercent = when {
+                                effectivePeriodIncome.isFinite() && effectivePeriodIncome > 0.0 ->
+                                    effectivePeriodIncome / 100.0
+                                periodIncomeRow != null || carryoverIncome != 0.0 -> 0.0
+                                else -> plannedForPeriod(income, 1.0, periodStart, periodEnd)
+                            }
                             val redistribution = BudgetAllocationCalculator.redistribute(
                                 categories = periodAllocationPlan,
                                 spentByCategory = periodFacts,
@@ -2481,7 +2485,7 @@ private fun ThunBudgetApp() {
                                             )
                                         }
                                         Text(
-                                            "Приоритет: резервные средства, затем категории с наибольшим прогнозируемым остатком (20%, 15%, 10%, далее выше 5%). Обычным категориям оставляется запас 2% дохода; накопления и остатки 5% или меньше защищены.",
+                                            "Приоритет: резервные средства, затем категории с наибольшим прогнозируемым остатком (20%, 15%, 10%, далее выше 5%). Обычным категориям оставляется запас 2% дохода; накопления и обычные категории с остатком 5% или меньше защищены. Резерв учитывает уже спрогнозированные расходы.",
                                             style=MaterialTheme.typography.labelSmall,
                                             color=MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -2496,7 +2500,7 @@ private fun ThunBudgetApp() {
                                             modifier = Modifier.fillMaxWidth()
                                         ) { Text("Применить предложенное распределение") }
                                     } else {
-                                        Text("Подходящих категорий-доноров нет. Накопления и категории с прогнозируемым остатком 5% или меньше не используются.")
+                                        Text("Подходящих категорий-доноров нет. Накопления защищены; обычные категории с прогнозируемым остатком 5% или меньше не используются.")
                                     }
                                     if (redistribution.totalUncovered > 0.0001) {
                                         Text(
