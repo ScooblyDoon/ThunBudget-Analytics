@@ -16,7 +16,7 @@ class AnalyticsBudgetTest {
         assertEquals(120000.0, result, 0.001)
     }
 
-    @Test fun monthlyIncomeAllocatesPeriodIncomeAcrossCalendarMonthBoundaries() {
+    @Test fun monthlyIncomeUsesBothCompleteReportingPeriodsInsteadOfCalendarOverlap() {
         val result = AnalyticsBudgetCalculator.monthlyIncome(
             120000.0,
             listOf(
@@ -27,7 +27,7 @@ class AnalyticsBudgetTest {
             YearMonth.of(2026, 11),
             true
         )
-        assertEquals(78333.333333, result, 0.001)
+        assertEquals(90000.0, result, 0.001)
     }
 
 
@@ -64,7 +64,7 @@ class AnalyticsBudgetTest {
             YearMonth.of(2026, 11),
             true
         )
-        assertEquals(90641.333333, result, 0.001)
+        assertEquals(86881.0, result, 0.001)
     }
 
     @Test fun calendarMonthUsesOnlyCoveredDaysAndSplitsPeriodsByDay() {
@@ -608,6 +608,141 @@ class AnalyticsBudgetTest {
 
         assertEquals(14000.0, monthTotal, 0.001)
         assertEquals(19000.0, expenses.sumOf { it.amount }, 0.001)
+    }
+
+
+    @Test
+    fun reportingCycleCashExpensesUseBothPeriodsAndStopAtToday() {
+        val expenses = listOf(
+            Expense(1L, "До цикла", "Продукты", 100.0, "2026-11-08"),
+            Expense(2L, "Начало цикла", "Продукты", 100.0, "2026-11-09"),
+            Expense(3L, "Конец первого периода", "Продукты", 200.0, "2026-11-23"),
+            Expense(4L, "Технический перенос", "Перенос средств", 500.0, "2026-11-23"),
+            Expense(5L, "Начало второго периода", "Продукты", 300.0, "2026-11-24"),
+            Expense(6L, "Конец цикла", "Продукты", 400.0, "2026-12-08"),
+            Expense(7L, "После цикла", "Продукты", 500.0, "2026-12-09")
+        )
+
+        assertEquals(
+            600.0,
+            AnalyticsBudgetCalculator.reportingCycleCashExpenseTotal(
+                expenses, YearMonth.of(2026, 11), java.time.LocalDate.parse("2026-11-27"), 9, 23
+            ),
+            0.001
+        )
+        assertEquals(
+            1000.0,
+            AnalyticsBudgetCalculator.reportingCycleCashExpenseTotal(
+                expenses, YearMonth.of(2026, 11), java.time.LocalDate.parse("2026-12-10"), 9, 23
+            ),
+            0.001
+        )
+    }
+
+    @Test
+    fun availableReportingPeriodIncomeDoesNotDoubleCountRecordedCarryover() {
+        val periods = listOf(
+            PeriodIncome(
+                start = "2026-11-09", end = "2026-11-23", amount = 40000.0,
+                earnedAmount = 40000.0
+            ),
+            PeriodIncome(
+                start = "2026-11-24", end = "2026-12-08", amount = 35000.0,
+                earnedAmount = 30000.0, carryoverAmount = 5000.0
+            )
+        )
+        val expenses = listOf(
+            Expense(1L, "Покупки", "Продукты", 30000.0, "2026-11-20"),
+            Expense(2L, "Перенос остатка", "Перенос средств", 10000.0, "2026-11-23")
+        )
+        val available = AnalyticsBudgetCalculator.reportingPeriodAvailableIncome(
+            periods, java.time.LocalDate.parse("2026-11-24"), java.time.LocalDate.parse("2026-12-08"),
+            expenses, 9, 23
+        )
+        assertEquals(35000.0, available, 0.001)
+    }
+
+    @Test
+    fun availableReportingPeriodIncomeAddsLegacyCarryoverOnlyWhenNoExplicitTransferExists() {
+        val periods = listOf(
+            PeriodIncome(
+                start = "2026-11-09", end = "2026-11-23", amount = 40000.0,
+                earnedAmount = 40000.0
+            ),
+            PeriodIncome(
+                start = "2026-11-24", end = "2026-12-08", amount = 30000.0,
+                earnedAmount = 30000.0
+            )
+        )
+        val expenses = listOf(
+            Expense(1L, "Покупки", "Продукты", 30000.0, "2026-11-20")
+        )
+        val available = AnalyticsBudgetCalculator.reportingPeriodAvailableIncome(
+            periods, java.time.LocalDate.parse("2026-11-24"), java.time.LocalDate.parse("2026-12-08"),
+            expenses, 9, 23
+        )
+        assertEquals(40000.0, available, 0.001)
+    }
+
+    @Test
+    fun cycleCategoryPlanWeightsEachPeriodsOwnIncomeAndSavedShare() {
+        val firstStart = java.time.LocalDate.parse("2026-11-09")
+        val firstEnd = java.time.LocalDate.parse("2026-11-23")
+        val secondStart = java.time.LocalDate.parse("2026-11-24")
+        val secondEnd = java.time.LocalDate.parse("2026-12-08")
+        val cycle = ReportingPeriodCategoryPlanCalculator.cyclePlan(
+            currentShares = listOf("Продукты" to 20.0, "Резервные средства" to 80.0),
+            savedPlans = mapOf(
+                (firstStart.toString() to firstEnd.toString()) to mapOf("Продукты" to 20.0),
+                (secondStart.toString() to secondEnd.toString()) to mapOf("Продукты" to 40.0)
+            ),
+            firstStart = firstStart,
+            firstEnd = firstEnd,
+            secondStart = secondStart,
+            secondEnd = secondEnd,
+            firstIncome = 60000.0,
+            secondIncome = 40000.0
+        )
+        assertEquals(28.0, cycle.averagePercentages["Продукты"]!!, 0.001)
+        assertEquals(
+            28000.0,
+            100000.0 * cycle.averagePercentages["Продукты"]!! / 100.0,
+            0.001
+        )
+    }
+
+    @Test
+    fun redistributionUsesConfiguredDonorTiersAndProtectsFivePercentOrLess() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf(
+                "Кафе" to 10.0,
+                "Резервные средства" to 1.0,
+                "Продукты" to 30.0,
+                "Здоровье" to 20.0,
+                "Транспорт" to 15.0,
+                "Накопления" to 10.0,
+                "Личные расходы" to 10.0,
+                "Перенос средств" to 4.0
+            ),
+            spentByCategory = mapOf(
+                "Кафе" to 22000.0,
+                "Резервные средства" to 0.0,
+                "Продукты" to 24000.0,
+                "Здоровье" to 17000.0,
+                "Транспорт" to 13500.0,
+                "Накопления" to 9400.0,
+                "Личные расходы" to 9500.0,
+                "Перенос средств" to 0.0
+            ),
+            budgetPerPercent = 1000.0,
+            safetyBufferPercent = 0.0
+        )
+        assertEquals(
+            listOf("Резервные средства", "Продукты", "Здоровье", "Транспорт", "Накопления"),
+            result.transfers.map { it.fromCategory }
+        )
+        assertEquals(12000.0, result.totalTransferred, 0.001)
+        assertEquals(500.0, result.transfers.last().amount, 0.001)
     }
 
 }
