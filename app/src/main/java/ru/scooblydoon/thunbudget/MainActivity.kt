@@ -3431,6 +3431,98 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
 
 
 @Composable
+private fun AdditionalIncomeDialog(
+    start: String,
+    end: String,
+    onDismiss: () -> Unit,
+    onSave: (title: String, amount: Double, date: String) -> Unit
+) {
+    val periodStart = remember(start) { LocalDate.parse(start) }
+    val periodEnd = remember(end) { LocalDate.parse(end) }
+    var title by remember(start, end) { mutableStateOf("") }
+    var amount by remember(start, end) { mutableStateOf("") }
+    var date by remember(start, end) {
+        val today = LocalDate.now()
+        val selectedDate = if (!today.isBefore(periodStart) && !today.isAfter(periodEnd)) {
+            today
+        } else {
+            periodStart
+        }
+        mutableStateOf(selectedDate.format(DateTimeFormatter.ofPattern("ddMMyyyy")))
+    }
+    val parsedAmount = amount.replace(',', '.').toDoubleOrNull()
+    val parsedDate = parseUserDate(date)
+    val dateWithinPeriod = parsedDate != null &&
+        !parsedDate.isBefore(periodStart) && !parsedDate.isAfter(periodEnd)
+    val valid = title.isNotBlank() && parsedAmount != null &&
+        parsedAmount.isFinite() && parsedAmount > 0.0 && dateWithinPeriod
+
+    AppAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Дополнительный доход") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Разовое поступление прибавится к основному доходу этого отчётного периода и увеличит доступные бюджеты категорий. В прогноз регулярного заработка оно не попадёт.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it.take(80) },
+                    label = { Text("Название поступления") },
+                    placeholder = { Text("Например, премия") },
+                    singleLine = true,
+                    colors = themedDialogOutlinedTextFieldColors()
+                )
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == ',' || ch == '.' } },
+                    label = { Text("Сумма, ₽") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    colors = themedDialogOutlinedTextFieldColors()
+                )
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = { date = it.filter(Char::isDigit).take(8) },
+                    label = { Text("Дата поступления") },
+                    placeholder = { Text("ДД.ММ.ГГГГ") },
+                    visualTransformation = DateDigitsVisualTransformation,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    colors = themedDialogOutlinedTextFieldColors()
+                )
+                if (parsedDate != null && !dateWithinPeriod) {
+                    Text(
+                        "Дата должна находиться внутри выбранного отчётного периода.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                val current = parsedAmount?.takeIf { it.isFinite() && it > 0.0 }
+                if (current != null) {
+                    Text(
+                        "После сохранения доступный бюджет увеличится на ${money(current)}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (valid) onSave(title.trim(), parsedAmount!!, parsedDate!!.toString())
+                },
+                enabled = valid
+            ) { Text("Добавить доход") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
+}
+
+@Composable
 private fun ChartsScreen(
     expenses: List<Expense>,
     categories: List<BudgetCategory>,
