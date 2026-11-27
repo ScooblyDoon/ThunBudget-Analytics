@@ -1851,8 +1851,8 @@ private fun ThunBudgetApp() {
                             Card {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
-                                        Text("Автоматическое распределение", fontWeight = FontWeight.SemiBold)
-                                        Text("Доли для плана/факта усредняются по первому и текущему отчётным периодам.", style = MaterialTheme.typography.bodySmall)
+                                        Text("Использовать сохранённые доли периодов", fontWeight = FontWeight.SemiBold)
+                                        Text("План строится по сохранённой доле каждого отчётного периода с учётом дохода именно этого периода.", style = MaterialTheme.typography.bodySmall)
                                     }
                                     Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
                                         if (enabled) {
