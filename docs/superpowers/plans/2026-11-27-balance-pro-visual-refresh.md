@@ -18,7 +18,7 @@
 - Do not merge to main, publish to stores, or release outside the branch.
 
 ## Review Focus
-- Dark theme keeps graphite dialogs and input fills, uses calm violet controls (#3C344B selection fill), dusty rose income action (#563746), neutral category cards (#36343C), and teal spending progress (#168A72 on #383548).
+- Dark theme restores a bright violet budget card and primary action (#B49BFE), graphite income/category cards (#36343C), muted violet selection (#3C344B), rose income action (#623B48), and teal spending progress (#168A72 on #383548); light theme restores slate budget card (#445365) and gray cards (#E6E0E9).
 - Category colors remain consistent between overview, period, month and annual charts.
 - Empty and single-category charts render without divide-by-zero or missing legend labels.
 - Long category names and large ruble values remain readable on compact screens.
