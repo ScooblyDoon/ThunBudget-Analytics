@@ -124,6 +124,16 @@ internal object ReportingPeriodCategoryPlanCalculator {
      * may receive the separate income forecast at the average available plan
      * percentage; missing past days are never filled.
      */
+    private data class MonthlyPeriodIncomeInput(
+        val start: java.time.LocalDate,
+        val end: java.time.LocalDate,
+        val regularAmount: Double,
+        val additionalAmount: Double
+    ) {
+        val dayCount: Long
+            get() = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
+    }
+
     fun monthlyPlan(
         currentShares: List<Pair<String, Double>>,
         periodIncomes: List<PeriodIncome>,
@@ -131,63 +141,127 @@ internal object ReportingPeriodCategoryPlanCalculator {
         month: java.time.YearMonth,
         forecastIncome: Double = 0.0,
         firstStartDay: Int = 9,
-        firstEndDay: Int = 23
+        firstEndDay: Int = 23,
+        incomeEntries: List<IncomeEntry> = emptyList()
     ): Map<String, Double> {
         val basePlan = resolvePlan(currentShares, emptyMap())
         val result = basePlan.keys.associateWith { 0.0 }.toMutableMap()
         val monthStart = month.atDay(1)
         val monthEnd = month.atEndOfMonth()
-        val coveredDates = mutableSetOf<java.time.LocalDate>()
+        val coveredRegularDates = mutableSetOf<java.time.LocalDate>()
+        val coveredFallbackAdditionalDates = mutableSetOf<java.time.LocalDate>()
         val expectedRanges = (-1L..1L).flatMap { offset ->
             val period = ReportingPeriodCalculator.propose(month.plusMonths(offset), firstStartDay, firstEndDay)
             listOf(period.first, period.second)
         }.mapTo(mutableSetOf()) { it.start.toString() to it.end.toString() }
+
         val parsedPeriods = periodIncomes.mapNotNull { row ->
             val start = runCatching { java.time.LocalDate.parse(row.start) }.getOrNull() ?: return@mapNotNull null
             val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
             val earned = row.earnedAmount
-            if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
-            Triple(start, end, earned)
+            if (end.isBefore(start) || !earned.isFinite() || earned < 0.0) return@mapNotNull null
+            val additional = row.additionalAmount.takeIf { it.isFinite() && it >= 0.0 }?.coerceAtMost(earned) ?: 0.0
+            val regular = (earned - additional).coerceAtLeast(0.0)
+            if (regular <= 0.0 && additional <= 0.0) return@mapNotNull null
+            MonthlyPeriodIncomeInput(start, end, regular, additional)
         }
-        val hasCanonicalRows = parsedPeriods.any { (start, end, _) -> (start.toString() to end.toString()) in expectedRanges }
+        val hasCanonicalRows = parsedPeriods.any {
+            (it.start.toString() to it.end.toString()) in expectedRanges
+        }
         val validPeriods = (if (hasCanonicalRows) {
-            parsedPeriods.filter { (start, end, _) -> (start.toString() to end.toString()) in expectedRanges }
+            parsedPeriods.filter { (it.start.toString() to it.end.toString()) in expectedRanges }
         } else parsedPeriods)
-            .groupBy { it.first to it.second }
-            .map { (range, rows) -> Triple(range.first, range.second, rows.sumOf { it.third }) }
-            .sortedBy { it.first }
+            .groupBy { it.start to it.end }
+            .map { (range, rows) ->
+                MonthlyPeriodIncomeInput(
+                    range.first,
+                    range.second,
+                    rows.sumOf { it.regularAmount },
+                    rows.sumOf { it.additionalAmount }
+                )
+            }
+            .sortedBy { it.start }
 
-        validPeriods.forEach { (start, end, earnedAmount) ->
-            val overlapStart = maxOf(start, monthStart)
-            val overlapEnd = minOf(end, monthEnd)
+        val additionalEntriesByPeriod = incomeEntries
+            .filter { it.isAdditional && !it.isCarryover }
+            .groupBy { it.periodStart to it.periodEnd }
+
+        validPeriods.forEach { period ->
+            val overlapStart = maxOf(period.start, monthStart)
+            val overlapEnd = minOf(period.end, monthEnd)
             if (overlapEnd.isBefore(overlapStart)) return@forEach
-            val dayCount = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
+            val dayCount = period.dayCount
             if (dayCount <= 0L) return@forEach
-            val dailyIncome = earnedAmount / dayCount.toDouble()
-            val saved = savedPlans[start.toString() to end.toString()].orEmpty()
+            val saved = savedPlans[period.start.toString() to period.end.toString()].orEmpty()
             val planForPeriod = resolvePlan(currentShares, saved)
-            var date = overlapStart
-            while (!date.isAfter(overlapEnd)) {
-                if (coveredDates.add(date)) {
-                    planForPeriod.forEach { (name, percent) ->
-                        if (!name.equals(TRANSFER_CATEGORY, true)) {
-                            result[name] = (result[name] ?: 0.0) +
-                                dailyIncome * percent / 100.0
+
+            // Regular income entered for a reporting period is allocated evenly
+            // over its calendar dates, then apportioned by that period's saved plan.
+            if (period.regularAmount > 0.0) {
+                val dailyRegularIncome = period.regularAmount / dayCount.toDouble()
+                var date = overlapStart
+                while (!date.isAfter(overlapEnd)) {
+                    if (coveredRegularDates.add(date)) {
+                        planForPeriod.forEach { (name, percent) ->
+                            if (!name.equals(TRANSFER_CATEGORY, true)) {
+                                result[name] = (result[name] ?: 0.0) +
+                                    dailyRegularIncome * percent / 100.0
+                            }
                         }
                     }
+                    date = date.plusDays(1)
                 }
-                date = date.plusDays(1)
+            }
+
+            // A dated one-off receipt belongs to the calendar month in which it
+            // actually arrives; it must not be spread into an adjacent month.
+            val detailedAdditional = additionalEntriesByPeriod[
+                period.start.toString() to period.end.toString()
+            ].orEmpty()
+            val detailedAdditionalAmount = detailedAdditional.sumOf { it.amount.coerceAtLeast(0.0) }
+            detailedAdditional.forEach { entry ->
+                val date = runCatching { java.time.LocalDate.parse(entry.date) }.getOrNull()
+                    ?: return@forEach
+                if (date.isBefore(period.start) || date.isAfter(period.end) ||
+                    date.isBefore(monthStart) || date.isAfter(monthEnd)
+                ) return@forEach
+                planForPeriod.forEach { (name, percent) ->
+                    if (!name.equals(TRANSFER_CATEGORY, true)) {
+                        result[name] = (result[name] ?: 0.0) +
+                            entry.amount.coerceAtLeast(0.0) * percent / 100.0
+                    }
+                }
+            }
+
+            // Older backups can contain the aggregate additional-income amount
+            // without its individual dated ledger rows. Preserve those amounts
+            // using the legacy day-proration rule until the detailed rows exist.
+            val fallbackAdditional = (period.additionalAmount - detailedAdditionalAmount).coerceAtLeast(0.0)
+            if (fallbackAdditional > 0.0) {
+                val dailyAdditional = fallbackAdditional / dayCount.toDouble()
+                var date = overlapStart
+                while (!date.isAfter(overlapEnd)) {
+                    if (coveredFallbackAdditionalDates.add(date)) {
+                        planForPeriod.forEach { (name, percent) ->
+                            if (!name.equals(TRANSFER_CATEGORY, true)) {
+                                result[name] = (result[name] ?: 0.0) +
+                                    dailyAdditional * percent / 100.0
+                            }
+                        }
+                    }
+                    date = date.plusDays(1)
+                }
             }
         }
 
         // Forecast is already limited to uncovered future calendar days by
         // CalendarMonthIncomeEstimate. Use an equal-weight average of the
-        // actual plan shares in the reporting periods intersecting this month.
+        // saved plan shares for the reporting periods intersecting this month.
         if (forecastIncome.isFinite() && forecastIncome > 0.0) {
-            val relevantPlans = validPeriods.filter { (start, end, _) ->
-                !end.isBefore(monthStart) && !start.isAfter(monthEnd)
-            }.map { (start, end, _) ->
-                val saved = savedPlans[start.toString() to end.toString()].orEmpty()
+            val relevantPlans = validPeriods.filter { period ->
+                !period.end.isBefore(monthStart) && !period.start.isAfter(monthEnd)
+            }.map { period ->
+                val saved = savedPlans[period.start.toString() to period.end.toString()].orEmpty()
                 resolvePlan(currentShares, saved)
             }
             val forecastShares = basePlan.keys.associateWith { name ->
@@ -220,6 +294,45 @@ internal object AnalyticsBudgetCalculator {
         if (month == java.time.YearMonth.from(today)) minOf(month.atEndOfMonth(), today)
         else month.atEndOfMonth()
 
+    /**
+     * Carryover between reporting periods is an internal budget allocation, not
+     * a cash outflow. Savings/reserve categories remain ordinary outflows under
+     * ThunBudget's available-card-balance model.
+     */
+    fun cashExpensesInRange(
+        expenses: List<Expense>,
+        start: java.time.LocalDate,
+        end: java.time.LocalDate
+    ): List<Expense> {
+        if (end.isBefore(start)) return emptyList()
+        return expenses.filter { expense ->
+            !expense.category.equals("Перенос средств", ignoreCase = true) &&
+                expense.date >= start.toString() && expense.date <= end.toString()
+        }
+    }
+
+    fun cashExpenseTotalInRange(
+        expenses: List<Expense>,
+        start: java.time.LocalDate,
+        end: java.time.LocalDate
+    ): Double = cashExpensesInRange(expenses, start, end).sumOf { it.amount.coerceAtLeast(0.0) }
+
+    fun calendarMonthCashExpenses(
+        expenses: List<Expense>,
+        month: java.time.YearMonth,
+        today: java.time.LocalDate
+    ): List<Expense> {
+        val start = month.atDay(1)
+        val end = calendarMonthExpenseEnd(month, today)
+        return cashExpensesInRange(expenses, start, end)
+    }
+
+    fun calendarMonthCashExpenseTotal(
+        expenses: List<Expense>,
+        month: java.time.YearMonth,
+        today: java.time.LocalDate
+    ): Double = calendarMonthCashExpenses(expenses, month, today).sumOf { it.amount.coerceAtLeast(0.0) }
+
 
     private data class IncomePeriod(
         val start: java.time.LocalDate,
@@ -249,25 +362,31 @@ internal object AnalyticsBudgetCalculator {
         asOf: java.time.LocalDate,
         forecastLookbackPeriods: Int = 6,
         firstStartDay: Int = 9,
-        firstEndDay: Int = 23
+        firstEndDay: Int = 23,
+        incomeEntries: List<IncomeEntry> = emptyList()
     ): CalendarMonthIncomeEstimate {
         require(forecastLookbackPeriods >= 1)
         val expectedRanges = (-4L..1L).flatMap { offset ->
             val period = ReportingPeriodCalculator.propose(month.plusMonths(offset), firstStartDay, firstEndDay)
             listOf(period.first, period.second)
         }.mapTo(mutableSetOf()) { it.start.toString() to it.end.toString() }
+
         val parsedPeriods = periodIncomes.mapNotNull { row ->
             val start = runCatching { java.time.LocalDate.parse(row.start) }.getOrNull() ?: return@mapNotNull null
             val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
             val earned = row.earnedAmount
-            if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
-            val additional = row.additionalAmount.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-            IncomePeriod(start, end, earned, (earned - additional).coerceAtLeast(0.0))
+            if (end.isBefore(start) || !earned.isFinite() || earned < 0.0) return@mapNotNull null
+            val additional = row.additionalAmount.takeIf { it.isFinite() && it >= 0.0 }?.coerceAtMost(earned) ?: 0.0
+            val regular = (earned - additional).coerceAtLeast(0.0)
+            if (regular <= 0.0 && additional <= 0.0) return@mapNotNull null
+            IncomePeriod(start, end, earned, regular)
         }
+
         // Prefer periods matching the configured reporting cycle. This prevents
-        // an old overlapping monthly/legacy aggregate from filling days that
-        // have no income entry in the current reporting-period model.
-        val hasCanonicalRows = parsedPeriods.any { (it.start.toString() to it.end.toString()) in expectedRanges }
+        // old overlapping monthly aggregates from filling gaps in the current model.
+        val hasCanonicalRows = parsedPeriods.any {
+            (it.start.toString() to it.end.toString()) in expectedRanges
+        }
         val normalized = (if (hasCanonicalRows) {
             parsedPeriods.filter { (it.start.toString() to it.end.toString()) in expectedRanges }
         } else parsedPeriods)
@@ -282,24 +401,59 @@ internal object AnalyticsBudgetCalculator {
 
         val monthStart = month.atDay(1)
         val monthEnd = month.atEndOfMonth()
-        val coveredDates = mutableSetOf<java.time.LocalDate>()
+        val coveredRegularDates = mutableSetOf<java.time.LocalDate>()
+        val coveredFallbackAdditionalDates = mutableSetOf<java.time.LocalDate>()
         var enteredIncome = 0.0
+        val additionalEntriesByPeriod = incomeEntries
+            .filter { it.isAdditional && !it.isCarryover }
+            .groupBy { it.periodStart to it.periodEnd }
 
         normalized.forEach { period ->
             val from = maxOf(monthStart, period.start)
             val to = minOf(monthEnd, period.end)
             if (to.isBefore(from)) return@forEach
-            var date = from
-            while (!date.isAfter(to)) {
-                // A calendar day can contribute only once, even if corrupted or
-                // legacy data contains overlapping period definitions.
-                if (coveredDates.add(date)) enteredIncome += period.dailyRate
-                date = date.plusDays(1)
+
+            // Base income is a reporting-period amount, so it is allocated over
+            // that period's calendar days when a month boundary splits the period.
+            if (period.regularEarnedAmount > 0.0) {
+                var date = from
+                while (!date.isAfter(to)) {
+                    if (coveredRegularDates.add(date)) enteredIncome += period.regularDailyRate
+                    date = date.plusDays(1)
+                }
+            }
+
+            // Additional income (including returned savings) is a dated cash
+            // receipt. Attribute it to the month of its actual entry date.
+            val detailedAdditional = additionalEntriesByPeriod[
+                period.start.toString() to period.end.toString()
+            ].orEmpty()
+            val detailedAdditionalAmount = detailedAdditional.sumOf { it.amount.coerceAtLeast(0.0) }
+            detailedAdditional.forEach { entry ->
+                val date = runCatching { java.time.LocalDate.parse(entry.date) }.getOrNull()
+                    ?: return@forEach
+                if (!date.isBefore(period.start) && !date.isAfter(period.end) &&
+                    !date.isBefore(monthStart) && !date.isAfter(monthEnd)
+                ) {
+                    enteredIncome += entry.amount.coerceAtLeast(0.0)
+                }
+            }
+
+            // Retain aggregate-only older backups. Once dated ledger rows exist,
+            // only an unrepresented remainder is prorated as legacy data.
+            val fallbackAdditional = (period.additionalAmount - detailedAdditionalAmount).coerceAtLeast(0.0)
+            if (fallbackAdditional > 0.0) {
+                val dailyAdditional = fallbackAdditional / period.dayCount.toDouble()
+                var date = from
+                while (!date.isAfter(to)) {
+                    if (coveredFallbackAdditionalDates.add(date)) enteredIncome += dailyAdditional
+                    date = date.plusDays(1)
+                }
             }
         }
 
-        // One-off additional income counts in actual monthly receipts above,
-        // but never raises the baseline used to forecast future regular income.
+        // Only regular income periods train the recurring-income forecast.
+        // Additional receipts never inflate the baseline.
         val recentDailyRates = normalized
             .filter { !it.end.isAfter(asOf) && it.regularEarnedAmount > 0.0 }
             .sortedBy { it.end }
@@ -307,8 +461,6 @@ internal object AnalyticsBudgetCalculator {
             .map { it.regularDailyRate }
             .filter { it.isFinite() && it > 0.0 }
             .sorted()
-        // Require at least two completed periods so a single unusual payment
-        // does not become the forecast baseline.
         val medianDailyIncome = if (recentDailyRates.size >= 2) {
             val middle = recentDailyRates.size / 2
             if (recentDailyRates.size % 2 == 0) {
@@ -316,11 +468,13 @@ internal object AnalyticsBudgetCalculator {
             } else recentDailyRates[middle]
         } else null
 
+        // Additional one-off receipts do not mark an entire reporting period
+        // as covered by regular income; only a real base-income period does.
         var uncoveredPastDays = 0
         var uncoveredFutureDays = 0
         var date = monthStart
         while (!date.isAfter(monthEnd)) {
-            if (date !in coveredDates) {
+            if (date !in coveredRegularDates) {
                 if (date.isAfter(asOf)) uncoveredFutureDays++ else uncoveredPastDays++
             }
             date = date.plusDays(1)
@@ -330,7 +484,7 @@ internal object AnalyticsBudgetCalculator {
         return CalendarMonthIncomeEstimate(
             enteredIncome = enteredIncome,
             forecastIncome = forecastIncome,
-            coveredDays = coveredDates.size,
+            coveredDays = coveredRegularDates.size,
             uncoveredPastDays = uncoveredPastDays,
             forecastDays = forecastDays,
             uncoveredFutureDays = uncoveredFutureDays,
@@ -338,7 +492,6 @@ internal object AnalyticsBudgetCalculator {
             medianDailyIncome = medianDailyIncome
         )
     }
-
     /**
      * Returns the unprorated earned income for the two reporting periods in the
      * selected reporting cycle. Carryover is excluded from earned income.
@@ -371,13 +524,15 @@ internal object AnalyticsBudgetCalculator {
         useReportingPeriods: Boolean,
         asOf: java.time.LocalDate = java.time.LocalDate.now(),
         firstStartDay: Int = 9,
-        firstEndDay: Int = 23
+        firstEndDay: Int = 23,
+        incomeEntries: List<IncomeEntry> = emptyList()
     ): Double {
         if (!useReportingPeriods) return fixedMonthlyIncome.coerceAtLeast(0.0)
         return calendarMonthIncome(
             periodIncomes, month, asOf,
             firstStartDay = firstStartDay,
-            firstEndDay = firstEndDay
+            firstEndDay = firstEndDay,
+            incomeEntries = incomeEntries
         ).totalIncome
     }
 
