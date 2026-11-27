@@ -1215,7 +1215,8 @@ private fun ThunBudgetApp() {
                         AnalyticsBudgetCalculator.monthlyIncome(
                             income, periodIncomes, month, true,
                             firstStartDay = firstPeriodStartDay,
-                            firstEndDay = firstPeriodEndDay
+                            firstEndDay = firstPeriodEndDay,
+                            incomeEntries = incomeEntries
                         )
                     }?.takeIf { it > 0.0 } ?: income
                 }
@@ -1461,7 +1462,8 @@ private fun ThunBudgetApp() {
                             runCatching { AnalyticsBudgetCalculator.monthlyIncome(
                                 income, periodIncomes, YearMonth.parse(monthKey), true,
                                 firstStartDay = firstPeriodStartDay,
-                                firstEndDay = firstPeriodEndDay
+                                firstEndDay = firstPeriodEndDay,
+                                incomeEntries = incomeEntries
                             ) }
                                 .getOrDefault(entries.sumOf { it.earnedAmount })
                         }, incomeEntries)
