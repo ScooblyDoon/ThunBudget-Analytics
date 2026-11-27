@@ -114,4 +114,49 @@ class BudgetAllocationReportingCycleTest {
         assertFalse(result.transfers.any { it.fromCategory == "Донор 5" })
         assertEquals(100.0, result.totalTransferred, 0.001)
     }
+
+    @Test
+    fun keepsOneGlobalSafetyBufferAcrossAllOrdinaryDonors() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf(
+                "Транспорт" to 10.0,
+                "Донор A" to 25.0,
+                "Донор B" to 25.0
+            ),
+            spentByCategory = mapOf(
+                "Транспорт" to 17000.0,
+                "Донор A" to 20000.0,
+                "Донор B" to 20000.0
+            ),
+            budgetPerPercent = 1000.0,
+            safetyBufferPercent = 2.0
+        )
+
+        // Income is 100,000 ₽, so the single protected global buffer is 2,000 ₽.
+        // Donors have 10,000 ₽ free in total; 8,000 ₽ is available for transfers.
+        // The 7,000 ₽ transport deficit is fully covered without consuming the buffer.
+        assertEquals(7000.0, result.totalTransferred, 0.001)
+        assertEquals(0.0, result.totalUncovered, 0.001)
+        assertEquals(3000.0, result.transfers.sumOf { it.amount }, 0.001)
+    }
+
+    @Test
+    fun housingAndUtilitiesAreNotUsedAsDonorsByDefault() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf(
+                "Транспорт" to 10.0,
+                "Жильё и ЖКХ" to 90.0
+            ),
+            spentByCategory = mapOf(
+                "Транспорт" to 13000.0,
+                "Жильё и ЖКХ" to 0.0
+            ),
+            budgetPerPercent = 1000.0,
+            safetyBufferPercent = 0.0
+        )
+
+        assertTrue(result.transfers.isEmpty())
+        assertEquals(3000.0, result.totalUncovered, 0.001)
+    }
+
 }
