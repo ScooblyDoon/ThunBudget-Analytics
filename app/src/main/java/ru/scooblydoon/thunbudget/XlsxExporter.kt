@@ -103,7 +103,14 @@ object XlsxExporter {
         return withTotals(rows, listOf(3, 4, 5, 6))
     }
 
-    internal fun months(expenses: List<Expense>, cats: List<BudgetCategory>, income: Double, year: Int, monthlyIncomes: Map<String, Double>): List<List<Any>> {
+    internal fun months(
+        expenses: List<Expense>,
+        cats: List<BudgetCategory>,
+        income: Double,
+        year: Int,
+        monthlyIncomes: Map<String, Double>,
+        asOf: LocalDate = LocalDate.now()
+    ): List<List<Any>> {
         val cashCategories = cats.filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
         val rows = mutableListOf<List<Any>>(
             listOf("Месяц", "Категория", "План, ₽", "Факт, ₽", "Не выбрано, ₽", "Превышение, ₽")
@@ -111,11 +118,10 @@ object XlsxExporter {
         for (month in 1..12) {
             val ym = YearMonth.of(year, month)
             val from = ym.atDay(1)
-            val today = LocalDate.now()
-            val currentMonth = YearMonth.from(today)
+            val currentMonth = YearMonth.from(asOf)
             val actualEnd = when {
                 ym.isAfter(currentMonth) -> from.minusDays(1)
-                ym == currentMonth -> today
+                ym == currentMonth -> asOf
                 else -> ym.atEndOfMonth()
             }
             val monthIncome = monthlyIncomes[ym.toString()]?.takeIf { it.isFinite() && it > 0.0 } ?: income
