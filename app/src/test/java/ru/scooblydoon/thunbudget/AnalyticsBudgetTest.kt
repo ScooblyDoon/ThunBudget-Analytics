@@ -434,9 +434,9 @@ class AnalyticsBudgetTest {
             asOf = java.time.LocalDate.parse("2026-11-23")
         )
 
-        // November includes only Nov 8 from the first period, then all 15 days of the second:
-        // 40,000 / 16 + 40,000 = 42,500 actual month income, including both bonuses.
-        assertEquals(42500.0, estimate.enteredIncome, 0.001)
+        // November includes Nov 1–8 (8/16 of the first period) and all 15 days
+        // of the second period: 20,000 + 40,000 = 60,000 actual month income.
+        assertEquals(60000.0, estimate.enteredIncome, 0.001)
         // Forecast baseline uses 30,000 regular earnings in each completed period:
         // median(30,000/16, 30,000/15) = 1,937.50 per uncovered future day.
         assertEquals(1937.5, estimate.medianDailyIncome!!, 0.001)
