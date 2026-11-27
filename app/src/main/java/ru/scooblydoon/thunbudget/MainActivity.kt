@@ -2728,12 +2728,14 @@ private fun ThunBudgetApp() {
                         val amount = confirmedAmount ?: return@Button
                         store.prepareUndoSnapshot(); canUndo=true
                         val incomeDate = LocalDate.parse(confirmedDate)
-                        val incomePeriod = when {
-                            incomeDate.dayOfMonth in 9..23 -> incomeDate.withDayOfMonth(9).toString() to incomeDate.withDayOfMonth(23).toString()
-                            incomeDate.dayOfMonth >= 24 -> incomeDate.withDayOfMonth(24).toString() to incomeDate.plusMonths(1).withDayOfMonth(8).toString()
-                            else -> incomeDate.minusMonths(1).withDayOfMonth(24).toString() to incomeDate.withDayOfMonth(8).toString()
-                        }
-                        store.addIncomeEntry(draft.title, amount, confirmedDate, incomePeriod.first, incomePeriod.second, isAdditional = true)
+                        val incomePeriod = ReportingPeriodCalculator.periodFor(
+                            incomeDate, firstPeriodStartDay, firstPeriodEndDay
+                        )
+                        store.addIncomeEntry(
+                            draft.title, amount, confirmedDate,
+                            incomePeriod.start.toString(), incomePeriod.end.toString(),
+                            isAdditional = true
+                        )
                         periodIncomes = store.loadPeriodIncomes()
                         incomeEntries = store.loadIncomeEntries()
                         voiceMessage = "Дополнительный доход ${money(amount)} сохранён за отчётный период. Доступный бюджет с учётом поступления: ${money(effectivePeriodIncome + amount)}."
