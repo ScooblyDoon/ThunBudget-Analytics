@@ -1444,7 +1444,7 @@ private fun ThunBudgetApp() {
                     val cycleIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
                         periodIncomes, month, firstPeriodStartDay, firstPeriodEndDay
                     ).totalIncome
-                    month.toString() to cycleIncome.takeIf { it > 0.0 } ?: income
+                    month.toString() to (cycleIncome.takeIf { it > 0.0 } ?: income)
                 }
                 val exportMonthlyCategoryPlans = (1..12).associate { monthNumber ->
                     val month = YearMonth.of(exportYear, monthNumber)
