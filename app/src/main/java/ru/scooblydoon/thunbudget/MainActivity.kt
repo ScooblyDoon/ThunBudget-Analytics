@@ -1470,10 +1470,45 @@ private fun ThunBudgetApp() {
                         )
                     }.getOrDefault(income)
                 }
+                val exportMonthlyCategoryPlans = (1..12).associate { monthNumber ->
+                    val month = YearMonth.of(exportYear, monthNumber)
+                    val monthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(
+                        periodIncomes, month, today,
+                        firstStartDay = firstPeriodStartDay,
+                        firstEndDay = firstPeriodEndDay,
+                        incomeEntries = incomeEntries
+                    )
+                    val hasMonthlyIncomePeriods = periodIncomes.any { row ->
+                        val range = runCatching {
+                            LocalDate.parse(row.start) to LocalDate.parse(row.end)
+                        }.getOrNull()
+                        range != null && row.earnedAmount.isFinite() && row.earnedAmount > 0.0 &&
+                            !range.second.isBefore(month.atDay(1)) &&
+                            !range.first.isAfter(month.atEndOfMonth())
+                    }
+                    val monthlyIncomeFallback = monthIncomeEstimate.totalIncome.takeIf { it > 0.0 } ?: income
+                    val plan = if (hasMonthlyIncomePeriods) {
+                        ReportingPeriodCategoryPlanCalculator.monthlyPlan(
+                            currentShares = currentCategoryShares,
+                            periodIncomes = periodIncomes,
+                            savedPlans = plansForAnalytics,
+                            month = month,
+                            forecastIncome = monthIncomeEstimate.forecastIncome,
+                            firstStartDay = firstPeriodStartDay,
+                            firstEndDay = firstPeriodEndDay,
+                            incomeEntries = incomeEntries
+                        )
+                    } else {
+                        currentCategoryShares.associate { (name, percent) ->
+                            name to monthlyIncomeFallback.coerceAtLeast(0.0) * percent / 100.0
+                        }
+                    }
+                    month.toString() to plan
+                }
                 XlsxExporter.write(
                     context, uri, expenses, categories, income, exportYear,
                     periodStart, periodEnd, effectivePeriodIncome,
-                    exportMonthlyIncomes, incomeEntries
+                    exportMonthlyIncomes, incomeEntries, exportMonthlyCategoryPlans
                 )
                 "Excel-отчёт успешно сохранён."
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
@@ -2126,11 +2161,11 @@ private fun ThunBudgetApp() {
                             if (analyticsIncomeMode == 0) {
                                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                     Text(
-                                        "Учтено за прошедшие дни: ${money(analyticsMonthIncomeEstimate.enteredIncome)}",
+                                        "Доход по введённым периодам: ${money(analyticsMonthIncomeEstimate.enteredIncome)}",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Text(
-                                        "Прогноз на оставшиеся дни: ${money(analyticsMonthIncomeEstimate.forecastIncome)}",
+                                        "Прогноз на незаполненные будущие дни: ${money(analyticsMonthIncomeEstimate.forecastIncome)}",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
