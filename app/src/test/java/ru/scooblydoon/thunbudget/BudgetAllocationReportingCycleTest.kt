@@ -57,6 +57,22 @@ class BudgetAllocationReportingCycleTest {
         assertEquals(10000.0, result.uncoveredByCategory["Покупки"]!!, 0.001)
     }
 
+
+    @Test
+    fun zeroReportingPeriodIncomeStillShowsOverspendingWithoutCreatingDonors() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf("Продукты" to 100.0),
+            spentByCategory = mapOf("Продукты" to 1200.0),
+            budgetPerPercent = 0.0,
+            forecastSpentByCategory = mapOf("Продукты" to 1200.0)
+        )
+
+        assertEquals(1, result.deficits.size)
+        assertEquals(1200.0, result.deficits.single().amount, 0.001)
+        assertTrue(result.transfers.isEmpty())
+        assertEquals(1200.0, result.totalUncovered, 0.001)
+    }
+
     @Test
     fun redistributionUsesTwentyFifteenTenAndAboveFivePercentDonorTiers() {
         val categories = listOf(

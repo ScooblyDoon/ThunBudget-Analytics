@@ -99,7 +99,9 @@ object BudgetAllocationCalculator {
         forecastSpentByCategory: Map<String, Double> = emptyMap(),
         safetyBufferPercent: Double = 2.0
     ): Redistribution {
-        if (budgetPerPercent <= 0.0) return Redistribution(emptyList(), categories.toMap())
+        if (!budgetPerPercent.isFinite() || budgetPerPercent < 0.0) {
+            return Redistribution(emptyList(), categories.toMap())
+        }
 
         // "Перенос средств" is a technical period-closing entry, never a
         // spending category, deficit, reserve or donor in redistribution.
@@ -136,7 +138,6 @@ object BudgetAllocationCalculator {
         val bufferAmount = safetyBufferPercent.coerceAtLeast(0.0) * budgetPerPercent
         val donors = budgetCategories.mapNotNull { (name, _) ->
             val cap = caps[name] ?: 0.0
-            val actualSpent = actual[name] ?: 0.0
             val projectedSpend = projected[name] ?: actualSpent
             val effectiveFreePercent = freePercent(cap, projectedSpend)
             val reserve = isReserve(name)
@@ -174,10 +175,12 @@ object BudgetAllocationCalculator {
             if (uncovered > 0.0001) uncoveredByCategory[deficit.category] = uncovered
         }
 
-        transfers.forEach { transfer ->
-            val points = transfer.amount / budgetPerPercent
-            updated[transfer.toCategory] = (updated[transfer.toCategory] ?: 0.0) + points
-            updated[transfer.fromCategory] = ((updated[transfer.fromCategory] ?: 0.0) - points).coerceAtLeast(0.0)
+        if (budgetPerPercent > 0.0) {
+            transfers.forEach { transfer ->
+                val points = transfer.amount / budgetPerPercent
+                updated[transfer.toCategory] = (updated[transfer.toCategory] ?: 0.0) + points
+                updated[transfer.fromCategory] = ((updated[transfer.fromCategory] ?: 0.0) - points).coerceAtLeast(0.0)
+            }
         }
         return Redistribution(transfers, updated, deficits, uncoveredByCategory)
     }
