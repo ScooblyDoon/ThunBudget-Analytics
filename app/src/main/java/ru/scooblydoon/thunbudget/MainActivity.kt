@@ -2914,7 +2914,10 @@ private fun ThunBudgetApp() {
                     expenses, firstPeriodStartDay, firstPeriodEndDay
                 )
             },
-            fallbackPeriodIncome = if (effectivePeriodIncome > 0.0) effectivePeriodIncome else income / 2.0,
+            periodEarnedIncomeByRange = periodIncomes.associate {
+                (it.start to it.end) to it.earnedAmount.coerceAtLeast(0.0)
+            },
+            fallbackPeriodIncome = if (periodEarnedIncome > 0.0) periodIncomeRow?.earnedAmount ?: periodEarnedIncome else income / 2.0,
             onDismiss = { showDynamicAllocationDialog = false },
             onSave = { updated ->
                 store.prepareUndoSnapshot()
