@@ -654,4 +654,16 @@ class AnalyticsBudgetTest {
         assertEquals(0.0, result, 0.001)
     }
 
+    @Test
+    fun negativePeriodIncomeDoesNotFallBackToTheFixedMonthlyBudget() {
+        val result = AnalyticsBudgetCalculator.periodCategoryBudget(
+            periodIncome = -2000.0,
+            monthlyIncomeFallback = 100000.0,
+            categoryPercent = 25.0,
+            start = java.time.LocalDate.parse("2026-11-24"),
+            end = java.time.LocalDate.parse("2026-12-08"),
+            periodIncomeIsDefined = true
+        )
+        assertEquals(0.0, result, 0.001)
+    }
 }
