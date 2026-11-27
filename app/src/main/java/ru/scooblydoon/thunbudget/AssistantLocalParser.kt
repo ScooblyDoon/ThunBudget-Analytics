@@ -12,7 +12,9 @@ object AssistantLocalParser {
     fun parse(
         phrase: String,
         availableCategories: List<String>,
-        today: LocalDate = LocalDate.now()
+        today: LocalDate = LocalDate.now(),
+        availablePeriods: List<FlexiblePeriodDefinition> = emptyList(),
+        memoryPeriodName: String? = null
     ): AssistantCommand? {
         val normalized = phrase.lowercase(Locale("ru", "RU"))
             .replace('ё', 'е')
@@ -22,6 +24,29 @@ object AssistantLocalParser {
         if (normalized.isBlank()) return null
 
         val category = resolveCategory(phrase, availableCategories)?.name
+        val mentionedPeriods = availablePeriods
+            .sortedByDescending { it.name.length }
+            .filter { period -> containsPeriodName(normalized, period.name) }
+        val matchedPeriod = mentionedPeriods.firstOrNull()
+        val hasExplicitDateScope = listOf(
+            "сегодня", "вчера", "на этой неделе", "за неделю", "за последние",
+            "в этом месяце", "за этот месяц", "за прошлый месяц", "в прошлом месяце",
+            "за квартал", "в этом квартале", "за прошлый квартал",
+            "за год", "в этом году", "за прошлый год", "между "
+        ).any { normalized.contains(it) } || Regex("""\b\d{1,2}\.\d{1,2}\.\d{2,4}\b""").containsMatchIn(normalized)
+        val contextFollowUp = matchedPeriod == null && !hasExplicitDateScope &&
+            !memoryPeriodName.isNullOrBlank() &&
+            (normalized.startsWith("а ") || normalized.startsWith("и ") ||
+                normalized.startsWith("теперь") || normalized.startsWith("еще") ||
+                normalized.startsWith("ещё") || normalized.startsWith("тогда") ||
+                normalized.startsWith("покажи") || normalized.startsWith("построй") ||
+                normalized.startsWith("сколько") || normalized.startsWith("доход"))
+        val resolvedPeriod = matchedPeriod ?: if (contextFollowUp) {
+            availablePeriods.firstOrNull { it.name.equals(memoryPeriodName, ignoreCase = true) }
+        } else null
+        val hasFlexibleScope = matchedPeriod != null || (contextFollowUp && resolvedPeriod != null)
+        val customPeriodStart = resolvedPeriod?.start?.toString()
+        val customPeriodEnd = resolvedPeriod?.end?.toString()
 
         val parsedDate = parseVoiceDate(phrase, today)
         val mentionsYesterday = Regex("""\b(вчера|за вчера)\b""").containsMatchIn(normalized)
@@ -35,7 +60,9 @@ object AssistantLocalParser {
         }
         val quarterStart = LocalDate.of(today.year, ((today.monthValue - 1) / 3) * 3 + 1, 1)
         val previousQuarterEnd = quarterStart.minusDays(1)
-        val periodBounds = when {
+        val periodBounds = if (resolvedPeriod != null) {
+            resolvedPeriod.start to resolvedPeriod.end
+        } else when {
             normalized.contains("за прошлый год") || normalized.contains("в прошлом году") ->
                 LocalDate.of(today.year - 1, 1, 1) to LocalDate.of(today.year - 1, 12, 31)
             normalized.contains("за год") || normalized.contains("в этом году") || normalized.contains("за текущий год") ->
@@ -56,6 +83,98 @@ object AssistantLocalParser {
         val periodEnd = periodBounds?.second?.toString()
 
         val mentionsChart = listOf("график", "диаграмм", "построй график", "покажи график").any { normalized.contains(it) }
+
+        val mentionsFlexiblePeriods = hasFlexibleScope ||
+            listOf("свободн", "гибк", "произвольн", "пользовательск").any { normalized.contains(it) }
+        val asksPeriodList = listOf(
+            "список свободных периодов", "список периодов", "какие свободные периоды",
+            "какие периоды созданы", "покажи свободные периоды", "перечисли периоды",
+            "мои периоды", "все периоды"
+        ).any { normalized.contains(it) } &&
+            !listOf("отчет", "отчёт", "график", "доход", "расход", "сравни").any { normalized.contains(it) }
+
+        if (asksPeriodList && mentionsFlexiblePeriods) {
+            return command(
+                AssistantIntent.QUERY_FLEXIBLE_PERIOD_LIST,
+                confidence = 0.96
+            )
+        }
+
+        if (mentionsFlexiblePeriods) {
+            val asksCompare = listOf("сравни", "сравнение", "по сравнению", "разница между").any { normalized.contains(it) }
+            val asksIncome = listOf("доход", "поступлен", "заработ").any { normalized.contains(it) } &&
+                !listOf("добавь", "добавить", "запиши", "внеси", "получил", "получила", "мне перевели").any { normalized.contains(it) }
+            val asksNamedCategory = category != null && listOf("сколько", "потрат", "расход", "ушло", "затрат").any { normalized.contains(it) }
+            val asksSpending = listOf("сколько потратил", "сколько потратила", "расходы", "потрачено", "сколько ушло").any { normalized.contains(it) }
+            if (asksNamedCategory) {
+                return command(
+                    AssistantIntent.QUERY_CATEGORY_SPENDING,
+                    category = category,
+                    periodStart = customPeriodStart ?: periodBounds?.first?.toString(),
+                    periodEnd = customPeriodEnd ?: periodBounds?.second?.toString(),
+                    periodName = resolvedPeriod?.name,
+                    confidence = 0.94
+                )
+            }
+            if (asksCompare) {
+                val comparePeriod = mentionedPeriods.firstOrNull { it.id != resolvedPeriod?.id }
+                return command(
+                    AssistantIntent.QUERY_FLEXIBLE_PERIOD_COMPARE,
+                    periodStart = customPeriodStart,
+                    periodEnd = customPeriodEnd,
+                    periodName = resolvedPeriod?.name,
+                    comparePeriodName = comparePeriod?.name,
+                    confidence = 0.93
+                )
+            }
+            if (mentionsChart) {
+                return command(
+                    AssistantIntent.QUERY_FLEXIBLE_PERIOD_CHART,
+                    periodStart = customPeriodStart,
+                    periodEnd = customPeriodEnd,
+                    periodName = resolvedPeriod?.name,
+                    confidence = 0.94
+                )
+            }
+            if (asksIncome) {
+                return command(
+                    AssistantIntent.QUERY_FLEXIBLE_PERIOD_INCOME,
+                    periodStart = customPeriodStart,
+                    periodEnd = customPeriodEnd,
+                    periodName = resolvedPeriod?.name,
+                    confidence = 0.95
+                )
+            }
+            if (asksSpending) {
+                return command(
+                    AssistantIntent.QUERY_SPENDING,
+                    periodStart = customPeriodStart,
+                    periodEnd = customPeriodEnd,
+                    periodName = resolvedPeriod?.name,
+                    confidence = 0.94
+                )
+            }
+            return command(
+                AssistantIntent.QUERY_FLEXIBLE_PERIOD_REPORT,
+                periodStart = customPeriodStart,
+                periodEnd = customPeriodEnd,
+                periodName = resolvedPeriod?.name,
+                confidence = 0.91
+            )
+        }
+
+        if (contextFollowUp && resolvedPeriod != null && category != null &&
+            !listOf("график", "диаграм", "доход", "сравни", "отчет", "отчёт").any { normalized.contains(it) }) {
+            return command(
+                AssistantIntent.QUERY_CATEGORY_SPENDING,
+                category = category,
+                periodStart = customPeriodStart,
+                periodEnd = customPeriodEnd,
+                periodName = resolvedPeriod.name,
+                confidence = 0.91
+            )
+        }
+
         if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalized == it }) {
             return command(AssistantIntent.UNKNOWN, confidence = 0.9)
         }
@@ -225,6 +344,16 @@ object AssistantLocalParser {
         }
     }
 
+    private fun containsPeriodName(normalizedPhrase: String, periodName: String): Boolean {
+        val normalizedName = periodName.lowercase(Locale("ru", "RU"))
+            .replace('ё', 'е')
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        if (normalizedName.isBlank()) return false
+        val pattern = Regex("""(?<![а-яa-z0-9])${Regex.escape(normalizedName)}(?![а-яa-z0-9])""")
+        return pattern.containsMatchIn(normalizedPhrase)
+    }
+
     private fun extractExpenseTitle(phrase: String, category: String?): String {
         var title = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
         val categoryText = category?.lowercase(Locale("ru", "RU"))?.replace('ё', 'е')
@@ -243,6 +372,8 @@ object AssistantLocalParser {
         periodStart: String? = null,
         periodEnd: String? = null,
         target: String? = null,
+        periodName: String? = null,
+        comparePeriodName: String? = null,
         confidence: Double,
         missingFields: List<String> = emptyList()
     ) = AssistantCommand(
@@ -254,6 +385,8 @@ object AssistantLocalParser {
         periodStart = periodStart,
         periodEnd = periodEnd,
         target = target,
+        periodName = periodName,
+        comparePeriodName = comparePeriodName,
         confidence = confidence,
         missingFields = missingFields
     )
