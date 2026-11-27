@@ -1542,6 +1542,7 @@ private fun ThunBudgetApp() {
             secondary = visualPalette.secondary, onSecondary = visualPalette.onSecondary,
             secondaryContainer = visualPalette.secondaryContainer, onSecondaryContainer = visualPalette.onSecondaryContainer,
             tertiary = visualPalette.tertiary, onTertiary = visualPalette.onTertiary,
+            tertiaryContainer = visualPalette.tertiaryContainer, onTertiaryContainer = visualPalette.onTertiaryContainer,
             background = visualPalette.background, surface = visualPalette.surface,
             surfaceVariant = visualPalette.surfaceVariant,
             surfaceDim = visualPalette.background, surfaceBright = visualPalette.surfaceContainerHighest,
@@ -1559,6 +1560,7 @@ private fun ThunBudgetApp() {
             secondary = visualPalette.secondary, onSecondary = visualPalette.onSecondary,
             secondaryContainer = visualPalette.secondaryContainer, onSecondaryContainer = visualPalette.onSecondaryContainer,
             tertiary = visualPalette.tertiary, onTertiary = visualPalette.onTertiary,
+            tertiaryContainer = visualPalette.tertiaryContainer, onTertiaryContainer = visualPalette.onTertiaryContainer,
             background = visualPalette.background, surface = visualPalette.surface,
             surfaceVariant = visualPalette.surfaceVariant,
             surfaceDim = visualPalette.background, surfaceBright = visualPalette.surfaceContainerHighest,
@@ -1620,14 +1622,16 @@ private fun ThunBudgetApp() {
                         if (quickActionsExpanded) {
                             SmallFloatingActionButton(
                                 onClick = { voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                containerColor = visualPalette.secondaryContainer,
+                                contentColor = visualPalette.onSecondaryContainer
                             ) {
                                 Icon(Icons.Outlined.Mic, contentDescription = "Голосовой ввод")
                             }
                             Spacer(Modifier.width(8.dp))
                             SmallFloatingActionButton(
                                 onClick = { showPeriodIncomeEditor = true },
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                                containerColor = visualPalette.tertiaryContainer,
+                                contentColor = visualPalette.onTertiaryContainer
                             ) {
                                 Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = "Добавить доход")
                             }
@@ -1701,7 +1705,14 @@ private fun ThunBudgetApp() {
                                 onClick = { tab = destination },
                                 icon = { Icon(imageVector = item.second, contentDescription = item.third) },
                                 label = { Text(item.third, style = navLabelStyle, maxLines = 1, softWrap = false) },
-                                alwaysShowLabel = true
+                                alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = visualPalette.primary,
+                                    selectedTextColor = visualPalette.primary,
+                                    indicatorColor = visualPalette.secondaryContainer,
+                                    unselectedIconColor = visualPalette.onSurfaceVariant,
+                                    unselectedTextColor = visualPalette.onSurfaceVariant
+                                )
                             )
                         }
                     }
@@ -1784,7 +1795,7 @@ private fun ThunBudgetApp() {
                                     val spent=expenses.filter{it.category==cat.name&&it.date>=periodStart&&it.date<=periodEnd}.sumOf{it.amount}
                                     val planPercent = overviewCategoryPercent(cat.name)
                                     val cap = overviewCategoryBudget(cat.name)
-                                    Card(onClick={selectedCategory=cat.name}, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape=RoundedCornerShape(16.dp)) {
+                                    Card(onClick={selectedCategory=cat.name}, colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface), shape=RoundedCornerShape(16.dp)) {
                                         Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                             if (cat.name.equals("Перенос средств", ignoreCase = true)) {
                                                 Text(cat.name, fontWeight = FontWeight.SemiBold)
@@ -1797,10 +1808,10 @@ private fun ThunBudgetApp() {
                                                         Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                                                     }
                                                     IconButton(onClick={editingCategory=cat}) { Icon(Icons.Outlined.Edit, contentDescription = "Изменить категорию", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) }
-                                                    Text("${planPercent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text("${planPercent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurface,fontWeight=FontWeight.SemiBold)
                                                 }
-                                                LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                                                Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary) }
+                                                LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
+                                                Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive) }
                                             }
                                         }
                                     }
@@ -2162,7 +2173,8 @@ private fun ThunBudgetApp() {
                                                 if (planned > 0.0) (actual / planned).coerceIn(0.0, 1.0).toFloat() else 0f
                                             },
                                             modifier = Modifier.weight(1f),
-                                            color = if (actual > planned) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                            color = if (actual > planned) MaterialTheme.colorScheme.error else visualPalette.positive,
+                                            trackColor = visualPalette.progressTrack
                                         )
                                     }
                                     Text(
@@ -2234,7 +2246,7 @@ private fun ThunBudgetApp() {
                             start = pStart,
                             end = pEnd
                         )
-                        Card { Column(Modifier.padding(14.dp)) {
+                        Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
                             Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток бюджета: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary)
@@ -2293,11 +2305,11 @@ private fun ThunBudgetApp() {
                         val to=AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
                         val plan=analyticsMonthPlanAmounts[cat.name] ?: 0.0
-                        Card { Column(Modifier.padding(14.dp)) {
+                        Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
-                            LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                            LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
-                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary)
+                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) MaterialTheme.colorScheme.error else visualPalette.positive)
                             Text("Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}%",style=MaterialTheme.typography.labelSmall,color=if((metrics.remainingPercent ?: 0.0)<0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                         } }
                     }
@@ -2308,9 +2320,9 @@ private fun ThunBudgetApp() {
                         val yearStart=LocalDate.of(today.year,1,1).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=yearStart && it.date<=today.toString() }.sumOf { it.amount }
                         val plan=plannedForPeriod(income,cat.percent,yearStart,today.toString())
-                        Card { Column(Modifier.padding(14.dp)) {
+                        Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
-                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary)
+                            Text("План: ${money(plan)} · "+if(fact>plan) "Превышение: ${money(fact-plan)}" else "Остаток: ${money(plan-fact)}",style=MaterialTheme.typography.bodySmall,color=if(fact>plan) MaterialTheme.colorScheme.error else visualPalette.positive)
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
                             Text(
                                 "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru","RU"), "%.1f", it) } ?: "—"}%",
@@ -3597,7 +3609,7 @@ private fun CategoryDonutBreakdown(
         }
 
         if (expanded) {
-            Card {
+            Card(colors = CardDefaults.cardColors(containerColor = thunBudgetCategoryCardSurface())) {
                 Column(
                     Modifier.fillMaxWidth().padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -3662,9 +3674,9 @@ private fun ScaledBarChart(values:List<Double>,xLabels:List<String>,color:Color,
         Text("тыс. ₽",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.width(42.dp).height(height),verticalArrangement=Arrangement.SpaceBetween) {
-                Text(String.format(Locale("ru","RU"),"%.1f",maxValue/1000.0),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(String.format(Locale("ru","RU"),"%.1f",middleValue/1000.0),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("0",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(String.format(Locale("ru","RU"),"%.1f",maxValue/1000.0),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurface)
+                Text(String.format(Locale("ru","RU"),"%.1f",middleValue/1000.0),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurface)
+                Text("0",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurface)
             }
             Canvas(Modifier.weight(1f).height(height)) {
                 val slot=size.width/values.size.coerceAtLeast(1)
@@ -3737,10 +3749,10 @@ private fun AnnualChartsSection(
             onExpandedChange = onShowBreakdownChange,
             emptyText = "За выбранный год расходов пока нет."
         )
-        Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = thunBudgetCategoryCardSurface())) { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("Расходы по месяцам",fontWeight=FontWeight.Bold)
             if(total==0.0) Text("За этот год расходов пока нет.",color=MaterialTheme.colorScheme.onSurfaceVariant)
-            else ScaledBarChart(values=totals,xLabels=labels,color=ThunBudgetPalette.ChartSeries.first(),height=145.dp)
+            else ScaledBarChart(values=totals,xLabels=labels,color=MaterialTheme.colorScheme.primary,height=145.dp)
         } }
         Row(verticalAlignment=Alignment.CenterVertically) {
             Text("Графики по категориям",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
@@ -3769,7 +3781,7 @@ private fun AnnualChartsSection(
                     yearExpenses.filter { it.category==name && runCatching { LocalDate.parse(it.date).monthValue==month }.getOrDefault(false) }.sumOf { it.amount }
                 }
                 val sum=values.sum()
-                Card {
+                Card(colors = CardDefaults.cardColors(containerColor = thunBudgetCategoryCardSurface())) {
                     Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text(name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
@@ -3810,7 +3822,7 @@ private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCate
         item { Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("Расходы по месяцам",fontWeight=FontWeight.Bold)
             if(total==0.0) Text("За этот год расходов пока нет.",color=MaterialTheme.colorScheme.onSurfaceVariant) else {
-                ScaledBarChart(values=totals,xLabels=labels,color=ThunBudgetPalette.ChartSeries.first(),height=145.dp)
+                ScaledBarChart(values=totals,xLabels=labels,color=MaterialTheme.colorScheme.primary,height=145.dp)
             }
         } } }
         item {
@@ -3864,7 +3876,7 @@ private fun SpendingBreakdownCard(
         cat to expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
     }.filter { it.second>0.0 }.sortedByDescending { it.second }
     val total=values.sumOf { it.second }
-    Card(shape=RoundedCornerShape(24.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = thunBudgetCategoryCardSurface()), shape=RoundedCornerShape(24.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Text(title,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium)
             if(total<=0.0) {
