@@ -65,10 +65,7 @@ internal fun FlexiblePeriodsScreen(
     val selected = ordered.firstOrNull { it.id == selectedId }
         ?: ordered.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
         ?: ordered.lastOrNull()
-    val colors = ThunBudgetPalette.ChartSeries, Color(0xFF168A72), Color(0xFFF2A541),
-        Color(0xFF9A6AD6), Color(0xFFE16C70), Color(0xFF5C9DB8),
-        Color(0xFF8B9A45), Color(0xFF7A8290)
-    )
+    val colors = ThunBudgetPalette.ChartSeries
     val report = if (selected != null) {
         remember(
             selected, expenses, incomeEntries, categories, monthlyIncome, recurringPayments,

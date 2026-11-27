@@ -3525,9 +3525,7 @@ private fun CategoryDonutBreakdown(
     onExpandedChange: (Boolean) -> Unit,
     emptyText: String
 ) {
-    val palette = ThunBudgetPalette.ChartSeries, MaterialTheme.colorScheme.secondary, Color(0xFFF2A541), Color(0xFF9A6AD6),
-        Color(0xFFE16C70), Color(0xFF5C9DB8), Color(0xFF8B9A45), Color(0xFF7A8290)
-    )
+    val palette = ThunBudgetPalette.ChartSeries
     val available = categories
     val selected = when {
         selectedCategoryNames == "__NONE__" -> emptySet()
@@ -3700,7 +3698,7 @@ private fun AnnualChartsSection(
     }
     val total=totals.sum()
     val labels=listOf("Я","Ф","М","А","М","И","И","А","С","О","Н","Д")
-    val palette = ThunBudgetPalette.ChartSeries,MaterialTheme.colorScheme.secondary,Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
+    val palette = ThunBudgetPalette.ChartSeries
     Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Divider()
         Text("Расходы за год",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
@@ -3785,7 +3783,7 @@ private fun AnnualChartsScreen(expenses:List<Expense>,categories:List<BudgetCate
     val totals=(1..12).map { m -> yearExpenses.filter { runCatching { LocalDate.parse(it.date).monthValue==m }.getOrDefault(false) }.sumOf { it.amount } }
     val total=totals.sum()
     val labels=listOf("Я","Ф","М","А","М","И","И","А","С","О","Н","Д")
-    val palette = ThunBudgetPalette.ChartSeries,MaterialTheme.colorScheme.secondary,Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
+    val palette = ThunBudgetPalette.ChartSeries
     LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
         item { Text("Графики за год",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
         item { Row(verticalAlignment=Alignment.CenterVertically) {
@@ -3846,9 +3844,7 @@ private fun SpendingBreakdownCard(
     to:String,
     title:String
 ) {
-    val palette = ThunBudgetPalette.ChartSeries,Color(0xFF36AFA8),Color(0xFFF2B84B),Color(0xFF8B7AE8),
-        Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290)
-    )
+    val palette = ThunBudgetPalette.ChartSeries
     val values=categories.map { cat ->
         cat to expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
     }.filter { it.second>0.0 }.sortedByDescending { it.second }
