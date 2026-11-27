@@ -284,6 +284,33 @@ internal object ReportingPeriodCategoryPlanCalculator {
 
 internal object AnalyticsBudgetCalculator {
     /**
+     * Returns real cash outflows for the selected reporting cycle (both periods).
+     * The technical carryover row is excluded, while savings/reserve remain expenses.
+     * An active cycle is cut off at today; a completed cycle includes its full end date.
+     */
+    fun reportingCycleCashExpenses(
+        expenses: List<Expense>,
+        month: java.time.YearMonth,
+        today: java.time.LocalDate,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
+    ): List<Expense> {
+        val proposal = ReportingPeriodCalculator.propose(month, firstStartDay, firstEndDay)
+        val actualEnd = minOf(proposal.second.end, today)
+        return cashExpensesInRange(expenses, proposal.first.start, actualEnd)
+    }
+
+    fun reportingCycleCashExpenseTotal(
+        expenses: List<Expense>,
+        month: java.time.YearMonth,
+        today: java.time.LocalDate,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
+    ): Double = reportingCycleCashExpenses(
+        expenses, month, today, firstStartDay, firstEndDay
+    ).sumOf { it.amount.coerceAtLeast(0.0) }
+
+    /**
      * Shared expense cutoff for calendar-month actuals. The current month is
      * counted only through today; completed months include the full month.
      */
@@ -520,6 +547,29 @@ internal object AnalyticsBudgetCalculator {
         )
     }
 
+    /**
+     * Combined cycle plan funding counts the funds entering period 1 plus new
+     * earned income in period 2. Any carryover from period 1 into period 2 is
+     * the same money already counted in period 1 and must not be added again.
+     */
+    fun reportingCyclePlanIncome(
+        firstPeriodAvailableIncome: Double,
+        secondPeriodEarnedIncome: Double,
+        fallbackIncome: Double = 0.0
+    ): Double {
+        val first = firstPeriodAvailableIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val second = secondPeriodEarnedIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val combined = first + second
+        return combined.takeIf { it > 0.0 }
+            ?: (fallbackIncome.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0)
+    }
+
+    /**
+     * "Monthly income" in the primary budget model means the sum of the two
+     * configured reporting periods for the selected cycle, not a calendar-day
+     * allocation across the 1st..last day of a month. Carryover is excluded
+     * because it is already money earned in an earlier period.
+     */
     fun monthlyIncome(
         fixedMonthlyIncome: Double,
         periodIncomes: List<PeriodIncome>,
@@ -531,12 +581,39 @@ internal object AnalyticsBudgetCalculator {
         incomeEntries: List<IncomeEntry> = emptyList()
     ): Double {
         if (!useReportingPeriods) return fixedMonthlyIncome.coerceAtLeast(0.0)
-        return calendarMonthIncome(
-            periodIncomes, month, asOf,
-            firstStartDay = firstStartDay,
-            firstEndDay = firstEndDay,
-            incomeEntries = incomeEntries
+        val enteredCycleIncome = reportingCycleIncome(
+            periodIncomes, month, firstStartDay, firstEndDay
         ).totalIncome
+        return enteredCycleIncome.takeIf { it > 0.0 } ?: fixedMonthlyIncome.coerceAtLeast(0.0)
+    }
+
+    /**
+     * Available money for one exact reporting period. The ledger's amount
+     * already includes explicit carryover entries. carryoverBefore() supplies
+     * only an unrecorded legacy carryover, and returns zero when a period-closing
+     * transfer has already accounted for it.
+     */
+    fun reportingPeriodAvailableIncome(
+        periodIncomes: List<PeriodIncome>,
+        start: java.time.LocalDate,
+        end: java.time.LocalDate,
+        expenses: List<Expense>,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
+    ): Double {
+        val periodRows = periodIncomes.filter {
+            it.start == start.toString() && it.end == end.toString()
+        }
+        val recorded = periodRows.sumOf {
+            if (it.amount.isFinite()) it.amount.coerceAtLeast(0.0) else 0.0
+        }
+        val hasExplicitCarryover = periodRows.any {
+            it.carryoverAmount.isFinite() && it.carryoverAmount > 0.0
+        }
+        val legacyCarryover = if (hasExplicitCarryover) 0.0 else carryoverBefore(
+            start.toString(), periodIncomes, expenses, firstStartDay, firstEndDay
+        )
+        return recorded + legacyCarryover
     }
 
     fun carryoverBefore(

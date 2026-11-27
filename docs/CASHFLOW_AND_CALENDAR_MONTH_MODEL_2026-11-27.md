@@ -1,138 +1,113 @@
-# Cash-flow and calendar-month model
+# ThunBudget reporting-cycle and cash-flow model
 
-Version: 1.0  
+Version: 1.1  
 Date: 2026-11-27  
-Working branch: `feature/cashflow-calendar-ledger-2026-11-27`
+Working branch: `fix/reporting-cycle-analytics-redistribution-2026-11-27`
 
-## 1. Product accounting policy
+## 1. Primary budget period
 
-ThunBudget uses a **cash available to spend from the main card / routine spending pool** model, not a bank-account net-worth model.
+The primary "reporting month" is the complete two-period cycle selected by the configured reporting boundaries.
 
-- Regular salary/base earnings are regular income.
-- Bonuses, side earnings, refunds and money returned from a savings account to the main card are dated additional income.
-- Money moved from the main card to a savings account, reserve or another unavailable pool is an expense/outflow. Savings and reserve categories remain in spending totals.
-- Internal category reallocations are not income and are not expense transactions.
-- The technical `Перенос средств` operation that moves the remaining budget from one reporting period to the next is an internal period allocation. It closes the prior period and opens the next period's budget, but it is not a new cash outflow from the main card and is excluded from calendar-month cash expenses.
-- The original outflow to savings is not deleted when money is later returned. The return is recorded as a separate additional income transaction.
+With the default 9–23 setting:
 
-This policy is intentionally different from some account-ledger apps. In YNAB, a transfer between two accounts that are both included in the plan is an internal transfer; a transfer to an account outside the plan is treated as spending from the plan. Monarch excludes transfers between owned accounts from spending totals. ThunBudget follows the user's selected available-card-balance policy rather than copying either app wholesale.
+- Period 1: 9th–23rd of the selected month.
+- Period 2: 24th of the selected month–8th of the next month.
+- Reporting month: 9th of the selected month–8th of the next month.
 
-## 2. Date model
+All boundaries are inclusive. The first and second periods are consecutive and non-overlapping. A selected month label identifies the cycle start month, not the calendar month.
 
-There are two time axes and they must not be mixed:
+A separate calendar-month view (1st–last day) remains available for comparisons and trend analysis. It must be labelled as a calendar-month view and must not feed the primary reporting-month totals.
 
-1. **Reporting-period budget:** a configured first period followed by a second period. Example for 9–23: first period 9th–23rd; second period 24th–8th of the next month. Date bounds are inclusive and periods are consecutive.
-2. **Calendar-month cash-flow report:** calendar dates from the 1st to the last day of the month. For the current month, actuals stop at today. A reporting period that crosses a month boundary contributes to each calendar month only for the dates falling inside that month.
+## 2. Income and available budget
 
-For an inclusive reporting period (P=[s,e]):
-- (D_P = e-s+1) calendar days.
-- (D_{P,M}) is the number of dates in the overlap of that period and calendar month (M).
+Two different values must be kept distinct:
 
-## 3. Income formulas
+1. Earned income: new regular and additional receipts recorded in the two reporting periods. Carryover is excluded.
+2. Available period budget: earned receipts plus money carried into that period from the preceding period.
 
-### Reporting-period available income
+For each exact reporting period P:
 
-For reporting period (P):
+`earned(P) = sum of income entries in P excluding explicit carryover entries`
 
-`periodAvailableIncome = regularIncome(P) + additionalIncome(P) + carryoverIn(P)`
+`available(P) = recordedIncomeAmount(P) + unrecordedLegacyCarryover(P)`
 
-Carryover is not new earned income. It is a budget balance imported from the previous period.
+The recorded amount already includes explicit carryover entries. The legacy carryover calculation is added only when no explicit period transfer has already closed the source period; this prevents counting the same carryover twice.
 
-### Calendar-month income allocation
+For the selected two-period cycle:
 
-The regular-income input stores one amount for the entire reporting period; it does not currently store the exact bank posting date of the salary. To make calendar-month budgets comparable when a reporting period crosses month boundaries, the app allocates the regular amount evenly across the inclusive calendar dates of that reporting period:
+`reportingMonthEarnedIncome = earned(P1) + earned(P2)`
 
-`regularIncomeAllocatedToMonth(M) = Σ regularIncome(P) × D(P,M) / D(P)`
+`reportingMonthPlanFunding = available(P1) + earned(P2)`
 
-This is a **calendar-month allocation for budget analysis**, not a claim that the salary was deposited on every one of those dates. Exact bank-statement cash-flow for regular salary would require a separate salary receipt date. The current product model deliberately uses period allocation for regular income, consistent with the configured reporting-period budget.
+Do **not** use `available(P1) + available(P2)` as the combined cycle total: carryover from P1 is already part of P1's available funds. Adding it again from P2 would double-count the same money. Carryover entering P1 from the preceding cycle is included once in `available(P1)`; carryover from P1 into P2 remains part of P2's own period budget but is not new cycle funding.
 
-Additional income is different: it is a dated event, not a recurring daily rate:
+The primary income figure reports earned income. Carryover is shown separately and affects the receiving period's category budget. A configured fixed monthly income is used as a plan fallback only when neither period provides cycle funding; a missing second period is not fabricated when the first period is already recorded.
 
-`additionalIncomeInMonth(M) = Σ amount(entry), where entry.isAdditional and entry.date ∈ M`
+## 3. Category budget plans
 
-Thus:
+Each period uses its own saved category-share snapshot. The two periods must not be assigned one identical percentage when their saved shares differ.
 
-`calendarMonthIncomeEntered(M) = regularIncomeAllocatedToMonth(M) + additionalIncomeInMonth(M)`
+For category C:
 
-The carryover from the preceding reporting period is not counted as new monthly income; the original income was already included when allocated to its original reporting-period dates.
+`cyclePlan(C) = available(P1) × share(P1,C) + earned(P2) × share(P2,C)`
 
-### Monthly income forecast
+This counts the opening funds for P1 once and only new income in P2. P2's own period budget still includes its carryover; the cycle aggregate excludes that same transferred balance because it was already included in P1. The period percentages remain individually saved and are weighted by the respective funding amounts. This is not an unweighted average and is not a calendar-day prorating operation.
 
-- Use only regular/base earnings from completed reporting periods.
-- Estimate a daily rate from the median of up to six most recent completed regular-income periods.
-- Forecast only uncovered future calendar dates.
-- Do not fill uncovered dates in the past.
-- One-off additional income, including a return from savings, never raises the regular-income forecast baseline.
-- An additional-only period does not mark every date in that period as covered by regular income.
+If one period's income has not been entered, its new-income contribution is zero. If the whole cycle has no funding, the configured fixed monthly income is used as a fallback with the current category setup.
 
-`calendarMonthForecast(M) = medianCompletedRegularDailyRate × uncoveredFutureDays(M)`
+## 4. Actual expenses and daily average
 
-`calendarMonthProjectedIncome(M) = calendarMonthIncomeEntered(M) + calendarMonthForecast(M)`
+Primary reporting-month actuals use transaction dates within:
 
-The report should label actual and forecast amounts separately. It must not present projected income as money already received.
+`[P1.start, min(today, P2.end)]`
 
-## 4. Expense and transfer formulas
+The total and category facts use the same date interval. The daily average is:
 
-### Reporting-period budget balance
+`actual cash expenses in cycle ÷ elapsed inclusive days from P1.start to actual cutoff`
 
-For the reporting-period plan, the service carryover transaction is retained because it explicitly closes the source period and pairs with carryover income in the next period:
+For a completed historical cycle, the cutoff is P2.end. For a future cycle that has not started, actual expenses are zero.
 
-`periodBudgetRemaining = periodAvailableIncome − periodBudgetOutflows`
+ThunBudget uses the selected available-card-balance policy:
 
-The period-budget outflow total includes the explicit `Перенос средств` row so the same balance is not simultaneously left in the source period and added to the next period.
+- Purchases and bills are cash outflows.
+- Transfers from the main spending balance to savings/reserve remain outflows.
+- Money returned from savings is a separate dated additional-income entry; it does not erase the original savings outflow.
+- The technical `Перенос средств` transaction is an internal period-closing allocation. It remains visible in operation history and period closure, but is excluded from reporting-month cash expenses.
 
-### Calendar-month cash expenses
+## 5. Dynamic redistribution
 
-Calendar-month cash expense totals are calculated by transaction date and include all real outflows, including:
-- regular purchases and bills;
-- transfers to savings that leave the user's available card pool;
-- allocations to reserve/savings categories.
+Redistribution recommendations apply to the explicitly selected reporting period, not to an unrelated calendar-month aggregate. They use that period's actual expenses, period-available budget, category shares and remaining-period forecast.
 
-They exclude only the technical internal period-carryover category:
+- A category with actual spending above its plan is a redistribution target.
+- Donors are ordered by projected free balance: at least 20%, then at least 15%, then at least 10%, then greater than 5%.
+- Categories with 5% or less projected free balance are never used as donors.
+- The reserve category is considered before ordinary donors when it has available funds.
+- Savings is not silently excluded as a donor; its eligibility is determined by the same free-balance threshold.
+- The technical `Перенос средств` row is neither a target nor a donor.
+- Applying a proposal updates the selected period's saved plan; it does not rewrite the other period's distinct snapshot.
 
-`calendarMonthCashExpenses(M) = Σ expense.amount`
+The user confirms a proposed redistribution before the app changes category shares.
 
-for expense transactions whose date is inside (M), excluding category `Перенос средств`.
+The dynamic share proposal uses an income-weighted ratio across completed reporting periods:
 
-`calendarMonthNetCashFlow(M) = calendarMonthActualIncome(M) − calendarMonthCashExpenses(M)`
+`dynamicShare(C) = sum(actualSpend(P,C)) / (availableIncome(first sampled P) + sum(earnedIncome(later sampled P))) × 100`
 
-If a projected net cash-flow value is shown, use projected income and projected expenses as separate terms and label it as a forecast. Do not silently mix actual and forecast.
+Only the first sampled period contributes its opening available balance. Later periods contribute new earned income only, because carryover between them is the same money and must not inflate the denominator. The calculation does not use an unweighted average of period percentages. The proposal dialog is opened by the dynamic-allocation control; dismissing it leaves the current shares unchanged.
 
-### Double-counting guardrails
+## 6. Secondary calendar and annual views
 
-- Do not count the same savings return both as a refund that reverses the original expense and as an independent additional income; it is one dated additional-income record.
-- Do not count carryover as new earned income in calendar-month income.
-- Do not count the internal carryover expense in calendar-month cash outflows.
-- Do not remove savings/reserve outflows from the user's monthly expenses.
-- A transfer/payment against a credit card or account can be treated differently depending on whether the original purchase was already recorded. If future account-level sync is introduced, it needs a separate linked-transfer model to avoid counting both the purchase and repayment. This change does not introduce bank-account synchronization.
+The calendar-month mode keeps its separate 1st–last-day calculations and forecast. The calendar view must not be used to populate the primary reporting-month cards.
 
-## 5. Category budget and presentation
+The year summary remains a calendar-year report from January 1 through the current date. The Excel `Месяцы` sheet follows the primary reporting cycle; the annual sheet remains a calendar-year summary. The raw Operations sheet preserves all transactions, including technical carryover rows.
 
-- Reporting-period category plans use the plan snapshot saved for that exact reporting period. When no historical snapshot exists, use the current configured category shares as the migration fallback.
-- For calendar-month planned category amounts, allocate each reporting period's regular income over its calendar days and apply the saved category share for that period. Additional income with a date is allocated using that period's category share on the receipt date.
-- Actual month category spending uses calendar-month cash expenses (same exclusion rule for internal carryover as the total).
-- Savings and reserve category outflows remain visible as spending under this product policy.
-- A category exceeding its cap is a category-level variance, not proof that the total period or month exceeded the overall available budget. Show the category balance and overall period/month balance separately.
-- For a current month, an on-pace warning can use elapsed-day pace or the forecast; red "over budget" should be reserved for an amount that actually exceeds the relevant cap. Forecast overspend should be labelled as projected, not actual.
+## 7. Regression coverage
 
-## 6. Current implementation scope
+Tests cover:
 
-Implemented on the working branch:
-- Calendar-month income can receive the dated income ledger so additional income is assigned to its actual transaction month.
-- Monthly category budget allocation can receive the dated ledger and assigns additional receipts on their actual dates.
-- Legacy aggregate additional-income amounts without dated ledger detail retain a compatibility fallback.
-- Dedicated calendar-month cash expense helpers exclude internal `Перенос средств` only; savings/reserve remain included.
-- Monthly and yearly analytics totals/charts use the calendar cash-expense basis.
-- The monthly income selector shows income allocated from entered reporting periods, the forecast for uncovered future dates, and the combined expected income as separate figures.
-- The Excel monthly category sheet uses the same cash-expense basis and saved period-specific category shares as monthly analytics. The annual sheet uses the app's existing year-to-date plan model, while its actual amounts exclude internal carryover. The raw Operations sheet keeps every transaction visible for audit, including technical carryover rows. The period report retains carryover for reporting-period closure.
-- Reporting-period carryover calculation and per-period budget closure remain unchanged.
-
-## 7. Regression tests
-
-The accompanying tests cover:
-- a reporting period crossing a month boundary;
-- a dated savings return assigned only to the month in which it arrived;
-- additional-only income not marking an entire period as covered by regular income;
-- category plan allocation of a dated additional receipt;
-- monthly cash expenses excluding internal period carryover while retaining savings/reserve outflows;
-- existing carryover tests to ensure period budget closing continues to work.
+- the two full periods being summed without prorating across calendar month boundaries;
+- carryover being added to available period funds without double counting explicit transfer entries;
+- legacy carryover being added only when no explicit transfer is recorded;
+- reporting-cycle actuals using both periods and stopping at today;
+- category plans preserving different saved percentages for the first and second periods;
+- technical carryover exclusion from cash-expense totals while savings and reserve outflows remain included;
+- redistribution priority by 20%, 15%, and 10% thresholds, with categories at 5% or less excluded.

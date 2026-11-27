@@ -21,11 +21,15 @@ internal fun DynamicAllocationDialog(
     firstPeriodStartDay: Int = 9,
     firstPeriodEndDay: Int = 23,
     periodIncomeByRange: Map<Pair<String, String>, Double> = emptyMap(),
+    periodEarnedIncomeByRange: Map<Pair<String, String>, Double> = emptyMap(),
     fallbackPeriodIncome: Double = 0.0,
     onDismiss: () -> Unit,
     onSave: (List<BudgetCategory>) -> Unit
 ) {
-    val regular = categories.filterNot { it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) }
+    val regular = categories.filterNot {
+        it.name.equals(BudgetAllocationCalculator.RESERVE_CATEGORY, true) ||
+            it.name.equals("Перенос средств", true)
+    }
     val forecast = remember(expenses, categories, firstPeriodStartDay, firstPeriodEndDay) {
         BudgetForecastCalculator.calculate(
             categories = regular.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
@@ -44,20 +48,28 @@ internal fun DynamicAllocationDialog(
             periodIncomeByRange[key]?.takeIf { it.isFinite() && it > 0.0 }?.let { range to it }
         }
     }
-    val forecastPercentages = remember(forecast, pairedIncomePeriods, expenses, fallbackPeriodIncome) {
+    val forecastPercentages = remember(
+        forecast, pairedIncomePeriods, periodEarnedIncomeByRange, expenses, fallbackPeriodIncome, categories
+    ) {
         regular.associate { category ->
-            val ratios = pairedIncomePeriods.map { (range, income) ->
+            val spendAndIncomeByPeriod = pairedIncomePeriods.mapIndexed { index, (range, openingAvailableIncome) ->
                 val spent = expenses.asSequence()
                     .filter { it.category.equals(category.name, ignoreCase = true) }
                     .filter { it.date >= range.start.toString() && it.date <= range.end.toString() }
                     .sumOf { it.amount.coerceAtLeast(0.0) }
-                spent / income * 100.0
+                val periodEarnedIncome = periodEarnedIncomeByRange[
+                    range.start.toString() to range.end.toString()
+                ]?.takeIf { it.isFinite() && it >= 0.0 }
+                val countedIncome = if (index == 0) openingAvailableIncome
+                    else periodEarnedIncome ?: openingAvailableIncome
+                spent to countedIncome
             }
+            val weightedPercent = BudgetAllocationCalculator.weightedPercentOfIncome(spendAndIncomeByPeriod)
             val categoryForecast = forecast.categories.firstOrNull { it.category == category.name }
             val averagePercent = if (categoryForecast == null || !categoryForecast.hasHistory) {
                 null
             } else when {
-                ratios.isNotEmpty() -> ratios.average()
+                weightedPercent != null -> weightedPercent
                 fallbackPeriodIncome > 0.0 -> (categoryForecast.averagePeriodSpend / fallbackPeriodIncome) * 100.0
                 else -> null
             }
@@ -66,8 +78,7 @@ internal fun DynamicAllocationDialog(
     }
     val rawRecommendations = regular.associate { category ->
         val predicted = forecastPercentages[category.name]
-        val protectedReserve = category.name.equals("Непредвиденные расходы", true) ||
-            category.name.equals("Перенос средств", true)
+        val protectedReserve = category.name.equals("Непредвиденные расходы", true)
         val suggested = when {
             protectedReserve || predicted == null -> category.percent
             predicted < category.percent -> minOf(category.percent, predicted + 2.0)
@@ -110,7 +121,7 @@ internal fun DynamicAllocationDialog(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "Проценты рассчитываются относительно фактического дохода за соответствующие периоды. Для категорий с запасом сохраняется дополнительный резерв 2% дохода.",
+                    "Взвешивание учитывает доступный остаток на входе в первое выбранное окно и новый доход следующих периодов. Переносы не считаются повторно; для долей ниже текущих сохраняется запас 2 процентных пункта.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -154,7 +165,10 @@ internal fun DynamicAllocationDialog(
                 val withReserve = BudgetAllocationCalculator.withReserve(updated.map { it.name to it.percent })
                 val reserve = withReserve.firstOrNull { it.first == BudgetAllocationCalculator.RESERVE_CATEGORY }
                     ?.let { BudgetCategory(it.first, it.second) }
-                onSave(updated + listOfNotNull(reserve))
+                val technicalCarryover = categories.firstOrNull {
+                    it.name.equals("Перенос средств", true)
+                }
+                onSave(updated + listOfNotNull(reserve, technicalCarryover))
             }) { Text("Применить выбранные") }
         },
         dismissButton = {

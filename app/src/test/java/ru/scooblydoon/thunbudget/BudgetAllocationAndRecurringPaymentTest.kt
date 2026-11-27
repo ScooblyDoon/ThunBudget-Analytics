@@ -87,7 +87,7 @@ class BudgetAllocationTest {
         assertTrue(result.updatedPercents["Превышение"]!! > 20.0)
     }
 
-    @Test fun redistributionUsesReserveFirstAndProtectsSavingsAndSmallDonors() {
+    @Test fun redistributionUsesReserveFirstThenEligibleSavingsAndOtherDonors() {
         val categories = listOf(
             "Цель" to 20.0,
             "Накопления" to 20.0,
@@ -99,18 +99,21 @@ class BudgetAllocationTest {
         val result = BudgetAllocationCalculator.redistribute(
             categories,
             mapOf(
-                "Цель" to 300.0,
+                "Цель" to 500.0,
                 "Накопления" to 100.0,
                 BudgetAllocationCalculator.RESERVE_CATEGORY to 0.0,
                 "Запас9" to 182.0,
                 "Запас10" to 180.0,
-                "Перерасход" to 200.0
+                "Перерасход" to 400.0
             ),
             10.0
         )
         assertTrue(result.transfers.isNotEmpty())
         assertEquals(BudgetAllocationCalculator.RESERVE_CATEGORY, result.transfers.first().fromCategory)
-        assertTrue(result.transfers.none { it.fromCategory == "Накопления" || it.fromCategory == "Запас9" })
+        assertEquals(
+            listOf(BudgetAllocationCalculator.RESERVE_CATEGORY, "Накопления", "Запас10", "Запас9"),
+            result.transfers.map { it.fromCategory }.distinct()
+        )
     }
 
     @Test fun forecastDonorKeepsTwoPercentSafetyMargin() {

@@ -192,4 +192,26 @@ class XlsxExporterTest {
         assertEquals(14000.0, november.values.sumOf { it[3] as Double }, 0.001)
     }
 
+
+    @Test
+    fun monthlyExcelUsesFullReportingCycleAndIncludesTheEighthOfNextMonth() {
+        val rows = XlsxExporter.months(
+            expenses = listOf(
+                Expense(1, "До начала цикла", "Продукты", 90.0, "2026-11-08"),
+                Expense(2, "Начало цикла", "Продукты", 100.0, "2026-11-09"),
+                Expense(3, "Второй период", "Продукты", 200.0, "2026-12-08"),
+                Expense(4, "После цикла", "Продукты", 300.0, "2026-12-09")
+            ),
+            cats = listOf(BudgetCategory("Продукты", 100.0)),
+            income = 1000.0,
+            year = 2026,
+            monthlyIncomes = mapOf("2026-11" to 1000.0),
+            asOf = LocalDate.parse("2026-12-09")
+        )
+        val november = rows.drop(1).dropLast(1)
+            .first { it[0] == "2026-11" && it[1] == "Продукты" }
+
+        assertEquals(300.0, november[3] as Double, 0.001)
+    }
+
 }
