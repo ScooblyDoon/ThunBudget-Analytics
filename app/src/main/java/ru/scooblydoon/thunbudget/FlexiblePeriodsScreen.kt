@@ -280,7 +280,7 @@ internal fun FlexiblePeriodsScreen(
             item {
                 val values = report.categories.map { it.category to it.actualToDate }
                     .filter { it.second > 0.0 }.sortedByDescending { it.second }
-                Card(shape = RoundedCornerShape(20.dp)) {
+                Card(colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = thunBudgetCategoryCardSurface()), shape = RoundedCornerShape(20.dp)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (values.isEmpty()) {
                             Text("Фактических расходов за выбранный период пока нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
