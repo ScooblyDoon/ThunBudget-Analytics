@@ -1107,6 +1107,7 @@ private fun ThunBudgetApp() {
                             val hasDatedIncome = report.earnedIncome + report.carryoverIncome > 0.0
                             voiceMessage = "Доход за свободный период «${chosenPeriod.name}» ($periodLabel):\n" +
                                 "Фактические поступления: ${money(report.earnedIncome)}.\n" +
+                                "Дополнительные поступления: ${money(report.additionalIncome)}.\n" +
                                 "Перенос из предыдущего периода: ${money(report.carryoverIncome)}.\n" +
                                 "Доход, использованный для расчёта бюджета: ${money(report.budgetIncome)}." +
                                 if (hasDatedIncome) "" else "\nФактических поступлений за эти даты нет: использован расчёт по месячному доходу пропорционально календарным дням."
@@ -1172,7 +1173,7 @@ private fun ThunBudgetApp() {
                                     "• ${category.category}: факт ${money(category.actualToDate)}, план ${money(category.planned)}, прогноз ${money(category.projectedTotal)}"
                                 }
                             voiceMessage = "Полный отчёт по свободному периоду «${chosenPeriod.name}» ($periodLabel):\n" +
-                                "Доход: ${money(report.budgetIncome)} (поступления ${money(report.earnedIncome)}; перенос ${money(report.carryoverIncome)}).\n" +
+                                "Доход: ${money(report.budgetIncome)} (заработок ${money(report.earnedIncome)}, включая разовые поступления ${money(report.additionalIncome)}; перенос ${money(report.carryoverIncome)}).\n" +
                                 "План расходов: ${money(report.plannedTotal)}.\n" +
                                 "Фактические расходы: ${money(report.actualTotal)}; операций: ${periodRows.count { !LocalDate.parse(it.date).isAfter(today) && !it.category.equals("Перенос средств", true) }}.\n" +
                                 "Будущие внесённые расходы: ${money(report.futureEnteredTotal)}.\n" +
@@ -3401,6 +3402,7 @@ private fun IncomeEntryEditDialog(entry: IncomeEntry, onDismiss:()->Unit, onSave
                 Text(entry.title, fontWeight=FontWeight.SemiBold)
                 Text("Дата: ${entry.date} · ${entry.periodStart} — ${entry.periodEnd}", style=MaterialTheme.typography.bodySmall)
                 if(entry.isLegacyAggregate) Text("Это перенесённая общая сумма старого периода, а не отдельное поступление.", style=MaterialTheme.typography.bodySmall)
+                if(entry.isAdditional) Text("Это разовое дополнительное поступление. Оно увеличивает бюджет периода, но не используется как база прогноза регулярного дохода.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if(entry.isCarryover) Text("Это перенос между отчётными периодами. Изменение или удаление суммы синхронно изменит запись «Перенос средств» в исходном периоде.", style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Сумма, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
             }
