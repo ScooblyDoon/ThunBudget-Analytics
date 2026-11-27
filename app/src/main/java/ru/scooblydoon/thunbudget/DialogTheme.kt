@@ -40,12 +40,13 @@ internal val LocalThunBudgetDialogFields = staticCompositionLocalOf { false }
 internal fun themedDialogOutlinedTextFieldColors(): androidx.compose.material3.TextFieldColors {
     if (!LocalThunBudgetDialogFields.current) return androidx.compose.material3.OutlinedTextFieldDefaults.colors()
     val isDark = LocalThunBudgetDarkTheme.current
-    val container = if (isDark) Color(0xFF343440) else Color(0xFFF0F2F5)
-    val foreground = if (isDark) Color(0xFFF3F2F8) else Color(0xFF1F2937)
-    val secondary = if (isDark) Color(0xFFB4B7C2) else Color(0xFF6B7280)
-    val primary = if (isDark) Color(0xFFB59AFF) else Color(0xFF445264)
-    val outline = if (isDark) Color(0xFF50535F) else Color(0xFFD9DEE5)
-    val error = if (isDark) Color(0xFFFF817A) else Color(0xFFD77A72)
+    val palette = if (isDark) ThunBudgetPalette.Dark else ThunBudgetPalette.Light
+    val container = palette.dialogField
+    val foreground = palette.onSurface
+    val secondary = palette.onSurfaceVariant
+    val primary = palette.primary
+    val outline = palette.dialogOutline
+    val error = palette.danger
     return androidx.compose.material3.OutlinedTextFieldDefaults.colors(
         focusedTextColor = foreground,
         unfocusedTextColor = foreground,
@@ -88,8 +89,8 @@ internal fun ThunBudgetTheme(
 /** Shared visual system for every modal in ThunBudget. */
 @Composable
 internal fun themedDialogContainerColor(): Color =
-    if (LocalThunBudgetDarkTheme.current) Color(0xFF21222D)
-    else Color(0xFFFFFFFF)
+    if (LocalThunBudgetDarkTheme.current) ThunBudgetPalette.Dark.dialogSurface
+    else ThunBudgetPalette.Light.dialogSurface
 
 @Composable
 internal fun AppAlertDialog(
@@ -106,17 +107,18 @@ internal fun AppAlertDialog(
     val isDark = LocalThunBudgetDarkTheme.current
     // One source of truth for the container color used by every modal surface.
     val surfaceColor = themedDialogContainerColor()
-    val foreground = if (isDark) Color(0xFFF3F2F8) else Color(0xFF1F2937)
-    val secondary = if (isDark) Color(0xFFB4B7C2) else Color(0xFF6B7280)
-    val rowSurface = if (isDark) Color(0xFF343440) else Color(0xFFF0F2F5)
-    val primary = if (isDark) Color(0xFFB59AFF) else Color(0xFF445264)
-    val error = if (isDark) Color(0xFFFF817A) else Color(0xFFD77A72)
-    val outline = if (isDark) Color(0xFF50535F) else Color(0xFFD9DEE5)
+    val palette = if (isDark) ThunBudgetPalette.Dark else ThunBudgetPalette.Light
+    val foreground = palette.onSurface
+    val secondary = palette.onSurfaceVariant
+    val rowSurface = palette.dialogField
+    val primary = palette.primary
+    val error = palette.danger
+    val outline = palette.dialogOutline
 
     val dialogColors = base.copy(
         primary = primary,
-        onPrimary = if (isDark) Color(0xFF171321) else Color.White,
-        secondary = if (isDark) Color(0xFF6BA88E) else Color(0xFF6BA88E),
+        onPrimary = palette.onPrimary,
+        secondary = palette.secondary,
         surface = surfaceColor,
         onSurface = foreground,
         surfaceVariant = rowSurface,

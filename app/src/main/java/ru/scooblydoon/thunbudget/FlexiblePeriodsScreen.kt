@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Divider
@@ -66,8 +65,7 @@ internal fun FlexiblePeriodsScreen(
     val selected = ordered.firstOrNull { it.id == selectedId }
         ?: ordered.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
         ?: ordered.lastOrNull()
-    val colors = listOf(
-        Color(0xFF315CBA), Color(0xFF168A72), Color(0xFFF2A541),
+    val colors = ThunBudgetPalette.ChartSeries, Color(0xFF168A72), Color(0xFFF2A541),
         Color(0xFF9A6AD6), Color(0xFFE16C70), Color(0xFF5C9DB8),
         Color(0xFF8B9A45), Color(0xFF7A8290)
     )
@@ -340,13 +338,13 @@ internal fun FlexiblePeriodsScreen(
                         LinearProgressIndicator(
                             progress = { (actualPercent / 100.0).toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
-                            color = if (actualPercent > 100.0) Color(0xFFC74444) else Color(0xFF168A72)
+                            color = if (actualPercent > 100.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
                         )
                         Text(
                             "Факт: " + formatFlexiblePercent(category.actualExecutionPercent) +
                                 " · Прогноз: " + formatFlexiblePercent(category.projectedExecutionPercent),
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (projectedPercent > 100.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (projectedPercent > 100.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             if (category.remainingToPlan >= 0.0) "Остаток плана: " + formatFlexibleMoney(category.remainingToPlan)
@@ -438,12 +436,13 @@ private fun FlexiblePeriodEditorDialog(
     val candidateTotal = periods.sumOf { it.dayCount } + (days ?: 0)
     val valid = name.isNotBlank() && start != null && end != null && maximum != null && candidateTotal <= maximum
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (periods.isEmpty()) "Первый период" else "Следующий период") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Название") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it }, label = { Text("Название") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    colors = themedDialogOutlinedTextFieldColors())
                 OutlinedTextField(
                     startText,
                     { if (periods.isEmpty()) startText = it.filter(Char::isDigit).take(8) },
@@ -453,14 +452,16 @@ private fun FlexiblePeriodEditorDialog(
                     placeholder = { Text("ДД.ММ.ГГГГ") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = themedDialogOutlinedTextFieldColors()
                 )
                 OutlinedTextField(
                     daysText, { daysText = it.filter(Char::isDigit).take(2) },
                     label = { Text("Длительность, дней") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = themedDialogOutlinedTextFieldColors()
                 )
                 if (end != null) {
                     Text("Окончание: " + end.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")))
