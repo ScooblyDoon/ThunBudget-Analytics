@@ -8,54 +8,46 @@ import org.junit.Test
 
 class ThunBudgetPaletteTest {
     @Test
-    fun lightThemeUsesCalmVioletSurfacesAndControls() {
+    fun lightThemeRestoresSlateBudgetCardAndGraySurfaces() {
         assertEquals(Color(0xFFF4F6F8), ThunBudgetPalette.Light.background)
         assertEquals(Color(0xFFE6E0E9), ThunBudgetPalette.Light.surfaceVariant)
         assertEquals(Color(0xFF445365), ThunBudgetPalette.Light.primary)
         assertEquals(Color(0xFFE6E0E9), ThunBudgetPalette.Light.secondaryContainer)
         assertEquals(Color(0xFFF3DCE7), ThunBudgetPalette.Light.tertiaryContainer)
-        assertEquals(Color(0xFFE6E0E9), ThunBudgetPalette.Light.categoryCardSurface)
-        assertEquals(Color(0xFFD8D2DC), ThunBudgetPalette.Light.progressTrack)
-        assertEquals(Color(0xFF445365), ThunBudgetPalette.Light.chartPrimary)
         assertEquals(Color(0xFF445365), ThunBudgetPalette.Light.budgetCardSurface)
         assertEquals(Color(0xFFFFFFFF), ThunBudgetPalette.Light.budgetCardContent)
-        assertEquals(Color(0xFFE6E0E9), ThunBudgetPalette.Light.surfaceVariant)
+        assertEquals(Color(0xFFFFFFFF), ThunBudgetPalette.Light.budgetCardProgress)
+        assertEquals(Color(0xFF8290A0), ThunBudgetPalette.Light.budgetCardProgressTrack)
         assertEquals(Color(0xFFE6E0E9), ThunBudgetPalette.Light.categoryCardSurface)
-        assertEquals(Color(0xFF168974), ThunBudgetPalette.Light.positive)
-        assertEquals(Color(0xFFDFA44B), ThunBudgetPalette.Light.warning)
-        assertEquals(Color(0xFFD36F83), ThunBudgetPalette.Light.danger)
+        assertEquals(Color(0xFFD8D2DC), ThunBudgetPalette.Light.progressTrack)
     }
 
     @Test
-    fun darkThemeUsesCalmVioletAndKeepsGraphiteDialogs() {
+    fun darkThemeRestoresBrightVioletBudgetCardAndGraphiteSurfaces() {
         assertEquals(Color(0xFF090A11), ThunBudgetPalette.Dark.background)
         assertEquals(Color(0xFF171821), ThunBudgetPalette.Dark.surface)
         assertEquals(Color(0xFF36343C), ThunBudgetPalette.Dark.surfaceVariant)
         assertEquals(Color(0xFFB49BFE), ThunBudgetPalette.Dark.primary)
+        assertEquals(Color(0xFF3C344B), ThunBudgetPalette.Dark.primaryContainer)
         assertEquals(Color(0xFF3C344B), ThunBudgetPalette.Dark.secondaryContainer)
-        assertEquals(Color(0xFFB49BFE), ThunBudgetPalette.Dark.primary)
-        assertTrue(ThunBudgetPalette.Dark.primary != ThunBudgetPalette.Dark.surfaceVariant)
-        assertEquals(Color(0xFF563746), ThunBudgetPalette.Dark.tertiaryContainer)
-        assertEquals(Color(0xFF36343C), ThunBudgetPalette.Dark.categoryCardSurface)
-        assertEquals(Color(0xFF383548), ThunBudgetPalette.Dark.progressTrack)
-        assertEquals(Color(0xFF168A72), ThunBudgetPalette.Dark.positive)
-        assertEquals(Color(0xFF168A72), ThunBudgetPalette.Dark.secondary)
-        assertEquals(Color(0xFFB49BFE), ThunBudgetPalette.Dark.chartPrimary)
+        assertEquals(Color(0xFF623B48), ThunBudgetPalette.Dark.tertiaryContainer)
         assertEquals(Color(0xFFB49BFE), ThunBudgetPalette.Dark.budgetCardSurface)
         assertEquals(Color(0xFF1B1220), ThunBudgetPalette.Dark.budgetCardContent)
-        assertEquals(Color(0xFF36343C), ThunBudgetPalette.Dark.surfaceVariant)
-        assertEquals(Color(0xFF36343C), ThunBudgetPalette.Dark.categoryCardSurface)
+        assertEquals(Color(0xFF1B1220), ThunBudgetPalette.Dark.budgetCardProgress)
         assertEquals(Color(0xFF927CCE), ThunBudgetPalette.Dark.budgetCardProgressTrack)
+        assertEquals(Color(0xFF36343C), ThunBudgetPalette.Dark.categoryCardSurface)
         assertEquals(Color(0xFF21222D), ThunBudgetPalette.Dark.dialogSurface)
         assertEquals(Color(0xFF343440), ThunBudgetPalette.Dark.dialogField)
     }
 
     @Test
-    fun selectedControlsUseVioletInsteadOfSemanticGreen() {
+    fun controlsUseThemeAccentWhileFinancialResultsRemainSemantic() {
         assertEquals(Color(0xFFE6E0E9), ThunBudgetPalette.Light.secondaryContainer)
         assertEquals(Color(0xFF3C344B), ThunBudgetPalette.Dark.secondaryContainer)
         assertTrue(ThunBudgetPalette.Light.secondaryContainer != ThunBudgetPalette.Light.positive)
         assertTrue(ThunBudgetPalette.Dark.secondaryContainer != ThunBudgetPalette.Dark.positive)
+        assertEquals(Color(0xFF168974), ThunBudgetPalette.Light.positive)
+        assertEquals(Color(0xFF168A72), ThunBudgetPalette.Dark.positive)
     }
 
     @Test
