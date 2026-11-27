@@ -8,24 +8,23 @@ import org.junit.Test
 
 class ThunBudgetPaletteTest {
     @Test
-    fun lightThemeMatchesApprovedBalanceProPalette() {
-        assertEquals(Color(0xFFF4F6F8), ThunBudgetPalette.Light.background)
-        assertEquals(Color(0xFFFFFFFF), ThunBudgetPalette.Light.surface)
-        assertEquals(Color(0xFFE6E0E9), ThunBudgetPalette.Light.surfaceVariant)
-        assertEquals(Color(0xFF445365), ThunBudgetPalette.Light.primary)
-        assertEquals(Color(0xFF168974), ThunBudgetPalette.Light.secondary)
-        assertEquals(Color(0xFFDFA44B), ThunBudgetPalette.Light.tertiary)
-        assertEquals(Color(0xFFD96B76), ThunBudgetPalette.Light.danger)
-        assertEquals(Color(0xFFD9DEE5), ThunBudgetPalette.Light.outline)
+    fun lightThemeUsesCalmVioletSurfacesAndControls() {
+        assertEquals(Color(0xFFF5F2F8), ThunBudgetPalette.Light.background)
+        assertEquals(Color(0xFFEEE8F4), ThunBudgetPalette.Light.surfaceVariant)
+        assertEquals(Color(0xFF6F5B89), ThunBudgetPalette.Light.primary)
+        assertEquals(Color(0xFF6F5B89), ThunBudgetPalette.Light.budgetCardSurface)
+        assertEquals(Color(0xFF168974), ThunBudgetPalette.Light.positive)
+        assertEquals(Color(0xFFDFA44B), ThunBudgetPalette.Light.warning)
+        assertEquals(Color(0xFFD36F83), ThunBudgetPalette.Light.danger)
     }
 
     @Test
-    fun darkThemeUsesMutedAccentAndPreservesGraphiteDialogs() {
+    fun darkThemeUsesCalmVioletAndKeepsGraphiteDialogs() {
         assertEquals(Color(0xFF090A10), ThunBudgetPalette.Dark.background)
-        assertEquals(Color(0xFF171821), ThunBudgetPalette.Dark.surface)
-        assertEquals(Color(0xFF242631), ThunBudgetPalette.Dark.surfaceVariant)
-        assertEquals(Color(0xFF89849A), ThunBudgetPalette.Dark.primary)
-        assertEquals(Color(0xFF171821), ThunBudgetPalette.Dark.onPrimary)
+        assertEquals(Color(0xFF17141F), ThunBudgetPalette.Dark.surface)
+        assertEquals(Color(0xFF2B2536), ThunBudgetPalette.Dark.surfaceVariant)
+        assertEquals(Color(0xFFA58EC6), ThunBudgetPalette.Dark.primary)
+        assertEquals(Color(0xFF30283B), ThunBudgetPalette.Dark.budgetCardSurface)
         assertEquals(Color(0xFF21222D), ThunBudgetPalette.Dark.dialogSurface)
         assertEquals(Color(0xFF343440), ThunBudgetPalette.Dark.dialogField)
     }
@@ -48,15 +47,19 @@ class ThunBudgetPaletteTest {
             "Dark primary button contrast must be at least 4.5:1",
             contrast(ThunBudgetPalette.Dark.onPrimary, ThunBudgetPalette.Dark.primary) >= 4.5
         )
+        assertTrue(
+            "Budget progress fill must be distinct from its track",
+            ThunBudgetPalette.Dark.budgetCardProgress != ThunBudgetPalette.Dark.budgetCardProgressTrack
+        )
     }
 
     @Test
-    fun chartSeriesUsesDistinctBalanceProSemanticColors() {
+    fun chartSeriesStartsWithVioletAndKeepsCategoryColorsDistinct() {
         assertTrue(ThunBudgetPalette.ChartSeries.size >= 5)
-        assertEquals(Color(0xFF445365), ThunBudgetPalette.ChartSeries[0])
-        assertEquals(Color(0xFF7189A3), ThunBudgetPalette.ChartSeries[1])
-        assertEquals(Color(0xFF168974), ThunBudgetPalette.ChartSeries[2])
-        assertEquals(Color(0xFFDFA44B), ThunBudgetPalette.ChartSeries[3])
-        assertEquals(Color(0xFFD96B76), ThunBudgetPalette.ChartSeries[4])
+        assertEquals(Color(0xFFA58EC6), ThunBudgetPalette.ChartSeries.first())
+        assertEquals(ThunBudgetPalette.ChartSeries.size, ThunBudgetPalette.ChartSeries.distinct().size)
+        assertEquals(Color(0xFF7F9DB8), ThunBudgetPalette.ChartSeries[1])
+        assertEquals(Color(0xFF70A58F), ThunBudgetPalette.ChartSeries[2])
+        assertEquals(Color(0xFFD6A55F), ThunBudgetPalette.ChartSeries[3])
     }
 }
