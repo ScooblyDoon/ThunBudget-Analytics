@@ -20,7 +20,7 @@ data class RedistributionCategoryInput(
     val variableForecast: Double = 0.0,
     val variableForecastUpper: Double = variableForecast,
     val hasEvidence: Boolean = true,
-    val protectedFromRedistribution: Boolean = false
+    val protectedFromRedistribution: Boolean? = null
 )
 
 data class BudgetRedistributionDeficit(
@@ -143,8 +143,8 @@ object BudgetRedistributionCalculator {
                 val alwaysProtectedSavings = normalized(input.name).contains("накоп")
                 val protectedByDefault = BudgetRedistributionProtectionDefaults
                     .isProtectedByDefault(input.name)
-                val protected = input.protectedFromRedistribution ||
-                    alwaysProtectedSavings || protectedByDefault
+                val protected = (input.protectedFromRedistribution ?: protectedByDefault) ||
+                    alwaysProtectedSavings
                 val planned = budgets.getValue(input.name)
                 val spent = conservativeSpend.getValue(input.name)
                 val available = (planned - spent).coerceAtLeast(0L)
@@ -179,9 +179,9 @@ object BudgetRedistributionCalculator {
 
         deficits.forEach { deficit ->
             var need = cents(deficit.amount)
-            donors.forEach { donor ->
+            donors.forEach donorLoop@ { donor ->
                 if (need <= EPSILON_CENTS || donor.name.equals(deficit.category, ignoreCase = true)) {
-                    return@forEach
+                    return@donorLoop
                 }
                 val donorRemainingCents = donorRemaining[donor.name] ?: 0L
                 if (donorRemainingCents <= EPSILON_CENTS) return@forEach

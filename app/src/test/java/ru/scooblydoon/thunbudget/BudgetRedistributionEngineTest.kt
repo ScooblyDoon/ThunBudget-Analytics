@@ -19,7 +19,7 @@ class BudgetRedistributionEngineTest {
         variable: Double = 0.0,
         variableUpper: Double = variable,
         evidence: Boolean = true,
-        protected: Boolean = false
+        protected: Boolean? = false
     ) = RedistributionCategoryInput(
         name = name,
         plannedAmount = planned,
@@ -200,8 +200,8 @@ class BudgetRedistributionEngineTest {
     @Test
     fun netAdjustmentsAreIsolatedToExactReportingPeriod() {
         val transfers = listOf(
-            AppliedBudgetRedistributionTransfer(start, end, "Продукты", "Транспорт", 250.0, "fingerprint-a", "2026-11-27T12:00:00Z"),
-            AppliedBudgetRedistributionTransfer(start.plusDays(15), end.plusDays(15), "Продукты", "Здоровье", 100.0, "fingerprint-b", "2026-11-27T12:00:00Z")
+            AppliedBudgetRedistributionTransfer(start, end, "Продукты", "Транспорт", 250.0, "a".repeat(64), "2026-11-27T12:00:00Z"),
+            AppliedBudgetRedistributionTransfer(start.plusDays(15), end.plusDays(15), "Продукты", "Здоровье", 100.0, "b".repeat(64), "2026-11-27T12:00:00Z")
         )
 
         val selected = BudgetRedistributionCalculator.netAdjustments(start, end, transfers)
