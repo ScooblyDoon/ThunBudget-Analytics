@@ -269,4 +269,27 @@ class FlexiblePeriodsTest {
         assertEquals(5000.0, report.projectedTotal, 0.001)
         assertNotNull(report.requiredPerRemainingDay)
     }
+
+    @Test
+    fun additionalIncomeIsIncludedInFlexiblePeriodBudgetAndReportedSeparately() {
+        val report = FlexiblePeriodAnalyticsCalculator.calculate(
+            period = period("bonus-period", "Период с премией", "2026-11-09", "2026-11-23"),
+            categories = listOf(FlexiblePeriodCategoryPlan("Продукты", 100.0)),
+            expenses = emptyList(),
+            incomes = listOf(
+                FlexiblePeriodIncome(30000.0, LocalDate.parse("2026-11-09")),
+                FlexiblePeriodIncome(5000.0, LocalDate.parse("2026-11-15"), isAdditional = true),
+                FlexiblePeriodIncome(2000.0, LocalDate.parse("2026-11-09"), isCarryover = true)
+            ),
+            monthlyIncomeFallback = 90000.0,
+            asOf = LocalDate.parse("2026-11-20")
+        )
+
+        assertEquals(35000.0, report.earnedIncome, 0.001)
+        assertEquals(5000.0, report.additionalIncome, 0.001)
+        assertEquals(2000.0, report.carryoverIncome, 0.001)
+        assertEquals(37000.0, report.budgetIncome, 0.001)
+        assertEquals(37000.0, report.plannedTotal, 0.001)
+    }
+
 }
