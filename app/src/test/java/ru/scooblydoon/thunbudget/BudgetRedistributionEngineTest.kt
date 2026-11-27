@@ -145,8 +145,8 @@ class BudgetRedistributionEngineTest {
         val proposal = BudgetRedistributionCalculator.calculate(
             start, end, 0.0,
             listOf(
-                category("Транспорт", 100.0, actual = 600.0),
-                category("Продукты", 5_000.0)
+                category("Транспорт", 0.0, actual = 600.0),
+                category("Продукты", 0.0)
             )
         )
 
@@ -158,7 +158,7 @@ class BudgetRedistributionEngineTest {
     @Test
     fun transferAmountsAreRoundedToKopecks() {
         val proposal = BudgetRedistributionCalculator.calculate(
-            start, end, 0.0,
+            start, end, 1_000.0,
             listOf(
                 category("Транспорт", 100.0, actual = 110.125),
                 category("Резервные средства", 50.0, evidence = false)
