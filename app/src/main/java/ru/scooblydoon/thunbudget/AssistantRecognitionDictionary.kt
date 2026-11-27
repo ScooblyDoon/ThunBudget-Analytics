@@ -11,6 +11,11 @@ import java.util.Locale
  * Merchant MCC codes are deliberately not treated as a source of truth here:
  * they describe a merchant's primary business, not the exact purchased item.
  */
+internal data class AssistantAliasTeaching(
+    val alias: String,
+    val category: String
+)
+
 internal object AssistantRecognitionDictionary {
     private val builtInAliases = linkedMapOf(
         listOf("продукт", "питание") to listOf(
@@ -42,6 +47,30 @@ internal object AssistantRecognitionDictionary {
             "телефон", "сотовая связь", "мобильная связь", "интернет", "связь"
         )
     )
+
+    fun parseTeachingCommand(phrase: String): AssistantAliasTeaching? {
+        val normalized = phrase.trim()
+        val patterns = listOf(
+            Regex("""^(?:запомни|сохрани|добавь в словарь)\\s+(?:синоним\\s+)?["«']?(.+?)["»']?\\s+(?:для категории|к категории|как категорию)\\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE),
+            Regex("""^(?:запомни|считай)\\s+["«']?(.+?)["»']?\\s+(?:это|— это)\\s+категори[яи]\\s+["«']?(.+?)["»']?[.!]?$""", RegexOption.IGNORE_CASE)
+        )
+        val match = patterns.firstNotNullOfOrNull { it.find(normalized) } ?: return null
+        val alias = cleanQuoted(match.groupValues[1])
+        val category = cleanQuoted(match.groupValues[2])
+        if (normalize(alias).length !in 2..60 || category.isBlank()) return null
+        return AssistantAliasTeaching(alias, category)
+    }
+
+    fun parseAliasRemovalCommand(phrase: String): String? {
+        val match = Regex(
+            """^(?:удали|забудь)\\s+(?:синоним|слово)\\s+["«']?(.+?)["»']?[.!]?$""",
+            RegexOption.IGNORE_CASE
+        ).find(phrase.trim()) ?: return null
+        return cleanQuoted(match.groupValues[1]).takeIf { normalize(it).isNotBlank() }
+    }
+
+    private fun cleanQuoted(value: String): String =
+        value.trim().trim('"', '\\'', '«', '»', '“', '”').trim().trimEnd('.', '!', '?').trim()
 
     fun normalize(value: String): String = value
         .lowercase(Locale("ru", "RU"))
