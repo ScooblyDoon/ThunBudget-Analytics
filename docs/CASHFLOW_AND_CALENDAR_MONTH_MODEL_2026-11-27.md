@@ -121,6 +121,8 @@ Implemented on the working branch:
 - Legacy aggregate additional-income amounts without dated ledger detail retain a compatibility fallback.
 - Dedicated calendar-month cash expense helpers exclude internal `Перенос средств` only; savings/reserve remain included.
 - Monthly and yearly analytics totals/charts use the calendar cash-expense basis.
+- The monthly income selector shows the amount allocated to elapsed calendar dates, the forecast for uncovered future dates, and the combined expected income as separate figures.
+- Excel month/year category sheets use the same cash-expense basis; the raw Operations sheet keeps every transaction visible for audit, including technical carryover rows. The period report retains carryover for reporting-period closure.
 - Reporting-period carryover calculation and per-period budget closure remain unchanged.
 
 ## 7. Regression tests
