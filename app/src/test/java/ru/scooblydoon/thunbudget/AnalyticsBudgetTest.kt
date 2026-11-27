@@ -776,4 +776,25 @@ class AnalyticsBudgetTest {
         )
     }
 
+
+    @Test
+    fun dynamicAllocationWeightsCategorySpendByUnequalPeriodIncome() {
+        val percent = BudgetAllocationCalculator.weightedPercentOfIncome(
+            listOf(
+                6000.0 to 60000.0,
+                12000.0 to 40000.0
+            )
+        )
+        assertEquals(18.0, percent!!, 0.001)
+    }
+
+    @Test
+    fun dynamicAllocationReturnsNoWeightedShareWithoutPositiveIncome() {
+        assertNull(
+            BudgetAllocationCalculator.weightedPercentOfIncome(
+                listOf(1000.0 to 0.0, 500.0 to -100.0)
+            )
+        )
+    }
+
 }
