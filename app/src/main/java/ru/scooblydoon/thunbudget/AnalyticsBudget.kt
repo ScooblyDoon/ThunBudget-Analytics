@@ -641,7 +641,7 @@ internal object AnalyticsBudgetCalculator {
         categoryPercent: Double,
         start: java.time.LocalDate,
         end: java.time.LocalDate,
-        periodIncomeIsDefined: Boolean = periodIncome > 0.0
+        periodIncomeIsDefined: Boolean = periodIncome != 0.0
     ): Double {
         if (!categoryPercent.isFinite() || categoryPercent < 0.0 || end.isBefore(start)) return 0.0
         if (periodIncomeIsDefined && periodIncome.isFinite()) {
