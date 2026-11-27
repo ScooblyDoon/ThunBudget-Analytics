@@ -2115,7 +2115,7 @@ private fun ThunBudgetApp() {
                             Text("Источник дохода для расчёта бюджета", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                                 SegmentedButton(selected = analyticsIncomeMode == 0, onClick = { analyticsIncomeMode = 0 }, shape = SegmentedButtonDefaults.itemShape(0, 2)) {
-                                    Text("Месячный доход")
+                                    Text("Отчётный месяц")
                                 }
                                 SegmentedButton(selected = analyticsIncomeMode == 1, onClick = { analyticsIncomeMode = 1 }, shape = SegmentedButtonDefaults.itemShape(1, 2)) {
                                     Text("За 2 периода")
@@ -2136,7 +2136,7 @@ private fun ThunBudgetApp() {
                             }
                         }
                     }
-                    item { Text("Выбранный месяц: " + analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item { Text("Выбранный отчётный месяц: " + analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
