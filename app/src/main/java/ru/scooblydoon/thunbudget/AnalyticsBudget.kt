@@ -224,12 +224,17 @@ internal object AnalyticsBudgetCalculator {
     private data class IncomePeriod(
         val start: java.time.LocalDate,
         val end: java.time.LocalDate,
-        val earnedAmount: Double
+        /** All actual non-carryover receipts, including one-off additional income. */
+        val earnedAmount: Double,
+        /** Stable/base earnings only; additional one-off receipts are excluded from forecasting. */
+        val regularEarnedAmount: Double
     ) {
         val dayCount: Long
             get() = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
         val dailyRate: Double
             get() = earnedAmount / dayCount.toDouble()
+        val regularDailyRate: Double
+            get() = regularEarnedAmount / dayCount.toDouble()
     }
 
     /**
@@ -256,7 +261,7 @@ internal object AnalyticsBudgetCalculator {
             val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
             val earned = row.earnedAmount
             if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
-            IncomePeriod(start, end, earned)
+            IncomePeriod(start, end, earned, (earned - row.additionalAmount.coerceAtLeast(0.0)).coerceAtLeast(0.0))
         }
         // Prefer periods matching the configured reporting cycle. This prevents
         // an old overlapping monthly/legacy aggregate from filling days that
@@ -266,7 +271,12 @@ internal object AnalyticsBudgetCalculator {
             parsedPeriods.filter { (it.start.toString() to it.end.toString()) in expectedRanges }
         } else parsedPeriods)
             .groupBy { it.start to it.end }
-            .map { (range, rows) -> IncomePeriod(range.first, range.second, rows.sumOf { it.earnedAmount }) }
+            .map { (range, rows) -> IncomePeriod(
+                range.first,
+                range.second,
+                rows.sumOf { it.earnedAmount },
+                rows.sumOf { it.regularEarnedAmount }
+            ) }
             .sortedWith(compareBy<IncomePeriod> { it.start }.thenBy { it.end })
 
         val monthStart = month.atDay(1)
@@ -287,11 +297,13 @@ internal object AnalyticsBudgetCalculator {
             }
         }
 
+        // One-off additional income counts in actual monthly receipts above,
+        // but never raises the baseline used to forecast future regular income.
         val recentDailyRates = normalized
-            .filter { !it.end.isAfter(asOf) && it.earnedAmount > 0.0 }
+            .filter { !it.end.isAfter(asOf) && it.regularEarnedAmount > 0.0 }
             .sortedBy { it.end }
             .takeLast(forecastLookbackPeriods)
-            .map { it.dailyRate }
+            .map { it.regularDailyRate }
             .filter { it.isFinite() && it > 0.0 }
             .sorted()
         // Require at least two completed periods so a single unusual payment
