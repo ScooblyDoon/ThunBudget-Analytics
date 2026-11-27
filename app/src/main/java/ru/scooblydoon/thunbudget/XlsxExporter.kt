@@ -24,7 +24,8 @@ object XlsxExporter {
         periodEnd: String,
         periodIncome: Double,
         monthlyIncomes: Map<String, Double>,
-        incomeEntries: List<IncomeEntry> = emptyList()
+        incomeEntries: List<IncomeEntry> = emptyList(),
+        monthlyCategoryPlans: Map<String, Map<String, Double>> = emptyMap()
     ) {
         val from = LocalDate.parse(periodStart)
         val to = LocalDate.parse(periodEnd)
@@ -33,7 +34,10 @@ object XlsxExporter {
             "Операции" to operations(expenses),
             "Доходы" to incomes(incomeEntries),
             "Отчётный период" to periods(expenses, categories, income, from, to, periodIncome),
-            "Месяцы" to months(expenses, categories, income, year, monthlyIncomes),
+            "Месяцы" to months(
+                expenses, categories, income, year, monthlyIncomes,
+                categoryPlans = monthlyCategoryPlans
+            ),
             "Год по категориям" to annual(expenses, categories, income, year),
             "Рекомендации" to recommendations(expenses, categories, income, from, to)
         )
@@ -103,20 +107,39 @@ object XlsxExporter {
         return withTotals(rows, listOf(3, 4, 5, 6))
     }
 
-    internal fun months(expenses: List<Expense>, cats: List<BudgetCategory>, income: Double, year: Int, monthlyIncomes: Map<String, Double>): List<List<Any>> {
+    internal fun months(
+        expenses: List<Expense>,
+        cats: List<BudgetCategory>,
+        income: Double,
+        year: Int,
+        monthlyIncomes: Map<String, Double>,
+        asOf: LocalDate = LocalDate.now(),
+        categoryPlans: Map<String, Map<String, Double>> = emptyMap()
+    ): List<List<Any>> {
+        val cashCategories = cats.filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
         val rows = mutableListOf<List<Any>>(
             listOf("Месяц", "Категория", "План, ₽", "Факт, ₽", "Не выбрано, ₽", "Превышение, ₽")
         )
         for (month in 1..12) {
             val ym = YearMonth.of(year, month)
             val from = ym.atDay(1)
-            val to = ym.atEndOfMonth()
+            val currentMonth = YearMonth.from(asOf)
+            val actualEnd = when {
+                ym.isAfter(currentMonth) -> from.minusDays(1)
+                ym == currentMonth -> asOf
+                else -> ym.atEndOfMonth()
+            }
             val monthIncome = monthlyIncomes[ym.toString()]?.takeIf { it.isFinite() && it > 0.0 } ?: income
-            cats.forEach { category ->
-                val fact = expenses.asSequence()
-                    .filter { it.category == category.name && it.date >= from.toString() && it.date <= to.toString() }
+            cashCategories.forEach { category ->
+                val fact = if (actualEnd.isBefore(from)) 0.0 else expenses.asSequence()
+                    .filter {
+                        it.category == category.name &&
+                            it.date >= from.toString() && it.date <= actualEnd.toString()
+                    }
                     .sumOf { it.amount }
-                val plan = monthIncome * category.percent / 100.0
+                val plan = categoryPlans[ym.toString()]?.get(category.name)
+                    ?.takeIf { it.isFinite() && it >= 0.0 }
+                    ?: monthIncome * category.percent / 100.0
                 rows.add(
                     listOf(
                         ym.toString(), category.name, plan, fact,
@@ -128,13 +151,19 @@ object XlsxExporter {
         return withTotals(rows, listOf(2, 3, 4, 5))
     }
 
-    private fun annual(expenses: List<Expense>, cats: List<BudgetCategory>, income: Double, year: Int): List<List<Any>> {
+    private fun annual(
+        expenses: List<Expense>,
+        cats: List<BudgetCategory>,
+        income: Double,
+        year: Int
+    ): List<List<Any>> {
         val from = LocalDate.of(year, 1, 1)
         val to = minOf(LocalDate.now(), LocalDate.of(year, 12, 31))
+        val cashCategories = cats.filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
         val rows = mutableListOf<List<Any>>(
             listOf("Категория", "Доля бюджета, %", "План за год, ₽", "Факт за год, ₽", "Не выбрано, ₽", "Превышение, ₽")
         )
-        cats.forEach { category ->
+        cashCategories.forEach { category ->
             val fact = expenses.asSequence()
                 .filter { it.category == category.name && it.date >= from.toString() && it.date <= to.toString() }
                 .sumOf { it.amount }
@@ -159,17 +188,18 @@ object XlsxExporter {
         val rows = mutableListOf<List<Any>>(
             listOf("Категория с превышением", "Сумма превышения, ₽", "Категория-донор", "Доступный остаток, ₽", "Рекомендуемый перенос, ₽")
         )
-        val spent = cats.associate { category ->
+        val cashCategories = cats.filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
+        val spent = cashCategories.associate { category ->
             category.name to expenses.asSequence()
                 .filter { it.category == category.name && it.date >= from.toString() && it.date <= to.toString() }
                 .sumOf { it.amount }
         }
-        val caps = cats.associate { category ->
+        val caps = cashCategories.associate { category ->
             category.name to planned(income, category.percent, from, to)
         }
-        val donors = cats.filter { (caps[it.name] ?: 0.0) > (spent[it.name] ?: 0.0) }
+        val donors = cashCategories.filter { (caps[it.name] ?: 0.0) > (spent[it.name] ?: 0.0) }
             .map { it.name to ((caps[it.name] ?: 0.0) - (spent[it.name] ?: 0.0)) }.toMutableList()
-        cats.filter { (spent[it.name] ?: 0.0) > (caps[it.name] ?: 0.0) }.forEach { over ->
+        cashCategories.filter { (spent[it.name] ?: 0.0) > (caps[it.name] ?: 0.0) }.forEach { over ->
             var deficit = (spent[over.name] ?: 0.0) - (caps[over.name] ?: 0.0)
             donors.toList().forEach { donor ->
                 if (deficit > 0.0 && donor.first != over.name) {

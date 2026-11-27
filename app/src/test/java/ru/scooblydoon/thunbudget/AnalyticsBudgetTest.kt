@@ -474,4 +474,140 @@ class AnalyticsBudgetTest {
         assertEquals(50000.0, result.totalIncome, 0.001)
     }
 
+
+    @Test
+    fun datedAdditionalIncomeIsCountedInTheCalendarMonthItArrives() {
+        val periods = listOf(
+            PeriodIncome(
+                start = "2026-10-24",
+                end = "2026-11-08",
+                amount = 40000.0,
+                earnedAmount = 40000.0,
+                additionalAmount = 10000.0
+            ),
+            PeriodIncome(
+                start = "2026-11-09",
+                end = "2026-11-23",
+                amount = 40000.0,
+                earnedAmount = 40000.0,
+                additionalAmount = 0.0
+            )
+        )
+        val entries = listOf(
+            IncomeEntry(
+                id = "returned-savings",
+                title = "Возврат с накопительного счёта",
+                amount = 10000.0,
+                date = "2026-11-08",
+                periodStart = "2026-10-24",
+                periodEnd = "2026-11-08",
+                isAdditional = true
+            )
+        )
+
+        val estimate = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periodIncomes = periods,
+            month = YearMonth.of(2026, 11),
+            asOf = java.time.LocalDate.parse("2026-11-23"),
+            incomeEntries = entries
+        )
+
+        // Base income for Oct 24–Nov 8 is prorated: 30,000 / 16 * 8 = 15,000.
+        // The 10,000 ₽ return was actually recorded on Nov 8, so all of it belongs to November.
+        // Nov 9–23 contributes another 40,000 ₽ of regular + additional income.
+        assertEquals(65000.0, estimate.enteredIncome, 0.001)
+        assertEquals((30000.0 / 16.0 + 40000.0 / 15.0) / 2.0, estimate.medianDailyIncome!!, 0.001)
+    }
+
+    @Test
+    fun additionalOnlyPeriodDoesNotPretendRegularIncomeCoversItsFutureDays() {
+        val periods = listOf(
+            PeriodIncome("2026-09-24", "2026-10-08", 15000.0),
+            PeriodIncome("2026-10-09", "2026-10-23", 15000.0),
+            PeriodIncome("2026-10-24", "2026-11-08", 16000.0),
+            PeriodIncome(
+                start = "2026-11-09",
+                end = "2026-11-23",
+                amount = 5000.0,
+                earnedAmount = 5000.0,
+                additionalAmount = 5000.0
+            )
+        )
+        val entries = listOf(
+            IncomeEntry(
+                id = "one-off",
+                title = "Разовый возврат",
+                amount = 5000.0,
+                date = "2026-11-14",
+                periodStart = "2026-11-09",
+                periodEnd = "2026-11-23",
+                isAdditional = true
+            )
+        )
+
+        val estimate = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periodIncomes = periods,
+            month = YearMonth.of(2026, 11),
+            asOf = java.time.LocalDate.parse("2026-11-15"),
+            incomeEntries = entries
+        )
+
+        // Nov 1–8 receives 8/16 of the regular 16,000 ₽ from Oct 24–Nov 8,
+        // plus the dated 5,000 ₽ additional receipt from Nov 14.
+        assertEquals(13000.0, estimate.enteredIncome, 0.001)
+        assertEquals(15, estimate.uncoveredFutureDays)
+        assertEquals(15, estimate.forecastDays)
+    }
+
+    @Test
+    fun monthlyCategoryPlanAttributesDatedAdditionalIncomeToItsReceiptDate() {
+        val result = ReportingPeriodCategoryPlanCalculator.monthlyPlan(
+            currentShares = listOf("Продукты" to 50.0, "Резервные средства" to 50.0),
+            periodIncomes = listOf(
+                PeriodIncome(
+                    start = "2026-10-24",
+                    end = "2026-11-08",
+                    amount = 40000.0,
+                    earnedAmount = 40000.0,
+                    additionalAmount = 10000.0
+                )
+            ),
+            savedPlans = mapOf(
+                ("2026-10-24" to "2026-11-08") to mapOf("Продукты" to 50.0)
+            ),
+            month = YearMonth.of(2026, 11),
+            incomeEntries = listOf(
+                IncomeEntry(
+                    id = "additional-november",
+                    title = "Возврат с накоплений",
+                    amount = 10000.0,
+                    date = "2026-11-08",
+                    periodStart = "2026-10-24",
+                    periodEnd = "2026-11-08",
+                    isAdditional = true
+                )
+            )
+        )
+
+        // 15,000 ₽ regular income accrues over Nov 1–8, plus the full 10,000 ₽ receipt on Nov 8.
+        assertEquals(12500.0, result["Продукты"]!!, 0.001)
+    }
+
+    @Test
+    fun cashFlowMonthExcludesOnlyInternalCarryoverAndKeepsSavingsAsOutflow() {
+        val expenses = listOf(
+            Expense(1L, "Покупка", "Продукты", 1000.0, "2026-11-10"),
+            Expense(2L, "На накопительный счёт", "Накопления", 10000.0, "2026-11-11"),
+            Expense(3L, "В резерв", "Резервные средства", 3000.0, "2026-11-12"),
+            Expense(4L, "Перенос остатка во второй период", "Перенос средств", 5000.0, "2026-11-23")
+        )
+
+        val monthTotal = AnalyticsBudgetCalculator.calendarMonthCashExpenseTotal(
+            expenses, YearMonth.of(2026, 11), java.time.LocalDate.parse("2026-11-27")
+        )
+
+        assertEquals(14000.0, monthTotal, 0.001)
+        assertEquals(19000.0, expenses.sumOf { it.amount }, 0.001)
+    }
+
 }
