@@ -192,4 +192,24 @@ class XlsxExporterTest {
         assertEquals(14000.0, november.values.sumOf { it[3] as Double }, 0.001)
     }
 
+    @Test
+    fun monthlyExportUsesReportingCycleDatesInsteadOfCalendarMonth() {
+        val expenses = listOf(
+            Expense(1, "До цикла", "Продукты", 900.0, "2026-11-08"),
+            Expense(2, "Начало цикла", "Продукты", 100.0, "2026-11-09"),
+            Expense(3, "Внутри цикла", "Продукты", 300.0, "2026-11-15"),
+            Expense(4, "После сегодня", "Продукты", 700.0, "2026-11-28")
+        )
+        val rows = XlsxExporter.months(
+            expenses = expenses,
+            cats = listOf(BudgetCategory("Продукты", 25.0)),
+            income = 30000.0,
+            year = 2026,
+            monthlyIncomes = mapOf("2026-11" to 40000.0),
+            asOf = LocalDate.parse("2026-11-27")
+        )
+        val november = rows.filter { it.size > 1 && it[0] == "2026-11" && it[1] == "Продукты" }.single()
+        assertEquals(10000.0, november[2] as Double, 0.001)
+        assertEquals(400.0, november[3] as Double, 0.001)
+    }
 }
