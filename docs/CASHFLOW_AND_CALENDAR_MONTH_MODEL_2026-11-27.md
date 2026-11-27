@@ -124,7 +124,7 @@ Implemented on the working branch:
 - Dedicated calendar-month cash expense helpers exclude internal `Перенос средств` only; savings/reserve remain included.
 - Monthly and yearly analytics totals/charts use the calendar cash-expense basis.
 - The monthly income selector shows income allocated from entered reporting periods, the forecast for uncovered future dates, and the combined expected income as separate figures.
-- Excel month/year category sheets use the same cash-expense basis and saved period-specific category shares; the raw Operations sheet keeps every transaction visible for audit, including technical carryover rows. The period report retains carryover for reporting-period closure.
+- The Excel monthly category sheet uses the same cash-expense basis and saved period-specific category shares as monthly analytics. The annual sheet uses the app's existing year-to-date plan model, while its actual amounts exclude internal carryover. The raw Operations sheet keeps every transaction visible for audit, including technical carryover rows. The period report retains carryover for reporting-period closure.
 - Reporting-period carryover calculation and per-period budget closure remain unchanged.
 
 ## 7. Regression tests
