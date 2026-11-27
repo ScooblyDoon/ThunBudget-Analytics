@@ -219,12 +219,12 @@ internal object ReportingPeriodCategoryPlanCalculator {
                 period.start.toString() to period.end.toString()
             ].orEmpty()
             val detailedAdditionalAmount = detailedAdditional.sumOf { it.amount.coerceAtLeast(0.0) }
-            detailedAdditional.forEach { entry ->
+            detailedAdditional.forEach entryLoop@{ entry ->
                 val date = runCatching { java.time.LocalDate.parse(entry.date) }.getOrNull()
-                    ?: return@forEach
+                    ?: return@entryLoop
                 if (date.isBefore(period.start) || date.isAfter(period.end) ||
                     date.isBefore(monthStart) || date.isAfter(monthEnd)
-                ) return@forEach
+                ) return@entryLoop
                 planForPeriod.forEach { (name, percent) ->
                     if (!name.equals(TRANSFER_CATEGORY, true)) {
                         result[name] = (result[name] ?: 0.0) +
@@ -429,9 +429,9 @@ internal object AnalyticsBudgetCalculator {
                 period.start.toString() to period.end.toString()
             ].orEmpty()
             val detailedAdditionalAmount = detailedAdditional.sumOf { it.amount.coerceAtLeast(0.0) }
-            detailedAdditional.forEach { entry ->
+            detailedAdditional.forEach entryLoop@{ entry ->
                 val date = runCatching { java.time.LocalDate.parse(entry.date) }.getOrNull()
-                    ?: return@forEach
+                    ?: return@entryLoop
                 if (!date.isBefore(period.start) && !date.isAfter(period.end) &&
                     !date.isBefore(monthStart) && !date.isAfter(monthEnd)
                 ) {
