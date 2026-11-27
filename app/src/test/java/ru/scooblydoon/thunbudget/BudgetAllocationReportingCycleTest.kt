@@ -159,4 +159,84 @@ class BudgetAllocationReportingCycleTest {
         assertEquals(3000.0, result.totalUncovered, 0.001)
     }
 
+
+    @Test
+    fun explicitDonorProtectionOverridesAHighAvailableBalance() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf("Транспорт" to 10.0, "Кафе" to 90.0),
+            spentByCategory = mapOf("Транспорт" to 13000.0, "Кафе" to 0.0),
+            budgetPerPercent = 1000.0,
+            safetyBufferPercent = 0.0,
+            protectedDonorCategories = setOf("Кафе"),
+            donorEvidenceAvailableCategories = setOf("Транспорт", "Кафе")
+        )
+
+        assertTrue(result.transfers.isEmpty())
+        assertEquals(3000.0, result.totalUncovered, 0.001)
+    }
+
+    @Test
+    fun categoryWithoutUsableHistoryIsNotTreatedAsFreeMoney() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf("Транспорт" to 10.0, "Новая категория" to 90.0),
+            spentByCategory = mapOf("Транспорт" to 13000.0, "Новая категория" to 0.0),
+            budgetPerPercent = 1000.0,
+            safetyBufferPercent = 0.0,
+            donorEvidenceAvailableCategories = setOf("Транспорт")
+        )
+
+        assertTrue(result.transfers.isEmpty())
+        assertEquals(3000.0, result.totalUncovered, 0.001)
+    }
+
+    @Test
+    fun conservativeUpperForecastProtectsMoneyNeededByTheDonorCategory() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf("Транспорт" to 10.0, "Кафе" to 90.0),
+            spentByCategory = mapOf("Транспорт" to 13000.0, "Кафе" to 0.0),
+            budgetPerPercent = 1000.0,
+            forecastSpentByCategory = mapOf("Транспорт" to 13000.0, "Кафе" to 1000.0),
+            donorForecastSpentByCategory = mapOf("Транспорт" to 13000.0, "Кафе" to 86000.0),
+            donorEvidenceAvailableCategories = setOf("Транспорт", "Кафе"),
+            safetyBufferPercent = 0.0
+        )
+
+        // The central forecast leaves 89,000 ₽ in Cafe, but the upper forecast
+        // leaves only 4.4% of its plan, below the strict >5% donor threshold.
+        assertTrue(result.transfers.isEmpty())
+        assertEquals(3000.0, result.totalUncovered, 0.001)
+    }
+
+    @Test
+    fun reserveCategoryIsUsedBeforeOrdinaryDonors() {
+        val result = BudgetAllocationCalculator.redistribute(
+            categories = listOf(
+                "Транспорт" to 10.0,
+                "Резервные средства" to 20.0,
+                "Кафе" to 70.0
+            ),
+            spentByCategory = mapOf(
+                "Транспорт" to 13000.0,
+                "Резервные средства" to 2000.0,
+                "Кафе" to 0.0
+            ),
+            budgetPerPercent = 1000.0,
+            safetyBufferPercent = 2.0
+        )
+
+        assertEquals("Резервные средства", result.transfers.first().fromCategory)
+        assertEquals(3000.0, result.totalTransferred, 0.001)
+        assertEquals(0.0, result.totalUncovered, 0.001)
+    }
+
+    @Test
+    fun essentialCategoryNamesDefaultToProtectedButFlexibleCategoriesDoNot() {
+        assertTrue(BudgetRedistributionProtectionDefaults.isProtectedByDefault("Жильё и ЖКХ"))
+        assertTrue(BudgetRedistributionProtectionDefaults.isProtectedByDefault("Аренда"))
+        assertTrue(BudgetRedistributionProtectionDefaults.isProtectedByDefault("Кредит"))
+        assertTrue(BudgetRedistributionProtectionDefaults.isProtectedByDefault("Страхование"))
+        assertTrue(BudgetRedistributionProtectionDefaults.isProtectedByDefault("Налог"))
+        assertFalse(BudgetRedistributionProtectionDefaults.isProtectedByDefault("Кафе и развлечения"))
+    }
+
 }
