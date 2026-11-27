@@ -156,6 +156,21 @@ object BudgetAllocationCalculator {
         return Redistribution(transfers, updated)
     }
 
+    /**
+     * Computes a category's share of income across periods with unequal income.
+     * This is a ratio of totals, not an unweighted average of period percentages.
+     * Each pair is (actual category spend, available income for that period).
+     */
+    fun weightedPercentOfIncome(spendAndIncomeByPeriod: List<Pair<Double, Double>>): Double? {
+        val valid = spendAndIncomeByPeriod.filter { (spent, income) ->
+            spent.isFinite() && income.isFinite() && spent >= 0.0 && income > 0.0
+        }
+        val totalIncome = valid.sumOf { it.second }
+        if (totalIncome <= 0.0) return null
+        val totalSpent = valid.sumOf { it.first }
+        return (totalSpent / totalIncome * 100.0).takeIf { it.isFinite() }?.coerceAtLeast(0.0)
+    }
+
     private fun donorTier(freePercent: Double): Int = when {
         freePercent >= 20.0 -> 3
         freePercent >= 15.0 -> 2
