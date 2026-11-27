@@ -552,7 +552,9 @@ class AnalyticsBudgetTest {
             incomeEntries = entries
         )
 
-        assertEquals(5000.0, estimate.enteredIncome, 0.001)
+        // Nov 1–8 receives 8/16 of the regular 16,000 ₽ from Oct 24–Nov 8,
+        // plus the dated 5,000 ₽ additional receipt from Nov 14.
+        assertEquals(13000.0, estimate.enteredIncome, 0.001)
         assertEquals(15, estimate.uncoveredFutureDays)
         assertEquals(15, estimate.forecastDays)
     }
