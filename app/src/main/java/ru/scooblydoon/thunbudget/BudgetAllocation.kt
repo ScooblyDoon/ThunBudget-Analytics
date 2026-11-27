@@ -164,8 +164,28 @@ object BudgetAllocationCalculator {
         (100.0 - categoryPercents.sum()).coerceIn(0.0, 100.0)
 
     fun withReserve(categoryPercents: List<Pair<String, Double>>): List<Pair<String, Double>> {
-        val regular = categoryPercents.filterNot { it.first.equals(RESERVE_CATEGORY, ignoreCase = true) }
-        val reserve = reservePercent(regular.map { it.second })
-        return if (reserve > 0.0001) regular + (RESERVE_CATEGORY to reserve) else regular
+        val regular = categoryPercents
+            .filterNot {
+                it.first.equals(RESERVE_CATEGORY, ignoreCase = true) ||
+                    it.first.equals("Перенос средств", ignoreCase = true)
+            }
+            .map { (name, percent) ->
+                name to (percent.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0)
+            }
+
+        val rawTotal = regular.sumOf { it.second }
+        val normalized = if (rawTotal > 100.0) {
+            regular.map { (name, percent) -> name to (percent * 100.0 / rawTotal) }
+        } else {
+            regular
+        }
+        val reserve = (100.0 - normalized.sumOf { it.second }).coerceAtLeast(0.0)
+        val result = if (reserve > 0.0001) normalized + (RESERVE_CATEGORY to reserve) else normalized
+
+        return if (categoryPercents.any { it.first.equals("Перенос средств", ignoreCase = true) }) {
+            result + ("Перенос средств" to 0.0)
+        } else {
+            result
+        }
     }
 }

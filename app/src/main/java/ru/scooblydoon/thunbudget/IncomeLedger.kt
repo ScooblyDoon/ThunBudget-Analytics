@@ -37,6 +37,18 @@ object IncomeLedgerMigration {
     ): List<IncomeEntry> {
         val result = existing.toMutableList()
         val knownIds = result.mapTo(mutableSetOf()) { it.id }
+        // Legacy summaries can overlap with detailed entries already written
+        // to the new ledger. Import only the missing difference per period so
+        // migration neither duplicates an existing total nor drops a partial one.
+        val earnedTotals = result.filterNot { it.isCarryover }
+            .groupBy { it.periodStart to it.periodEnd }
+            .mapValues { (_, rows) -> rows.sumOf { it.amount } }
+            .toMutableMap()
+        val carryoverTotals = result.filter { it.isCarryover }
+            .groupBy { it.periodStart to it.periodEnd }
+            .mapValues { (_, rows) -> rows.sumOf { it.amount } }
+            .toMutableMap()
+
         legacy.forEachIndexed { index, row ->
             val start = LocalDate.parse(row.start)
             val end = LocalDate.parse(row.end)
@@ -45,30 +57,37 @@ object IncomeLedgerMigration {
                 row.earnedAmount.isFinite() && row.earnedAmount >= 0.0 &&
                 row.carryoverAmount.isFinite() && row.carryoverAmount >= 0.0
             ) { "Некорректная сумма дохода." }
-            val id = "legacy-${row.start}-${row.end}-${index}"
-            if (row.earnedAmount > 0.0 && knownIds.add(id)) {
+
+            val periodKey = row.start to row.end
+            val earnedId = "legacy-${row.start}-${row.end}-${index}"
+            val missingEarned = (row.earnedAmount - (earnedTotals[periodKey] ?: 0.0)).coerceAtLeast(0.0)
+            if (missingEarned > 0.001 && knownIds.add(earnedId)) {
                 result += IncomeEntry(
-                    id = id,
+                    id = earnedId,
                     title = "Перенесённый доход за период",
-                    amount = row.earnedAmount,
+                    amount = missingEarned,
                     date = row.end,
                     periodStart = row.start,
                     periodEnd = row.end,
                     isLegacyAggregate = true
                 )
+                earnedTotals[periodKey] = (earnedTotals[periodKey] ?: 0.0) + missingEarned
             }
-            val carryoverId = "legacy-carryover-${row.start}-${row.end}-$index"
-            if (row.carryoverAmount > 0.0 && knownIds.add(carryoverId)) {
+
+            val carryoverId = "legacy-carryover-${row.start}-${row.end}-${index}"
+            val missingCarryover = (row.carryoverAmount - (carryoverTotals[periodKey] ?: 0.0)).coerceAtLeast(0.0)
+            if (missingCarryover > 0.001 && knownIds.add(carryoverId)) {
                 result += IncomeEntry(
                     id = carryoverId,
                     title = "Перенос средств за период",
-                    amount = row.carryoverAmount,
+                    amount = missingCarryover,
                     date = row.end,
                     periodStart = row.start,
                     periodEnd = row.end,
                     isLegacyAggregate = true,
                     isCarryover = true
                 )
+                carryoverTotals[periodKey] = (carryoverTotals[periodKey] ?: 0.0) + missingCarryover
             }
         }
         return result

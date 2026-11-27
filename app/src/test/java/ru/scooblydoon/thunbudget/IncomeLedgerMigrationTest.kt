@@ -47,6 +47,60 @@ class IncomeLedgerMigrationTest {
     }
 
     @Test
+    fun doesNotImportLegacyAggregateWhenLedgerAlreadyContainsPeriodEntries() {
+        val existing = listOf(
+            IncomeEntry(
+                id = "detail-earned", title = "Зарплата", amount = 50000.0,
+                date = "2026-11-23", periodStart = "2026-11-09", periodEnd = "2026-11-23"
+            ),
+            IncomeEntry(
+                id = "detail-carryover", title = "Перенос средств", amount = 20000.0,
+                date = "2026-11-23", periodStart = "2026-11-09", periodEnd = "2026-11-23",
+                isCarryover = true
+            )
+        )
+        val migrated = IncomeLedgerMigration.migrate(
+            listOf(
+                LegacyPeriodIncome(
+                    start = "2026-11-09", end = "2026-11-23", amount = 70000.0,
+                    earnedAmount = 50000.0, carryoverAmount = 20000.0
+                )
+            ),
+            existing
+        )
+        assertEquals(existing, migrated)
+        assertEquals(50000.0, migrated.filterNot { it.isCarryover }.sumOf { it.amount }, 0.001)
+        assertEquals(20000.0, migrated.filter { it.isCarryover }.sumOf { it.amount }, 0.001)
+    }
+
+    @Test
+    fun importsOnlyMissingPartOfLegacyPeriodAmounts() {
+        val existing = listOf(
+            IncomeEntry(
+                id = "partial-earned", title = "Зарплата", amount = 30000.0,
+                date = "2026-11-23", periodStart = "2026-11-09", periodEnd = "2026-11-23"
+            ),
+            IncomeEntry(
+                id = "partial-carryover", title = "Перенос средств", amount = 5000.0,
+                date = "2026-11-23", periodStart = "2026-11-09", periodEnd = "2026-11-23",
+                isCarryover = true
+            )
+        )
+        val migrated = IncomeLedgerMigration.migrate(
+            listOf(
+                LegacyPeriodIncome(
+                    start = "2026-11-09", end = "2026-11-23", amount = 70000.0,
+                    earnedAmount = 50000.0, carryoverAmount = 20000.0
+                )
+            ),
+            existing
+        )
+        assertEquals(50000.0, migrated.filterNot { it.isCarryover }.sumOf { it.amount }, 0.001)
+        assertEquals(20000.0, migrated.filter { it.isCarryover }.sumOf { it.amount }, 0.001)
+        assertEquals(4, migrated.size)
+    }
+
+    @Test
     fun leavesBaseBudgetIncomeOutsideTheLedger() {
         val migrated = IncomeLedgerMigration.migrate(
             listOf(LegacyPeriodIncome("2026-11-01", "2026-11-30", 0.0))
