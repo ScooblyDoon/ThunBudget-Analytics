@@ -2113,12 +2113,30 @@ private fun ThunBudgetApp() {
                                     Text("За 2 периода")
                                 }
                             }
-                            Text(
-                                if (analyticsIncomeMode == 0) "Доход за месяц: ${money(calculatedMonthlyIncome)}"
-                                else "Доход за 2 периода: ${money(analyticsCycleIncome.totalIncome)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            if (analyticsIncomeMode == 0) {
+                                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(
+                                        "Учтено за прошедшие дни: ${money(analyticsMonthIncomeEstimate.enteredIncome)}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        "Прогноз на оставшиеся дни: ${money(analyticsMonthIncomeEstimate.forecastIncome)}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        "Ожидаемый доход за месяц: ${money(calculatedMonthlyIncome)}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    "Доход за 2 периода: ${money(analyticsCycleIncome.totalIncome)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                     item { Text("Выбранный месяц: " + analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
