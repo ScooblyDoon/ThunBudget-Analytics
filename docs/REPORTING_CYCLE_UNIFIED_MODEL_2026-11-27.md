@@ -15,7 +15,7 @@ Calendar-month charts remain a separate view and must not feed the primary repor
 For a selected reporting month:
 
 1. Income = earned income in period 1 + earned income in period 2.
-2. Carryover is not new earned income and must not be counted twice.
+2. Carryover is not new earned income and must not be counted twice. Positive unused balance is available in the next period; a negative balance is preserved and reduces the next period's available budget.
 3. Category plan = period 1 income × its saved period 1 share + period 2 income × its saved period 2 share.
 4. Actual expense = cash expenses dated within the reporting-month range through today (or through the full end date for a completed cycle).
 5. The technical `Перенос средств` row is an internal period-closing allocation, not a cash expense and not a redistribution donor.
