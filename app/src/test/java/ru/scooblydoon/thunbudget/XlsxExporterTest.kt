@@ -171,13 +171,21 @@ class XlsxExporterTest {
             income = 100000.0,
             year = 2026,
             monthlyIncomes = mapOf("2026-11" to 100000.0),
-            asOf = LocalDate.parse("2026-11-27")
+            asOf = LocalDate.parse("2026-11-27"),
+            categoryPlans = mapOf(
+                "2026-11" to mapOf(
+                    "Продукты" to 15613.0,
+                    "Накопления" to 609.0,
+                    "Резервные средства" to 1721.0
+                )
+            )
         )
         val november = rows.drop(1).dropLast(1)
             .filter { it[0] == "2026-11" }
             .associateBy { it[1].toString() }
 
         assertEquals(setOf("Продукты", "Накопления", "Резервные средства"), november.keys)
+        assertEquals(15613.0, november["Продукты"]!![2] as Double, 0.001)
         assertEquals(1000.0, november["Продукты"]!![3] as Double, 0.001)
         assertEquals(10000.0, november["Накопления"]!![3] as Double, 0.001)
         assertEquals(3000.0, november["Резервные средства"]!![3] as Double, 0.001)
