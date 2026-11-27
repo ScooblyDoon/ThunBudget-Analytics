@@ -2462,7 +2462,7 @@ private fun ThunBudgetApp() {
                             spentByCategory = periodFacts,
                             budgetPerPercent = budgetPerPercent,
                             forecastSpentByCategory = projectedSpend,
-                            safetyBufferPercent = 2.0
+                            safetyBufferPercent = 0.0
                         )
                         if (redistribution.transfers.isEmpty()) {
                             Text("Превышений, которые можно покрыть за счёт категорий с достаточным свободным остатком, нет.")
@@ -2476,7 +2476,7 @@ private fun ThunBudgetApp() {
                                     )
                                 }
                                 Text(
-                                    "Сначала используются резервные средства и перенос средств. Затем учитывается прогноз по завершённым отчётным периодам: обычные категории сохраняют запас 2% дохода, а доноры выбираются по наибольшему прогнозному остатку.",
+                                    "Сначала используются свободные резервные средства. Затем доноры выбираются по прогнозному остатку: приоритет 20%, затем 15%, затем 10%; категории с остатком 5% и ниже не используются.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
