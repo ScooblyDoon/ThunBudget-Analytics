@@ -111,13 +111,19 @@ object XlsxExporter {
         for (month in 1..12) {
             val ym = YearMonth.of(year, month)
             val from = ym.atDay(1)
-            val to = ym.atEndOfMonth()
+            val today = LocalDate.now()
+            val currentMonth = YearMonth.from(today)
+            val actualEnd = when {
+                ym.isAfter(currentMonth) -> from.minusDays(1)
+                ym == currentMonth -> today
+                else -> ym.atEndOfMonth()
+            }
             val monthIncome = monthlyIncomes[ym.toString()]?.takeIf { it.isFinite() && it > 0.0 } ?: income
             cashCategories.forEach { category ->
-                val fact = expenses.asSequence()
+                val fact = if (actualEnd.isBefore(from)) 0.0 else expenses.asSequence()
                     .filter {
                         it.category == category.name &&
-                            it.date >= from.toString() && it.date <= to.toString()
+                            it.date >= from.toString() && it.date <= actualEnd.toString()
                     }
                     .sumOf { it.amount }
                 val plan = monthIncome * category.percent / 100.0
