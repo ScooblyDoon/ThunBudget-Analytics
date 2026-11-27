@@ -47,6 +47,13 @@ internal data class ReportingCycleExpenseRange(
         else (java.time.temporal.ChronoUnit.DAYS.between(start, visibleEnd) + 1L).toInt()
 }
 
+internal data class ReportingCycleBudgetIncome(
+    val firstPeriodBudget: Double,
+    val secondPeriodBudget: Double
+) {
+    val totalBudget: Double get() = firstPeriodBudget + secondPeriodBudget
+}
+
 
 internal data class ReportingCycleCategoryPlan(
     val averagePercentages: Map<String, Double>,
@@ -569,6 +576,46 @@ internal object AnalyticsBudgetCalculator {
         )
     }
 
+    /**
+     * Builds the spendable plan budget for both periods without double-counting
+     * money carried from period 1 into period 2. Positive carryover reduces the
+     * first period's remaining plan and increases the second period's plan;
+     * a negative balance reduces the second period's available budget.
+     */
+    fun reportingCycleBudgetIncome(
+        cycle: ReportingCycleIncomeEstimate,
+        periodIncomes: List<PeriodIncome>,
+        expenses: List<Expense>,
+        firstStartDay: Int = 9,
+        firstEndDay: Int = 23
+    ): ReportingCycleBudgetIncome {
+        fun rowsFor(start: java.time.LocalDate, end: java.time.LocalDate) =
+            periodIncomes.filter { it.start == start.toString() && it.end == end.toString() }
+
+        val firstRows = rowsFor(cycle.firstStart, cycle.firstEnd)
+        val secondRows = rowsFor(cycle.secondStart, cycle.secondEnd)
+        val firstRecordedAmount = firstRows.sumOf { it.amount.takeIf(Double::isFinite) ?: 0.0 }
+        val secondCarryoverRecorded = secondRows.sumOf {
+            it.carryoverAmount.takeIf { amount -> amount.isFinite() && amount > 0.0 } ?: 0.0
+        }
+        val carryoverAtFirstStart = carryoverBefore(
+            cycle.firstStart.toString(), periodIncomes, expenses, firstStartDay, firstEndDay
+        )
+        val carryoverAtSecondStart = carryoverBefore(
+            cycle.secondStart.toString(), periodIncomes, expenses, firstStartDay, firstEndDay
+        )
+        // If a transfer was explicitly recorded, the preceding period balance
+        // has already been reduced by its expense row; restore the paired
+        // carryover income here. If it was not explicitly transferred, use the
+        // signed unspent balance computed from the preceding period.
+        val carryoverIntoSecond = carryoverAtSecondStart + secondCarryoverRecorded
+        val firstBudget = (
+            firstRecordedAmount + carryoverAtFirstStart - carryoverIntoSecond.coerceAtLeast(0.0)
+        ).coerceAtLeast(0.0)
+        val secondBudget = (cycle.secondIncome + carryoverIntoSecond).coerceAtLeast(0.0)
+        return ReportingCycleBudgetIncome(firstBudget, secondBudget)
+    }
+
     fun monthlyIncome(
         fixedMonthlyIncome: Double,
         periodIncomes: List<PeriodIncome>,
@@ -623,7 +670,8 @@ internal object AnalyticsBudgetCalculator {
                     !date.isBefore(period.start) && !date.isAfter(period.end)
                 }.getOrDefault(false)
             }.sumOf { it.amount.coerceAtLeast(0.0) }
-            balance = (balance + amount - spent).coerceAtLeast(0.0)
+            // Keep signed balances: an overspend in one period reduces the next period's budget.
+            balance += amount - spent
         }
         return balance
     }
@@ -638,15 +686,14 @@ internal object AnalyticsBudgetCalculator {
         monthlyIncomeFallback: Double,
         categoryPercent: Double,
         start: java.time.LocalDate,
-        end: java.time.LocalDate
+        end: java.time.LocalDate,
+        periodIncomeIsDefined: Boolean = periodIncome > 0.0
     ): Double {
         if (!categoryPercent.isFinite() || categoryPercent < 0.0 || end.isBefore(start)) return 0.0
-        val validPeriodIncome = periodIncome.takeIf { it.isFinite() && it > 0.0 }
-        return if (validPeriodIncome != null) {
-            validPeriodIncome * categoryPercent / 100.0
-        } else {
-            proratedPeriodBudget(monthlyIncomeFallback, categoryPercent, start, end)
+        if (periodIncomeIsDefined && periodIncome.isFinite()) {
+            return periodIncome.coerceAtLeast(0.0) * categoryPercent / 100.0
         }
+        return proratedPeriodBudget(monthlyIncomeFallback, categoryPercent, start, end)
     }
 
     /**
