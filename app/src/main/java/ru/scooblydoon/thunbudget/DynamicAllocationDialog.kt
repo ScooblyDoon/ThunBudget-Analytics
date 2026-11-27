@@ -49,18 +49,19 @@ internal fun DynamicAllocationDialog(
     }
     val forecastPercentages = remember(forecast, pairedIncomePeriods, expenses, fallbackPeriodIncome) {
         regular.associate { category ->
-            val ratios = pairedIncomePeriods.map { (range, income) ->
+            val spendAndIncomeByPeriod = pairedIncomePeriods.map { (range, income) ->
                 val spent = expenses.asSequence()
                     .filter { it.category.equals(category.name, ignoreCase = true) }
                     .filter { it.date >= range.start.toString() && it.date <= range.end.toString() }
                     .sumOf { it.amount.coerceAtLeast(0.0) }
-                spent / income * 100.0
+                spent to income
             }
+            val weightedPercent = BudgetAllocationCalculator.weightedPercentOfIncome(spendAndIncomeByPeriod)
             val categoryForecast = forecast.categories.firstOrNull { it.category == category.name }
             val averagePercent = if (categoryForecast == null || !categoryForecast.hasHistory) {
                 null
             } else when {
-                ratios.isNotEmpty() -> ratios.average()
+                weightedPercent != null -> weightedPercent
                 fallbackPeriodIncome > 0.0 -> (categoryForecast.averagePeriodSpend / fallbackPeriodIncome) * 100.0
                 else -> null
             }
