@@ -91,7 +91,7 @@ internal fun FlexiblePeriodsScreen(
                 },
                 incomes = incomeEntries.mapNotNull { entry ->
                     runCatching {
-                        FlexiblePeriodIncome(entry.amount, LocalDate.parse(entry.date), entry.isCarryover)
+                        FlexiblePeriodIncome(entry.amount, LocalDate.parse(entry.date), entry.isCarryover, entry.isAdditional)
                     }.getOrNull()
                 },
                 monthlyIncomeFallback = monthlyIncome,
@@ -216,6 +216,13 @@ internal fun FlexiblePeriodsScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FlexibleMetric("Доход", report.budgetIncome, Modifier.weight(1f))
                             FlexibleMetric("План", report.plannedTotal, Modifier.weight(1f))
+                        }
+                        if (report.additionalIncome > 0.0) {
+                            Text(
+                                "В том числе дополнительный доход: ${formatFlexibleMoney(report.additionalIncome)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FlexibleMetric("Факт", report.actualTotal, Modifier.weight(1f))
@@ -556,7 +563,7 @@ internal fun buildFlexiblePeriodReport(
             runCatching { FlexiblePeriodExpense(row.id, row.title, row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
         },
         incomes = incomeEntries.mapNotNull { row ->
-            runCatching { FlexiblePeriodIncome(row.amount, LocalDate.parse(row.date), row.isCarryover) }.getOrNull()
+            runCatching { FlexiblePeriodIncome(row.amount, LocalDate.parse(row.date), row.isCarryover, row.isAdditional) }.getOrNull()
         },
         monthlyIncomeFallback = monthlyIncome,
         asOf = today,
