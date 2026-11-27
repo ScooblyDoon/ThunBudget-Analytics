@@ -90,9 +90,9 @@ The user confirms a proposed redistribution before the app changes category shar
 
 The dynamic share proposal uses an income-weighted ratio across completed reporting periods:
 
-`dynamicShare(C) = sum(actualSpend(P,C)) / sum(availableIncome(P)) × 100`
+`dynamicShare(C) = sum(actualSpend(P,C)) / (availableIncome(first sampled P) + sum(earnedIncome(later sampled P))) × 100`
 
-It does not use the unweighted average of per-period percentages, because that would give a low-income period the same influence as a high-income period. The proposal dialog is opened by the dynamic-allocation control; dismissing it leaves the current shares unchanged.
+Only the first sampled period contributes its opening available balance. Later periods contribute new earned income only, because carryover between them is the same money and must not inflate the denominator. The calculation does not use an unweighted average of period percentages. The proposal dialog is opened by the dynamic-allocation control; dismissing it leaves the current shares unchanged.
 
 ## 6. Secondary calendar and annual views
 
