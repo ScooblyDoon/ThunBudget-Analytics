@@ -138,7 +138,7 @@ object BudgetAllocationCalculator {
         val bufferAmount = safetyBufferPercent.coerceAtLeast(0.0) * budgetPerPercent
         val donors = budgetCategories.mapNotNull { (name, _) ->
             val cap = caps[name] ?: 0.0
-            val projectedSpend = projected[name] ?: actualSpent
+            val projectedSpend = projected[name] ?: (actual[name] ?: 0.0)
             val effectiveFreePercent = freePercent(cap, projectedSpend)
             val reserve = isReserve(name)
             val available = if (reserve) {
