@@ -930,7 +930,8 @@ private fun ThunBudgetApp() {
         monthlyIncomeFallback = calculatedMonthlyIncome,
         categoryPercent = 100.0,
         start = LocalDate.parse(periodStart),
-        end = LocalDate.parse(periodEnd)
+        end = LocalDate.parse(periodEnd),
+        periodIncomeIsDefined = periodIncomeRow != null || carryoverIncome != 0.0
     )
     val remaining=planned-totalSpent
     val dailyLimit = calculateDailyLimit(remaining, LocalDate.parse(periodStart), LocalDate.parse(periodEnd), today)
