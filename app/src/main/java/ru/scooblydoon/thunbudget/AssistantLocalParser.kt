@@ -14,7 +14,8 @@ object AssistantLocalParser {
         availableCategories: List<String>,
         today: LocalDate = LocalDate.now(),
         availablePeriods: List<FlexiblePeriodDefinition> = emptyList(),
-        memoryPeriodName: String? = null
+        memoryPeriodName: String? = null,
+        userCategoryAliases: Map<String, String> = emptyMap()
     ): AssistantCommand? {
         val normalized = phrase.lowercase(Locale("ru", "RU"))
             .replace('ё', 'е')
@@ -23,7 +24,7 @@ object AssistantLocalParser {
             .trim()
         if (normalized.isBlank()) return null
 
-        val category = resolveCategory(phrase, availableCategories)?.name
+        val category = resolveCategory(phrase, availableCategories, userCategoryAliases)?.name
         val mentionedPeriods = availablePeriods
             .sortedByDescending { it.name.length }
             .filter { period -> containsPeriodName(normalized, period.name) }
@@ -333,9 +334,16 @@ object AssistantLocalParser {
         return null
     }
 
-    private fun resolveCategory(phrase: String, availableCategories: List<String>): BudgetCategory? {
+    private fun resolveCategory(
+        phrase: String,
+        availableCategories: List<String>,
+        userAliases: Map<String, String>
+    ): BudgetCategory? {
         val categories = availableCategories.map { BudgetCategory(it, 0.0) }
         findVoiceCategory(phrase, categories)?.let { return it }
+        AssistantRecognitionDictionary.resolveCategory(phrase, availableCategories, userAliases)?.let {
+            return BudgetCategory(it, 0.0)
+        }
         val normalized = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
         val aliases = mapOf(
             "транспорт" to listOf("такси", "автобус", "метро", "проезд", "бензин", "заправка", "парковка", "электричка"),
