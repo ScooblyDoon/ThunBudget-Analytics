@@ -22,6 +22,8 @@ internal data class ThunBudgetThemePalette(
     val onSecondaryContainer: Color,
     val tertiary: Color,
     val onTertiary: Color,
+    val tertiaryContainer: Color,
+    val onTertiaryContainer: Color,
     val positive: Color,
     val warning: Color,
     val danger: Color,
@@ -34,7 +36,10 @@ internal data class ThunBudgetThemePalette(
     val budgetCardSurface: Color,
     val budgetCardContent: Color,
     val budgetCardProgress: Color,
-    val budgetCardProgressTrack: Color
+    val budgetCardProgressTrack: Color,
+    val categoryCardSurface: Color,
+    val progressTrack: Color,
+    val chartPrimary: Color
 )
 
 internal object ThunBudgetPalette {
@@ -53,10 +58,12 @@ internal object ThunBudgetPalette {
         onPrimaryContainer = Color(0xFF352940),
         secondary = Color(0xFF168974),
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFE2EEE8),
-        onSecondaryContainer = Color(0xFF23463B),
+        secondaryContainer = Color(0xFFE8DEF8),
+        onSecondaryContainer = Color(0xFF2F2540),
         tertiary = Color(0xFFDFA44B),
         onTertiary = Color(0xFF1F2937),
+        tertiaryContainer = Color(0xFFF4DCE8),
+        onTertiaryContainer = Color(0xFF4A263A),
         positive = Color(0xFF168974),
         warning = Color(0xFFDFA44B),
         danger = Color(0xFFD36F83),
@@ -69,7 +76,10 @@ internal object ThunBudgetPalette {
         budgetCardSurface = Color(0xFF6F5B89),
         budgetCardContent = Color(0xFFFFFFFF),
         budgetCardProgress = Color(0xFFF4EDF9),
-        budgetCardProgressTrack = Color(0xFFBDAEC9)
+        budgetCardProgressTrack = Color(0xFFBDAEC9),
+        categoryCardSurface = Color(0xFFF0EDF3),
+        progressTrack = Color(0xFFE2DCEA),
+        chartPrimary = Color(0xFF6F5B89)
     )
 
     val Dark = ThunBudgetThemePalette(
@@ -87,10 +97,12 @@ internal object ThunBudgetPalette {
         onPrimaryContainer = Color(0xFFF4EFF8),
         secondary = Color(0xFF6BA88E),
         onSecondary = Color(0xFF10251D),
-        secondaryContainer = Color(0xFF2E3A35),
-        onSecondaryContainer = Color(0xFFE7F1EB),
+        secondaryContainer = Color(0xFF3C344B),
+        onSecondaryContainer = Color(0xFFF4EFF8),
         tertiary = Color(0xFFDFA44B),
         onTertiary = Color(0xFF171821),
+        tertiaryContainer = Color(0xFF563746),
+        onTertiaryContainer = Color(0xFFF8EAF0),
         positive = Color(0xFF6BA88E),
         warning = Color(0xFFDFA44B),
         danger = Color(0xFFFF817A),
@@ -103,18 +115,21 @@ internal object ThunBudgetPalette {
         budgetCardSurface = Color(0xFF30283B),
         budgetCardContent = Color(0xFFF3F0F7),
         budgetCardProgress = Color(0xFFB9A4D5),
-        budgetCardProgressTrack = Color(0xFF675B78)
+        budgetCardProgressTrack = Color(0xFF675B78),
+        categoryCardSurface = Color(0xFF36343C),
+        progressTrack = Color(0xFF383548),
+        chartPrimary = Color(0xFFA58EC6)
     )
 
-    /** Muted but distinguishable category colors; violet is the primary chart accent. */
+    /** Established multi-color category chart palette; controls remain violet, chart series stay distinct. */
     val ChartSeries = listOf(
-        Color(0xFFA58EC6),
-        Color(0xFF7F9DB8),
-        Color(0xFF70A58F),
-        Color(0xFFD6A55F),
-        Color(0xFFCE7D8F),
-        Color(0xFF9585C3),
-        Color(0xFFA3AA75),
-        Color(0xFF8791A7)
+        Color(0xFF315CBA),
+        Color(0xFF168A72),
+        Color(0xFFF2A541),
+        Color(0xFF9A6AD6),
+        Color(0xFFE16C70),
+        Color(0xFF5C9DB8),
+        Color(0xFF8B9A45),
+        Color(0xFF7A8290)
     )
 }
