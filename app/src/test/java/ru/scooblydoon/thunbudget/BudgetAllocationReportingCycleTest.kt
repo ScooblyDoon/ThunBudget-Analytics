@@ -137,7 +137,7 @@ class BudgetAllocationReportingCycleTest {
         // The 7,000 ₽ transport deficit is fully covered without consuming the buffer.
         assertEquals(7000.0, result.totalTransferred, 0.001)
         assertEquals(0.0, result.totalUncovered, 0.001)
-        assertEquals(3000.0, result.transfers.sumOf { it.amount }, 0.001)
+        assertEquals(listOf(5000.0, 2000.0), result.transfers.map { it.amount }.sortedDescending())
     }
 
     @Test
