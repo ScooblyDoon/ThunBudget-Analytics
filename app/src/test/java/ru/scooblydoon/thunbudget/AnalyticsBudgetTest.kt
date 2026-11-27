@@ -652,8 +652,9 @@ class AnalyticsBudgetTest {
             )
         )
         val expenses = listOf(
-            Expense(1L, "Покупки", "Продукты", 30000.0, "2026-11-20"),
-            Expense(2L, "Перенос остатка", "Перенос средств", 10000.0, "2026-11-23")
+            // 5,000 ₽ remains in the source period, and the same 5,000 ₽ is
+            // already explicitly recorded as carryover in the receiving period.
+            Expense(1L, "Покупки", "Продукты", 35000.0, "2026-11-20")
         )
         val available = AnalyticsBudgetCalculator.reportingPeriodAvailableIncome(
             periods, java.time.LocalDate.parse("2026-11-24"), java.time.LocalDate.parse("2026-12-08"),
