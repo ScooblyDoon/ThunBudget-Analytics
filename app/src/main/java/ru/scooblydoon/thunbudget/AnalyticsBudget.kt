@@ -209,6 +209,18 @@ internal object ReportingPeriodCategoryPlanCalculator {
 }
 
 internal object AnalyticsBudgetCalculator {
+    /**
+     * Shared expense cutoff for calendar-month actuals. The current month is
+     * counted only through today; completed months include the full month.
+     */
+    fun calendarMonthExpenseEnd(
+        month: java.time.YearMonth,
+        today: java.time.LocalDate
+    ): java.time.LocalDate =
+        if (month == java.time.YearMonth.from(today)) minOf(month.atEndOfMonth(), today)
+        else month.atEndOfMonth()
+
+
     private data class IncomePeriod(
         val start: java.time.LocalDate,
         val end: java.time.LocalDate,

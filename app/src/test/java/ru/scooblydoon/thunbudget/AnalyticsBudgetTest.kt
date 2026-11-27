@@ -377,6 +377,18 @@ class AnalyticsBudgetTest {
         assertEquals(0.0, result, 0.001)
     }
 
+    @Test fun calendarMonthExpenseEndMatchesAnalysisWindow() {
+        val today = java.time.LocalDate.of(2026, 11, 27)
+        assertEquals(
+            java.time.LocalDate.of(2026, 11, 27),
+            AnalyticsBudgetCalculator.calendarMonthExpenseEnd(YearMonth.of(2026, 11), today)
+        )
+        assertEquals(
+            java.time.LocalDate.of(2026, 10, 31),
+            AnalyticsBudgetCalculator.calendarMonthExpenseEnd(YearMonth.of(2026, 10), today)
+        )
+    }
+
     @Test fun metricsShowFreePercentAndRequiredIncrease() {
         val free = AnalyticsBudgetCalculator.metrics(10000.0, 7500.0)
         assertEquals(25.0, free.remainingPercent!!, 0.001)

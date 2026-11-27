@@ -792,6 +792,15 @@ private fun ThunBudgetApp() {
     var showCategoryCharts by rememberUiExpanded(context, "chart_categories")
     var showAnnualCategoryCharts by rememberUiExpanded(context, "annual_category_charts")
     var selectedChartCategoryNames by rememberSaveable { mutableStateOf("") }
+    var chartsPeriodType by rememberSaveable {
+        mutableIntStateOf(if (LocalDate.now().dayOfMonth in firstPeriodStartDay..firstPeriodEndDay) 0 else 1)
+    }
+    var selectedPeriodBreakdownCategoryNames by rememberSaveable { mutableStateOf("") }
+    var selectedMonthBreakdownCategoryNames by rememberSaveable { mutableStateOf("") }
+    var selectedAnnualBreakdownCategoryNames by rememberSaveable { mutableStateOf("") }
+    var showPeriodBreakdown by rememberUiExpanded(context, "chart_period_breakdown", true)
+    var showAnnualBreakdown by rememberUiExpanded(context, "chart_annual_breakdown", true)
+
     var showHistoryFilters by rememberUiExpanded(context, "history_filters")
     var quickActionsExpanded by rememberUiExpanded(context, "quick_actions_panel", true)
     val today = LocalDate.now()
@@ -1989,14 +1998,14 @@ private fun ThunBudgetApp() {
                             TextButton(onClick={if(analyticsMonth<YearMonth.now()) analyticsMonth=analyticsMonth.plusMonths(1)}) { Text("›") }
                         }
                         val from=analyticsMonth.atDay(1).toString()
-                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
+                        val to=AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today).toString()
                         val monthTotal=expenses.filter { it.date>=from && it.date<=to }.sumOf { it.amount }
                         MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
                     }
                     item {
                         val previousMonth = analyticsMonth.minusMonths(1)
                         val currentFrom = analyticsMonth.atDay(1)
-                        val currentTo = minOf(analyticsMonth.atEndOfMonth(), if (analyticsMonth == YearMonth.now()) today else analyticsMonth.atEndOfMonth())
+                        val currentTo = AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today)
                         val previousTo = if (analyticsMonth == YearMonth.now()) {
                             previousMonth.atDay(today.dayOfMonth.coerceAtMost(previousMonth.lengthOfMonth()))
                         } else previousMonth.atEndOfMonth()
@@ -2030,7 +2039,7 @@ private fun ThunBudgetApp() {
                     item { TextButton(onClick={showMonthCategories=!showMonthCategories; persistUiExpanded(context,"month_categories",showMonthCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showMonthCategories) items(categories.filterNot { it.name.equals("Перенос средств", true) },key={ "month-"+it.name }) { cat ->
                         val from=analyticsMonth.atDay(1).toString()
-                        val to=minOf(analyticsMonth.atEndOfMonth(),if(analyticsMonth==YearMonth.now()) today else analyticsMonth.atEndOfMonth()).toString()
+                        val to=AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today).toString()
                         val fact=expenses.filter { it.category==cat.name && it.date>=from && it.date<=to }.sumOf { it.amount }
                         val plan=analyticsMonthPlanAmounts[cat.name] ?: 0.0
                         Card { Column(Modifier.padding(14.dp)) {
@@ -2128,17 +2137,37 @@ private fun ThunBudgetApp() {
                 }
                 2 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     ChartsScreen(
-                        expenses=expenses,categories=categories,month=analyticsMonth,onMonthChange={analyticsMonth=it},
-                        showPie=showPieChart,onShowPieChange={showPieChart=it; persistUiExpanded(context,"chart_pie",it)},
-                        selectedChartCategoryNames=selectedChartCategoryNames,onSelectedChartCategoryNamesChange={selectedChartCategoryNames=it},
-                        showCategoryCharts=showCategoryCharts,onShowCategoryChartsChange={showCategoryCharts=it; persistUiExpanded(context,"chart_categories",it)},
-                        fallbackIncome=income,periodIncomes=periodIncomes,
-                        firstPeriodStartDay=firstPeriodStartDay,firstPeriodEndDay=firstPeriodEndDay,
-                        annualYear=annualChartYear,onAnnualYearChange={annualChartYear=it},
-                        selectedAnnualCategoryNames=selectedAnnualChartCategoryNames,
-                        onSelectedAnnualCategoryNamesChange={selectedAnnualChartCategoryNames=it},
-                        showAnnualCategoryCharts=showAnnualCategoryCharts,
-                        onShowAnnualCategoryChartsChange={showAnnualCategoryCharts=it; persistUiExpanded(context,"annual_category_charts",it)}
+                        expenses = expenses,
+                        categories = categories,
+                        month = analyticsMonth,
+                        onMonthChange = { analyticsMonth = it },
+                        periodType = chartsPeriodType,
+                        onPeriodTypeChange = { chartsPeriodType = it },
+                        firstPeriodStartDay = firstPeriodStartDay,
+                        firstPeriodEndDay = firstPeriodEndDay,
+                        selectedPeriodBreakdownCategoryNames = selectedPeriodBreakdownCategoryNames,
+                        onSelectedPeriodBreakdownCategoryNamesChange = { selectedPeriodBreakdownCategoryNames = it },
+                        showPeriodBreakdown = showPeriodBreakdown,
+                        onShowPeriodBreakdownChange = { showPeriodBreakdown = it; persistUiExpanded(context, "chart_period_breakdown", it) },
+                        selectedMonthBreakdownCategoryNames = selectedMonthBreakdownCategoryNames,
+                        onSelectedMonthBreakdownCategoryNamesChange = { selectedMonthBreakdownCategoryNames = it },
+                        showPie = showPieChart,
+                        onShowPieChange = { showPieChart = it; persistUiExpanded(context, "chart_pie", it) },
+                        selectedChartCategoryNames = selectedChartCategoryNames,
+                        onSelectedChartCategoryNamesChange = { selectedChartCategoryNames = it },
+                        showCategoryCharts = showCategoryCharts,
+                        onShowCategoryChartsChange = { showCategoryCharts = it; persistUiExpanded(context, "chart_categories", it) },
+                        monthlyPlanAmounts = analyticsMonthPlanAmounts,
+                        annualYear = annualChartYear,
+                        onAnnualYearChange = { annualChartYear = it },
+                        selectedAnnualCategoryNames = selectedAnnualChartCategoryNames,
+                        onSelectedAnnualCategoryNamesChange = { selectedAnnualChartCategoryNames = it },
+                        selectedAnnualBreakdownCategoryNames = selectedAnnualBreakdownCategoryNames,
+                        onSelectedAnnualBreakdownCategoryNamesChange = { selectedAnnualBreakdownCategoryNames = it },
+                        showAnnualBreakdown = showAnnualBreakdown,
+                        onShowAnnualBreakdownChange = { showAnnualBreakdown = it; persistUiExpanded(context, "chart_annual_breakdown", it) },
+                        showAnnualCategoryCharts = showAnnualCategoryCharts,
+                        onShowAnnualCategoryChartsChange = { showAnnualCategoryCharts = it; persistUiExpanded(context, "annual_category_charts", it) }
                     )
                 }
                 3 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
@@ -3092,138 +3121,330 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
     })
 }
 
+
 @Composable
 private fun ChartsScreen(
-    expenses:List<Expense>,categories:List<BudgetCategory>,month:YearMonth,onMonthChange:(YearMonth)->Unit,
-    showPie:Boolean,onShowPieChange:(Boolean)->Unit,
-    selectedChartCategoryNames:String,onSelectedChartCategoryNamesChange:(String)->Unit,
-    showCategoryCharts:Boolean,onShowCategoryChartsChange:(Boolean)->Unit,
-    fallbackIncome:Double,periodIncomes:List<PeriodIncome>,
-    firstPeriodStartDay:Int,firstPeriodEndDay:Int,
-    annualYear:Int,onAnnualYearChange:(Int)->Unit,
-    selectedAnnualCategoryNames:String,onSelectedAnnualCategoryNamesChange:(String)->Unit,
-    showAnnualCategoryCharts:Boolean,onShowAnnualCategoryChartsChange:(Boolean)->Unit
+    expenses: List<Expense>,
+    categories: List<BudgetCategory>,
+    month: YearMonth,
+    onMonthChange: (YearMonth) -> Unit,
+    periodType: Int,
+    onPeriodTypeChange: (Int) -> Unit,
+    firstPeriodStartDay: Int,
+    firstPeriodEndDay: Int,
+    selectedPeriodBreakdownCategoryNames: String,
+    onSelectedPeriodBreakdownCategoryNamesChange: (String) -> Unit,
+    showPeriodBreakdown: Boolean,
+    onShowPeriodBreakdownChange: (Boolean) -> Unit,
+    selectedMonthBreakdownCategoryNames: String,
+    onSelectedMonthBreakdownCategoryNamesChange: (String) -> Unit,
+    showPie: Boolean,
+    onShowPieChange: (Boolean) -> Unit,
+    selectedChartCategoryNames: String,
+    onSelectedChartCategoryNamesChange: (String) -> Unit,
+    showCategoryCharts: Boolean,
+    onShowCategoryChartsChange: (Boolean) -> Unit,
+    monthlyPlanAmounts: Map<String, Double>,
+    annualYear: Int,
+    onAnnualYearChange: (Int) -> Unit,
+    selectedAnnualCategoryNames: String,
+    onSelectedAnnualCategoryNamesChange: (String) -> Unit,
+    selectedAnnualBreakdownCategoryNames: String,
+    onSelectedAnnualBreakdownCategoryNamesChange: (String) -> Unit,
+    showAnnualBreakdown: Boolean,
+    onShowAnnualBreakdownChange: (Boolean) -> Unit,
+    showAnnualCategoryCharts: Boolean,
+    onShowAnnualCategoryChartsChange: (Boolean) -> Unit
 ) {
-    val selectedChartCategories=selectedChartCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
-    val from=month.atDay(1).toString(); val to=month.atEndOfMonth().toString()
-    val monthExpenses=expenses.filter { it.date>=from && it.date<=to }
-    val total=monthExpenses.sumOf { it.amount }
-    val monthIncome=AnalyticsBudgetCalculator.monthlyIncome(
-        fallbackIncome, periodIncomes, month, true,
-        firstStartDay = firstPeriodStartDay,
-        firstEndDay = firstPeriodEndDay
-    ).let { if(it>0) it else fallbackIncome }
-    val palette=listOf(Color(0xFF315CBA),Color(0xFF168A72),Color(0xFFF2A541),Color(0xFF9A6AD6),Color(0xFFE16C70),Color(0xFF5C9DB8),Color(0xFF8B9A45),Color(0xFF7A8290))
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
-        item { Text("Графики",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
-        item { Row(verticalAlignment=Alignment.CenterVertically) {
-            TextButton(onClick={onMonthChange(month.minusMonths(1))}) { Text("‹") }
-            Text(month.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-            TextButton(onClick={if(month<YearMonth.now()) onMonthChange(month.plusMonths(1))}) { Text("›") }
-        } }
-        item { MetricCard("Фактические расходы за месяц",money(total),Modifier.fillMaxWidth()) }
+    val today = LocalDate.now()
+    val monthStart = month.atDay(1)
+    val monthEnd = AnalyticsBudgetCalculator.calendarMonthExpenseEnd(month, today)
+    val monthExpenses = if (monthEnd.isBefore(monthStart)) emptyList() else expenses.filter {
+        it.date >= monthStart.toString() && it.date <= monthEnd.toString()
+    }
+    val monthTotal = monthExpenses.sumOf { it.amount }
+
+    val proposal = ReportingPeriodCalculator.propose(month, firstPeriodStartDay, firstPeriodEndDay)
+    val selectedPeriod = if (periodType == 0) proposal.first else proposal.second
+    val periodVisibleEnd = minOf(selectedPeriod.end, today)
+    val periodExpenses = if (selectedPeriod.start.isAfter(today) || periodVisibleEnd.isBefore(selectedPeriod.start)) {
+        emptyList()
+    } else {
+        expenses.filter { it.date >= selectedPeriod.start.toString() && it.date <= periodVisibleEnd.toString() }
+    }
+    val periodTotal = periodExpenses.sumOf { it.amount }
+    val selectedDailyCategories = selectedChartCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
+    val monthDaysVisible = if (monthEnd.isBefore(monthStart)) 0 else monthEnd.dayOfMonth
+
+    LazyColumn(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        item { Text("Графики", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+
+        // 1. Reporting periods.
         item {
-            Row(verticalAlignment=Alignment.CenterVertically) {
-                Text("Графики по категориям",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                TextButton(onClick={onShowCategoryChartsChange(!showCategoryCharts)}) {
-                    Text(if(showCategoryCharts) "Свернуть ▲" else "Развернуть ▼")
-                }
-            }
-        }
-        if(showCategoryCharts) {
-            item {
-                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Text("Выберите категории, чтобы добавить или убрать их графики.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    categories.chunked(2).forEach { rowCategories ->
-                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                            rowCategories.forEach { category ->
-                                FilterChip(selected=selectedChartCategories.contains(category.name),onClick={
-                                    val updated=if(selectedChartCategories.contains(category.name)) selectedChartCategories-category.name else selectedChartCategories+category.name
-                                    onSelectedChartCategoryNamesChange(updated.joinToString("|"))
-                                },label={Text(category.name)})
-                            }
-                        }
-                    }
-                }
-            }
-            items(selectedChartCategories.filter { name -> categories.any { it.name==name } }.toList(),key={"category-daily-"+it}) { categoryName ->
-            val dailyValues=(1..month.lengthOfMonth()).map { day ->
-                val date=month.atDay(day).toString()
-                monthExpenses.filter { it.category==categoryName && it.date==date }.sumOf { it.amount }
-            }
-            val maxValue=dailyValues.maxOrNull()?.takeIf { it>0.0 } ?: 1.0
-            Card {
-                Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment=Alignment.CenterVertically) {
-                        Text(categoryName,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                        Text(money(dailyValues.sum()),fontWeight=FontWeight.Bold)
-                        TextButton(onClick={onSelectedChartCategoryNamesChange((selectedChartCategories-categoryName).joinToString("|"))}) { Text("Убрать") }
-                    }
-                    val dayTicks=listOf(1,5,10,15,20,25,month.lengthOfMonth()).distinct().filter { it<=month.lengthOfMonth() }
-                    ScaledBarChart(values=dailyValues,xLabels=dayTicks.map { it.toString() },color=Color(0xFF6556D9),height=112.dp)
-                    val category = categories.firstOrNull { it.name == categoryName }
-                    val categoryPlan = category?.let { plannedForPeriod(monthIncome, it.percent, from, to) } ?: 0.0
-                    val categoryMetrics = AnalyticsBudgetCalculator.metrics(categoryPlan, dailyValues.sum())
-                    Text("План: ${money(categoryPlan)} · Факт: ${money(dailyValues.sum())}", style = MaterialTheme.typography.bodySmall)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Расходы за отчётный период", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { onMonthChange(month.minusMonths(1)) }) { Text("‹") }
                     Text(
-                        "Свободный остаток: ${categoryMetrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${categoryMetrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if ((categoryMetrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                        month.format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru", "RU"))),
+                        modifier = Modifier.weight(1f),
+                        fontWeight = FontWeight.SemiBold
                     )
+                    TextButton(onClick = { if (month < YearMonth.now()) onMonthChange(month.plusMonths(1)) }) { Text("›") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = periodType == 0, onClick = { onPeriodTypeChange(0) }, label = { Text("9–23") })
+                    FilterChip(selected = periodType == 1, onClick = { onPeriodTypeChange(1) }, label = { Text("24–8") })
+                }
+                Text(
+                    "${selectedPeriod.start.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${selectedPeriod.end.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MetricCard("Фактические расходы за период", money(periodTotal), Modifier.fillMaxWidth())
+            }
+        }
+        item {
+            CategoryDonutBreakdown(
+                title = "Структура расходов за период",
+                categories = categories,
+                amounts = categories.associate { category ->
+                    category.name to periodExpenses.filter { it.category.equals(category.name, ignoreCase = true) }.sumOf { it.amount }
+                },
+                selectedCategoryNames = selectedPeriodBreakdownCategoryNames,
+                onSelectedCategoryNamesChange = onSelectedPeriodBreakdownCategoryNamesChange,
+                expanded = showPeriodBreakdown,
+                onExpandedChange = onShowPeriodBreakdownChange,
+                emptyText = "За выбранный отчётный период расходов нет."
+            )
+        }
+
+        // 2. Calendar month: actuals share the exact date window with the Analysis tab.
+        item {
+            Divider()
+            Text("Расходы за месяц", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                month.format(DateTimeFormatter.ofPattern("LLLL yyyy", Locale("ru", "RU"))),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            MetricCard("Фактические расходы за месяц", money(monthTotal), Modifier.fillMaxWidth())
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Графики по категориям", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onShowCategoryChartsChange(!showCategoryCharts) }) {
+                    Text(if (showCategoryCharts) "Свернуть ▲" else "Развернуть ▼")
                 }
             }
         }
-        }
-        item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Структура расходов",fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={onShowPieChange(!showPie)}) { Text(if(showPie) "Скрыть" else "Показать") } } }
-        if(showPie) {
+        if (showCategoryCharts) {
             item {
-                val values=categories.map { cat -> cat to monthExpenses.filter { it.category==cat.name }.sumOf { it.amount } }.filter { it.second>0 }
-                Card { Column(Modifier.fillMaxWidth().padding(16.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                    if(values.isEmpty()) Text("За выбранный месяц расходов пока нет.") else {
-                        BoxWithConstraints(contentAlignment=Alignment.Center) {
-                            val chartSize = minOf(210.dp, maxWidth * 0.68f)
-                            Canvas(Modifier.size(chartSize)) {
-                                var angle=-90f
-                                val sum=values.sumOf { it.second }.toFloat().coerceAtLeast(1f)
-                                val strokeWidth=size.minDimension*0.22f
-                                val inset=strokeWidth/2f
-                                val arcSize=androidx.compose.ui.geometry.Size(size.width-strokeWidth,size.height-strokeWidth)
-                                values.forEachIndexed { index,pair ->                                    val sweep=pair.second.toFloat()/sum*360f
-                                    drawArc(color=palette[index%palette.size],startAngle=angle,sweepAngle=sweep,useCenter=false,topLeft=androidx.compose.ui.geometry.Offset(inset,inset),size=arcSize,style=Stroke(width=strokeWidth))
-                                    angle+=sweep
-                                }
-                            }
-                            Column(horizontalAlignment=Alignment.CenterHorizontally) { Text(money(total),fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleLarge); Text("Всего",style=MaterialTheme.typography.labelSmall) }
-                        }
-                        values.forEachIndexed { index,pair ->
-                            Row(verticalAlignment=Alignment.CenterVertically,modifier=Modifier.fillMaxWidth()) {
-                                Box(Modifier.size(10.dp).background(palette[index%palette.size],RoundedCornerShape(3.dp)))
-                                Spacer(Modifier.width(8.dp))
-                                Text(pair.first.name,modifier=Modifier.weight(1f),maxLines=2)
-                                Text(
-                                    "${money(pair.second)} · ${if(total>0)(pair.second/total*100).toInt() else 0}%",
-                                    fontWeight=FontWeight.SemiBold,
-                                    style=MaterialTheme.typography.labelMedium
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Выберите категории, чтобы добавить или убрать их графики.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    categories.chunked(2).forEach { group ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            group.forEach { category ->
+                                FilterChip(
+                                    selected = selectedDailyCategories.contains(category.name),
+                                    onClick = {
+                                        val next = if (selectedDailyCategories.contains(category.name)) selectedDailyCategories - category.name
+                                            else selectedDailyCategories + category.name
+                                        onSelectedChartCategoryNamesChange(next.joinToString("|"))
+                                    },
+                                    label = { Text(category.name) }
                                 )
                             }
                         }
                     }
-                } }
+                }
+            }
+            items(
+                selectedDailyCategories.filter { name -> categories.any { it.name == name } }.toList(),
+                key = { "category-daily-" + it }
+            ) { categoryName ->
+                val dailyValues = (1..monthDaysVisible).map { day ->
+                    val date = month.atDay(day).toString()
+                    monthExpenses.filter { it.category.equals(categoryName, true) && it.date == date }.sumOf { it.amount }
+                }
+                val categoryPlan = monthlyPlanAmounts[categoryName] ?: 0.0
+                val fact = dailyValues.sum()
+                val metrics = AnalyticsBudgetCalculator.metrics(categoryPlan, fact)
+                Card {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(categoryName, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                            Text(money(fact), fontWeight = FontWeight.Bold)
+                            TextButton(onClick = { onSelectedChartCategoryNamesChange((selectedDailyCategories - categoryName).joinToString("|")) }) { Text("Убрать") }
+                        }
+                        if (dailyValues.isEmpty()) {
+                            Text("За выбранный месяц расходов пока нет.", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            val ticks = listOf(1, 5, 10, 15, 20, 25, monthDaysVisible).distinct().filter { it in 1..monthDaysVisible }
+                            ScaledBarChart(values = dailyValues, xLabels = ticks.map { it.toString() }, color = Color(0xFF6556D9), height = 112.dp)
+                        }
+                        Text("План: ${money(categoryPlan)} · Факт: ${money(fact)}", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "Свободный остаток: ${metrics.remainingPercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}% · Повышение бюджета: ${metrics.requiredIncreasePercent?.let { String.format(Locale("ru", "RU"), "%.1f", it) } ?: "—"}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if ((metrics.remainingPercent ?: 0.0) < 0.0) Color(0xFFC74444) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
         item {
+            CategoryDonutBreakdown(
+                title = "Структура расходов за месяц",
+                categories = categories,
+                amounts = categories.associate { category ->
+                    category.name to monthExpenses.filter { it.category.equals(category.name, ignoreCase = true) }.sumOf { it.amount }
+                },
+                selectedCategoryNames = selectedMonthBreakdownCategoryNames,
+                onSelectedCategoryNamesChange = onSelectedMonthBreakdownCategoryNamesChange,
+                expanded = showPie,
+                onExpandedChange = onShowPieChange,
+                emptyText = "За выбранный месяц расходов пока нет."
+            )
+        }
+
+        // 3. Annual charts are the final section.
+        item {
             AnnualChartsSection(
-                expenses=expenses,categories=categories,year=annualYear,onYearChange=onAnnualYearChange,
-                selectedCategoryNames=selectedAnnualCategoryNames,
-                onSelectedCategoryNamesChange=onSelectedAnnualCategoryNamesChange,
-                showCategoryCharts=showAnnualCategoryCharts,
-                onShowCategoryChartsChange=onShowAnnualCategoryChartsChange
+                expenses = expenses,
+                categories = categories,
+                year = annualYear,
+                onYearChange = onAnnualYearChange,
+                selectedCategoryNames = selectedAnnualCategoryNames,
+                onSelectedCategoryNamesChange = onSelectedAnnualCategoryNamesChange,
+                selectedBreakdownCategoryNames = selectedAnnualBreakdownCategoryNames,
+                onSelectedBreakdownCategoryNamesChange = onSelectedAnnualBreakdownCategoryNamesChange,
+                showBreakdown = showAnnualBreakdown,
+                onShowBreakdownChange = onShowAnnualBreakdownChange,
+                showCategoryCharts = showAnnualCategoryCharts,
+                onShowCategoryChartsChange = onShowAnnualCategoryChartsChange
             )
         }
     }
 }
 
+@Composable
+private fun CategoryDonutBreakdown(
+    title: String,
+    categories: List<BudgetCategory>,
+    amounts: Map<String, Double>,
+    selectedCategoryNames: String,
+    onSelectedCategoryNamesChange: (String) -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    emptyText: String
+) {
+    val palette = listOf(
+        Color(0xFF315CBA), Color(0xFF168A72), Color(0xFFF2A541), Color(0xFF9A6AD6),
+        Color(0xFFE16C70), Color(0xFF5C9DB8), Color(0xFF8B9A45), Color(0xFF7A8290)
+    )
+    val available = categories
+    val selected = when {
+        selectedCategoryNames == "__NONE__" -> emptySet()
+        selectedCategoryNames.isBlank() -> available.map { it.name }.toSet()
+        else -> selectedCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
+    }
+    val values = available.filter { it.name in selected }.mapNotNull { category ->
+        val amount = (amounts[category.name] ?: 0.0).coerceAtLeast(0.0)
+        if (amount > 0.0) category to amount else null
+    }
+    val total = values.sumOf { it.second }
 
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            TextButton(onClick = { onExpandedChange(!expanded) }) {
+                Text(if (expanded) "Скрыть ▲" else "Показать ▼")
+            }
+        }
+        if (expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Выберите категории, которые должны отображаться на диаграмме.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                available.chunked(2).forEach { group ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        group.forEach { category ->
+                            FilterChip(
+                                selected = category.name in selected,
+                                onClick = {
+                                    val next = if (category.name in selected) selected - category.name else selected + category.name
+                                    val encoded = when {
+                                        next.isEmpty() -> "__NONE__"
+                                        next.size == available.size -> ""
+                                        else -> next.joinToString("|")
+                                    }
+                                    onSelectedCategoryNamesChange(encoded)
+                                },
+                                label = { Text(category.name) }
+                            )
+                        }
+                    }
+                }
+            }
+            Card {
+                Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (values.isEmpty() || total <= 0.0) {
+                        Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        BoxWithConstraints(contentAlignment = Alignment.Center) {
+                            val chartSize = minOf(210.dp, maxWidth * 0.68f)
+                            Canvas(Modifier.size(chartSize)) {
+                                var angle = -90f
+                                val sum = total.toFloat().coerceAtLeast(1f)
+                                val strokeWidth = size.minDimension * 0.22f
+                                val inset = strokeWidth / 2f
+                                val arcSize = androidx.compose.ui.geometry.Size(size.width - strokeWidth, size.height - strokeWidth)
+                                values.forEach { pair ->
+                                    val categoryIndex = available.indexOfFirst { it.name == pair.first.name }.coerceAtLeast(0)
+                                    val sweep = pair.second.toFloat() / sum * 360f
+                                    drawArc(
+                                        color = palette[categoryIndex % palette.size],
+                                        startAngle = angle,
+                                        sweepAngle = sweep,
+                                        useCenter = false,
+                                        topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                                        size = arcSize,
+                                        style = Stroke(width = strokeWidth)
+                                    )
+                                    angle += sweep
+                                }
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(money(total), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                Text("Всего", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        values.forEach { pair ->
+                            val categoryIndex = available.indexOfFirst { it.name == pair.first.name }.coerceAtLeast(0)
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Box(Modifier.size(10.dp).background(palette[categoryIndex % palette.size], RoundedCornerShape(3.dp)))
+                                Spacer(Modifier.width(8.dp))
+                                Text(pair.first.name, modifier = Modifier.weight(1f), maxLines = 2)
+                                Text(
+                                    "${money(pair.second)} · ${(pair.second / total * 100.0).toInt()}%",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 @Composable
 private fun ScaledBarChart(values:List<Double>,xLabels:List<String>,color:Color,height:androidx.compose.ui.unit.Dp) {
     val maxValue=values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
@@ -3262,11 +3483,20 @@ private fun AnnualChartsSection(
     onYearChange:(Int)->Unit,
     selectedCategoryNames:String,
     onSelectedCategoryNamesChange:(String)->Unit,
+    selectedBreakdownCategoryNames:String,
+    onSelectedBreakdownCategoryNamesChange:(String)->Unit,
+    showBreakdown:Boolean,
+    onShowBreakdownChange:(Boolean)->Unit,
     showCategoryCharts:Boolean,
     onShowCategoryChartsChange:(Boolean)->Unit
 ) {
     val selected=selectedCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
-    val yearExpenses=expenses.filter { it.date.startsWith("$year-") }
+    val today = LocalDate.now()
+    val yearStart = LocalDate.of(year, 1, 1)
+    val yearEnd = if (year == today.year) today else YearMonth.of(year, 12).atEndOfMonth()
+    val yearExpenses = if (yearEnd.isBefore(yearStart)) emptyList() else expenses.filter {
+        it.date >= yearStart.toString() && it.date <= yearEnd.toString()
+    }
     val totals=(1..12).map { month ->
         yearExpenses.filter { runCatching { LocalDate.parse(it.date).monthValue==month }.getOrDefault(false) }.sumOf { it.amount }
     }
@@ -3281,7 +3511,19 @@ private fun AnnualChartsSection(
             Text(year.toString(),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.titleMedium)
             TextButton(onClick={if(year<LocalDate.now().year) onYearChange(year+1)}) { Text("›") }
         }
-        MetricCard("Расходы за год",money(total),Modifier.fillMaxWidth())
+        MetricCard("Фактические расходы за год",money(total),Modifier.fillMaxWidth())
+        CategoryDonutBreakdown(
+            title = "Структура расходов за год",
+            categories = categories,
+            amounts = categories.associate { category ->
+                category.name to yearExpenses.filter { it.category.equals(category.name, ignoreCase = true) }.sumOf { it.amount }
+            },
+            selectedCategoryNames = selectedBreakdownCategoryNames,
+            onSelectedCategoryNamesChange = onSelectedBreakdownCategoryNamesChange,
+            expanded = showBreakdown,
+            onExpandedChange = onShowBreakdownChange,
+            emptyText = "За выбранный год расходов пока нет."
+        )
         Card { Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("Расходы по месяцам",fontWeight=FontWeight.Bold)
             if(total==0.0) Text("За этот год расходов пока нет.",color=MaterialTheme.colorScheme.onSurfaceVariant)
