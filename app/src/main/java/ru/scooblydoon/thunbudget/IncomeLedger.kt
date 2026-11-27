@@ -248,7 +248,12 @@ class IncomeLedgerRepository(private val preferences: SharedPreferences) {
                 isLegacyAggregate = item.optBoolean("isLegacyAggregate", false),
                 isCarryover = item.optBoolean("isCarryover", false),
                 linkedExpenseId = if (item.has("linkedExpenseId") && !item.isNull("linkedExpenseId")) item.optLong("linkedExpenseId").takeIf { it > 0L } else null,
-                isAdditional = item.optBoolean("isAdditional", false)
+                // Previous app versions stored one-off assistant receipts as "Голосовой доход"
+                // before the explicit additional-income flag existed.
+                isAdditional = item.optBoolean(
+                    "isAdditional",
+                    item.optString("title").equals("Голосовой доход", ignoreCase = true)
+                )
             )
         }.also(::validate)
     }
