@@ -1903,8 +1903,8 @@ private fun ThunBudgetApp() {
                             Card {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
-                                        Text("Автоматическое распределение", fontWeight = FontWeight.SemiBold)
-                                        Text("Доли для плана/факта усредняются по первому и текущему отчётным периодам.", style = MaterialTheme.typography.bodySmall)
+                                        Text("Учитывать сохранённые доли периодов", fontWeight = FontWeight.SemiBold)
+                                        Text("Для отчётного месяца планы двух периодов объединяются с учётом дохода каждого периода.", style = MaterialTheme.typography.bodySmall)
                                     }
                                     Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
                                         if (enabled) {
@@ -2229,17 +2229,17 @@ private fun ThunBudgetApp() {
                     }
                     if (showPlanChart) {
                         items(categories.filterNot { it.name.equals("Перенос средств", ignoreCase = true) }, key = { "analysis-plan-" + it.name }) { category ->
-                            val monthlyMode = analyticsIncomeMode == 0
+                            val calendarMode = analyticsIncomeMode == 1
                             val monthStart = analyticsMonth.atDay(1)
                             val monthEnd = analyticsMonth.atEndOfMonth()
-                            val actualStart = if (monthlyMode) monthStart else analyticsCycleIncome.firstStart
-                            val fullActualEnd = if (monthlyMode) monthEnd else analyticsCycleIncome.secondEnd
+                            val actualStart = if (calendarMode) monthStart else analyticsCycleIncome.firstStart
+                            val fullActualEnd = if (calendarMode) monthEnd else analyticsCycleIncome.secondEnd
                             val actualEnd = minOf(fullActualEnd, today)
                             val actual = if (actualEnd.isBefore(actualStart)) 0.0 else expenses.filter {
                                 it.category.equals(category.name, ignoreCase = true) &&
                                     it.date >= actualStart.toString() && it.date <= actualEnd.toString()
                             }.sumOf { it.amount }
-                            val planned = if (monthlyMode) {
+                            val planned = if (calendarMode) {
                                 analyticsMonthPlanAmounts[category.name] ?: 0.0
                             } else {
                                 analyticsCyclePlanAmounts[category.name] ?: 0.0
@@ -2361,11 +2361,24 @@ private fun ThunBudgetApp() {
                             Text(analyticsMonth.format(DateTimeFormatter.ofPattern("LLLL yyyy",Locale("ru","RU")).withLocale(Locale("ru","RU"))),modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
                             TextButton(onClick={if(analyticsMonth<YearMonth.now()) analyticsMonth=analyticsMonth.plusMonths(1)}) { Text("›") }
                         }
-                        val monthTotal = AnalyticsBudgetCalculator.calendarMonthCashExpenseTotal(
-                            expenses, analyticsMonth, today
+                        Text(
+                            "Цикл: ${analyticsCycleIncome.firstStart.format(formatter)} — ${analyticsCycleIncome.secondEnd.format(formatter)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        MetricCard("Итого за месяц",money(monthTotal),Modifier.fillMaxWidth())
+                        val monthTotal = AnalyticsBudgetCalculator.reportingCycleCashExpenseTotal(
+                            expenses, analyticsMonth, today, firstPeriodStartDay, firstPeriodEndDay
+                        )
+                        MetricCard("Итого за отчётный месяц",money(monthTotal),Modifier.fillMaxWidth())
                     }
+                    item {
+                        val currentFrom = analyticsCycleIncome.firstStart
+                        val currentTo = minOf(analyticsCycleIncome.secondEnd, today)
+                        val monthCashExpenses = AnalyticsBudgetCalculator.cashExpensesInRange(expenses, currentFrom, currentTo)
+                        val currentTotal = monthCashExpenses.sumOf { it.amount }
+                        val elapsedDays = if (currentTo.isBefore(currentFrom)) 0L
+                            else java.time.temporal.ChronoUnit.DAYS.between(currentFrom, currentTo) + 1L
+                        val dailyAverage = if (elapsedDays > 0) currentTotal / elapsedDays else 0.0
                     item {
                         val currentFrom = analyticsMonth.atDay(1)
                         val currentTo = AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today)
@@ -2388,11 +2401,11 @@ private fun ThunBudgetApp() {
                     }
                     item { TextButton(onClick={showMonthCategories=!showMonthCategories; persistUiExpanded(context,"month_categories",showMonthCategories)},modifier=Modifier.fillMaxWidth()) { Text(if(showMonthCategories) "Скрыть категории ▲" else "Показать категории ▼") } }
                     if(showMonthCategories) items(categories.filterNot { it.name.equals("Перенос средств", true) },key={ "month-"+it.name }) { cat ->
-                        val from=analyticsMonth.atDay(1)
-                        val to=AnalyticsBudgetCalculator.calendarMonthExpenseEnd(analyticsMonth, today)
+                        val from=analyticsCycleIncome.firstStart
+                        val to=minOf(analyticsCycleIncome.secondEnd, today)
                         val fact=AnalyticsBudgetCalculator.cashExpensesInRange(expenses, from, to)
                             .filter { it.category == cat.name }.sumOf { it.amount }
-                        val plan=analyticsMonthPlanAmounts[cat.name] ?: 0.0
+                        val plan=analyticsCyclePlanAmounts[cat.name] ?: 0.0
                         Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             LinearProgressIndicator(progress={if(plan>0)(fact/plan).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(fact>plan) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
@@ -2425,9 +2438,9 @@ private fun ThunBudgetApp() {
                             )
                         } }
                     }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={showAdvice=!showAdvice; persistUiExpanded(context,"analytics_advice",showAdvice)}) { Text(if(showAdvice) "Скрыть" else "Показать") } } }
+                    item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Перераспределение за выбранный отчётный период",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={showAdvice=!showAdvice; persistUiExpanded(context,"analytics_advice",showAdvice)}) { Text(if(showAdvice) "Скрыть" else "Показать") } } }
                     if(showAdvice) item {
-                        val periodFacts = categories.associate { cat ->
+                        val periodFacts = categories.filterNot { it.name.equals("Перенос средств", true) }.associate { cat ->
                             cat.name to expenses.filter { it.category == cat.name && it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
                         }
                         val selectedStart = LocalDate.parse(periodStart)
@@ -2455,7 +2468,7 @@ private fun ThunBudgetApp() {
                         val budgetPerPercent = if (effectivePeriodIncome > 0.0) effectivePeriodIncome / 100.0
                             else plannedForPeriod(income, 1.0, periodStart, periodEnd)
                         val redistribution = BudgetAllocationCalculator.redistribute(
-                            categories = categories.map { it.name to it.percent },
+                            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name to it.percent },
                             spentByCategory = periodFacts,
                             budgetPerPercent = budgetPerPercent,
                             forecastSpentByCategory = projectedSpend,
