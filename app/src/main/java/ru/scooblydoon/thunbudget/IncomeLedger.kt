@@ -23,6 +23,43 @@ data class IncomeEntry(
     val isAdditional: Boolean = false
 )
 
+/**
+ * Replaces only the regular/base income for one reporting period.
+ * Additional one-off receipts and explicitly linked carryover entries are
+ * retained so editing the base amount cannot silently delete them.
+ */
+internal object IncomeLedgerRules {
+    fun replacePrimaryIncome(
+        entries: List<IncomeEntry>,
+        start: String,
+        end: String,
+        amount: Double
+    ): List<IncomeEntry> {
+        require(amount.isFinite() && amount >= 0.0)
+        val periodStart = LocalDate.parse(start)
+        val periodEnd = LocalDate.parse(end)
+        require(!periodEnd.isBefore(periodStart))
+        val periodEntries = entries.filter { it.periodStart == start && it.periodEnd == end }
+        val preserved = periodEntries.filter { it.isCarryover || it.isAdditional }
+        val retained = entries.filterNot { it.periodStart == start && it.periodEnd == end }
+        val primary = if (amount > 0.0) {
+            listOf(
+                IncomeEntry(
+                    id = "manual-$start-$end",
+                    title = "Доход за период",
+                    amount = amount,
+                    date = end,
+                    periodStart = start,
+                    periodEnd = end
+                )
+            )
+        } else {
+            emptyList()
+        }
+        return retained + preserved + primary
+    }
+}
+
 data class LegacyPeriodIncome(
     val start: String,
     val end: String,
