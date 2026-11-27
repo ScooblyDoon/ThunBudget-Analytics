@@ -337,10 +337,12 @@ internal object AnalyticsBudgetCalculator {
     private data class IncomePeriod(
         val start: java.time.LocalDate,
         val end: java.time.LocalDate,
-        /** All actual non-carryover receipts, including one-off additional income. */
+        /** All entered non-carryover income allocated to the reporting period. */
         val earnedAmount: Double,
         /** Stable/base earnings only; additional one-off receipts are excluded from forecasting. */
-        val regularEarnedAmount: Double
+        val regularEarnedAmount: Double,
+        /** Additional receipts; detailed ledger rows preserve their exact calendar date. */
+        val additionalAmount: Double
     ) {
         val dayCount: Long
             get() = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1L
@@ -379,7 +381,7 @@ internal object AnalyticsBudgetCalculator {
             val additional = row.additionalAmount.takeIf { it.isFinite() && it >= 0.0 }?.coerceAtMost(earned) ?: 0.0
             val regular = (earned - additional).coerceAtLeast(0.0)
             if (regular <= 0.0 && additional <= 0.0) return@mapNotNull null
-            IncomePeriod(start, end, earned, regular)
+            IncomePeriod(start, end, earned, regular, additional)
         }
 
         // Prefer periods matching the configured reporting cycle. This prevents
@@ -395,7 +397,8 @@ internal object AnalyticsBudgetCalculator {
                 range.first,
                 range.second,
                 rows.sumOf { it.earnedAmount },
-                rows.sumOf { it.regularEarnedAmount }
+                rows.sumOf { it.regularEarnedAmount },
+                rows.sumOf { it.additionalAmount }
             ) }
             .sortedWith(compareBy<IncomePeriod> { it.start }.thenBy { it.end })
 
