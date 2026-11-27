@@ -61,6 +61,42 @@ class AssistantRecognitionDictionaryTest {
         assertNull(result)
     }
 
+
+    @Test
+    fun parsesExplicitSynonymTeachingCommand() {
+        val teaching = AssistantRecognitionDictionary.parseTeachingCommand(
+            "Запомни синоним «кофейня» для категории «Кафе и развлечения»"
+        )
+        assertEquals("кофейня", teaching?.alias)
+        assertEquals("Кафе и развлечения", teaching?.category)
+    }
+
+    @Test
+    fun parsesNaturalSynonymTeachingPhrase() {
+        val teaching = AssistantRecognitionDictionary.parseTeachingCommand(
+            "Запомни, что кофейня — это категория Кафе и развлечения"
+        )
+        assertEquals("кофейня", teaching?.alias)
+        assertEquals("Кафе и развлечения", teaching?.category)
+    }
+
+    @Test
+    fun parsesAliasRemovalCommand() {
+        assertEquals(
+            "кофейня",
+            AssistantRecognitionDictionary.parseAliasRemovalCommand("Удали синоним «кофейня»")
+        )
+    }
+
+    @Test
+    fun doesNotLearnVeryShortAlias() {
+        assertNull(
+            AssistantRecognitionDictionary.parseTeachingCommand(
+                "Запомни синоним «ко» для категории «Кафе и развлечения»"
+            )
+        )
+    }
+
     @Test
     fun normalizesRussianYoAndPunctuation() {
         assertEquals("пятерочка кофе", AssistantRecognitionDictionary.normalize("Пятёрочка, кофе!"))
