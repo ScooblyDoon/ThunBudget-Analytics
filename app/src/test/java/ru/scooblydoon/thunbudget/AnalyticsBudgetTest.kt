@@ -746,4 +746,34 @@ class AnalyticsBudgetTest {
         assertEquals(500.0, result.transfers.last().amount, 0.001)
     }
 
+
+    @Test
+    fun reportingCyclePlanIncomeCountsOpeningCarryoverOnceAndExcludesSecondPeriodRollover() {
+        // Period 1 opens with 70,000 ₽ available (including prior-cycle carryover).
+        // Period 2 has 60,000 ₽ of new income plus a 25,000 ₽ rollover from period 1.
+        // The cycle aggregate must be 70,000 + 60,000, not 70,000 + 85,000.
+        assertEquals(
+            130000.0,
+            AnalyticsBudgetCalculator.reportingCyclePlanIncome(
+                firstPeriodAvailableIncome = 70000.0,
+                secondPeriodEarnedIncome = 60000.0,
+                fallbackIncome = 120000.0
+            ),
+            0.001
+        )
+    }
+
+    @Test
+    fun reportingCyclePlanIncomeUsesConfiguredFallbackOnlyWhenCycleHasNoFunding() {
+        assertEquals(
+            120000.0,
+            AnalyticsBudgetCalculator.reportingCyclePlanIncome(
+                firstPeriodAvailableIncome = 0.0,
+                secondPeriodEarnedIncome = 0.0,
+                fallbackIncome = 120000.0
+            ),
+            0.001
+        )
+    }
+
 }
