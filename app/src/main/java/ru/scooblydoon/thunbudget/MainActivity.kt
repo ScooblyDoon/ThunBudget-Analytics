@@ -169,17 +169,10 @@ internal class BudgetStore(context: Context) {
     }
 
     fun setPeriodIncomeTotal(start: String, end: String, amount: Double) {
-        require(amount.isFinite() && amount >= 0.0)
-        val currentEntries = incomeLedger.load()
-        val preservedEntries = currentEntries.filter {
-            it.periodStart == start && it.periodEnd == end && (it.isCarryover || it.isAdditional)
-        }
-        val retained = currentEntries.filterNot { it.periodStart == start && it.periodEnd == end }
-        val earnedEntry = if (amount > 0.0) listOf(IncomeEntry(
-            id = "manual-$start-$end", title = "Доход за период", amount = amount,
-            date = end, periodStart = start, periodEnd = end
-        )) else emptyList()
-        check(incomeLedger.save(retained + preservedEntries + earnedEntry)) { "Не удалось обновить доход за период." }
+        val updatedEntries = IncomeLedgerRules.replacePrimaryIncome(
+            incomeLedger.load(), start, end, amount
+        )
+        check(incomeLedger.save(updatedEntries)) { "Не удалось обновить доход за период." }
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
