@@ -700,6 +700,9 @@ private fun ThunBudgetApp() {
     val assistantMemoryRepository = remember(context) {
         AssistantMemoryRepository(context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE))
     }
+    val assistantRecognitionRepository = remember(context) {
+        AssistantRecognitionRepository(context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE))
+    }
     var assistantMemory by remember { mutableStateOf(assistantMemoryRepository.load()) }
     var income by remember { mutableDoubleStateOf(store.loadIncome()) }
     var savingsGoal by remember { mutableDoubleStateOf(store.loadSavingsGoal()) }
@@ -978,7 +981,8 @@ private fun ThunBudgetApp() {
             categories.map { it.name },
             today,
             availablePeriods = flexiblePeriods,
-            memoryPeriodName = rememberedPeriodName
+            memoryPeriodName = rememberedPeriodName,
+            userCategoryAliases = assistantRecognitionRepository.loadCategoryAliases()
         )
         if (parsed == null) {
             voiceMessage = "Пока не удалось понять запрос. Попробуй: «Сколько осталось до зарплаты?», «Сколько потратил на продукты в этом месяце?» или «Вчера потратил две тысячи на продукты»."
@@ -1363,7 +1367,8 @@ private fun ThunBudgetApp() {
                         availablePeriods = flexiblePeriods,
                         memoryPeriodName = assistantMemory.lastPeriodId
                             ?.let { savedId -> flexiblePeriods.firstOrNull { it.id == savedId }?.name }
-                            ?: assistantMemory.lastPeriodName
+                            ?: assistantMemory.lastPeriodName,
+                        userCategoryAliases = assistantRecognitionRepository.loadCategoryAliases()
                     )?.let { phrase to it }
                 }
                 if (interpreted != null) {
