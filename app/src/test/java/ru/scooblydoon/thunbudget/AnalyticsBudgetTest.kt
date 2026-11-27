@@ -409,4 +409,68 @@ class AnalyticsBudgetTest {
         assertEquals(0.0, proposal.percentages["Развлечения"]!!, 0.001)
         assertEquals(100.0, proposal.percentages.values.sum(), 0.001)
     }
+
+    @Test fun additionalIncomeCountsInActualMonthlyReceiptsButNotRegularIncomeForecast() {
+        val periods = listOf(
+            PeriodIncome(
+                start = "2026-10-24",
+                end = "2026-11-08",
+                amount = 40000.0,
+                earnedAmount = 40000.0,
+                additionalAmount = 10000.0
+            ),
+            PeriodIncome(
+                start = "2026-11-09",
+                end = "2026-11-23",
+                amount = 40000.0,
+                earnedAmount = 40000.0,
+                additionalAmount = 10000.0
+            )
+        )
+
+        val estimate = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periodIncomes = periods,
+            month = YearMonth.of(2026, 11),
+            asOf = java.time.LocalDate.parse("2026-11-23")
+        )
+
+        // November actuals contain both base earnings and the two one-off additions.
+        assertEquals(60000.0, estimate.enteredIncome, 0.001)
+        // Forecast baseline uses 30,000 regular earnings in each completed period:
+        // median(30,000/16, 30,000/15) = 1,937.50 per uncovered future day.
+        assertEquals(1937.5, estimate.medianDailyIncome!!, 0.001)
+        assertEquals(7, estimate.uncoveredFutureDays)
+        assertEquals(13562.5, estimate.forecastIncome, 0.001)
+    }
+
+    @Test fun reportingCycleIncomeIncludesAdditionalReceiptsButExcludesCarryover() {
+        val result = AnalyticsBudgetCalculator.reportingCycleIncome(
+            listOf(
+                PeriodIncome(
+                    start = "2026-11-09",
+                    end = "2026-11-23",
+                    amount = 41000.0,
+                    earnedAmount = 36000.0,
+                    carryoverAmount = 5000.0,
+                    additionalAmount = 6000.0
+                ),
+                PeriodIncome(
+                    start = "2026-11-24",
+                    end = "2026-12-08",
+                    amount = 17000.0,
+                    earnedAmount = 14000.0,
+                    carryoverAmount = 3000.0,
+                    additionalAmount = 3000.0
+                )
+            ),
+            YearMonth.of(2026, 11),
+            9,
+            23
+        )
+
+        assertEquals(36000.0, result.firstIncome, 0.001)
+        assertEquals(14000.0, result.secondIncome, 0.001)
+        assertEquals(50000.0, result.totalIncome, 0.001)
+    }
+
 }
