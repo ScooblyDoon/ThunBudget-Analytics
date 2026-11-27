@@ -857,7 +857,7 @@ private fun ThunBudgetApp() {
     var historyFromDate by remember { mutableStateOf("") }
     var historyToDate by remember { mutableStateOf("") }
     var amountLimit by remember { mutableFloatStateOf(100000f) }
-    var analyticsMonth by remember { mutableStateOf(YearMonth.now()) }
+    var analyticsMonth by remember { mutableStateOf(if (today.dayOfMonth < firstPeriodStartDay) YearMonth.now().minusMonths(1) else YearMonth.now()) }
     var annualChartYear by rememberSaveable { mutableIntStateOf(LocalDate.now().year) }
     var selectedAnnualChartCategoryNames by rememberSaveable { mutableStateOf("") }
     var analyticsPeriodMonth by remember { mutableStateOf(if (today.dayOfMonth < firstPeriodStartDay) YearMonth.now().minusMonths(1) else YearMonth.now()) }
@@ -1487,43 +1487,40 @@ private fun ThunBudgetApp() {
                 }
                 val exportMonthlyCategoryPlans = (1..12).associate { monthNumber ->
                     val month = YearMonth.of(exportYear, monthNumber)
-                    val monthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(
-                        periodIncomes, month, today,
-                        firstStartDay = firstPeriodStartDay,
-                        firstEndDay = firstPeriodEndDay,
-                        incomeEntries = incomeEntries
+                    val cycle = ReportingPeriodCalculator.propose(
+                        month, firstPeriodStartDay, firstPeriodEndDay
                     )
-                    val hasMonthlyIncomePeriods = periodIncomes.any { row ->
-                        val range = runCatching {
-                            LocalDate.parse(row.start) to LocalDate.parse(row.end)
-                        }.getOrNull()
-                        range != null && row.earnedAmount.isFinite() && row.earnedAmount > 0.0 &&
-                            !range.second.isBefore(month.atDay(1)) &&
-                            !range.first.isAfter(month.atEndOfMonth())
-                    }
-                    val monthlyIncomeFallback = monthIncomeEstimate.totalIncome.takeIf { it > 0.0 } ?: income
-                    val plan = if (hasMonthlyIncomePeriods) {
-                        ReportingPeriodCategoryPlanCalculator.monthlyPlan(
-                            currentShares = currentCategoryShares,
-                            periodIncomes = periodIncomes,
-                            savedPlans = plansForAnalytics,
-                            month = month,
-                            forecastIncome = monthIncomeEstimate.forecastIncome,
-                            firstStartDay = firstPeriodStartDay,
-                            firstEndDay = firstPeriodEndDay,
-                            incomeEntries = incomeEntries
-                        )
-                    } else {
-                        currentCategoryShares.associate { (name, percent) ->
-                            name to monthlyIncomeFallback.coerceAtLeast(0.0) * percent / 100.0
-                        }
+                    val firstAvailable = AnalyticsBudgetCalculator.reportingPeriodAvailableIncome(
+                        periodIncomes, cycle.first.start, cycle.first.end, expenses,
+                        firstPeriodStartDay, firstPeriodEndDay
+                    )
+                    val secondAvailable = AnalyticsBudgetCalculator.reportingPeriodAvailableIncome(
+                        periodIncomes, cycle.second.start, cycle.second.end, expenses,
+                        firstPeriodStartDay, firstPeriodEndDay
+                    )
+                    val cyclePlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
+                        currentShares = currentCategoryShares,
+                        savedPlans = plansForAnalytics,
+                        firstStart = cycle.first.start,
+                        firstEnd = cycle.first.end,
+                        secondStart = cycle.second.start,
+                        secondEnd = cycle.second.end,
+                        firstIncome = firstAvailable,
+                        secondIncome = secondAvailable
+                    )
+                    val availableIncome = firstAvailable + secondAvailable
+                    val planIncome = availableIncome.takeIf { it > 0.0 } ?: income
+                    val plan = currentCategoryShares.associate { (name, _) ->
+                        name to planIncome.coerceAtLeast(0.0) *
+                            (cyclePlan.averagePercentages[name] ?: 0.0) / 100.0
                     }
                     month.toString() to plan
                 }
                 XlsxExporter.write(
                     context, uri, expenses, categories, income, exportYear,
                     periodStart, periodEnd, effectivePeriodIncome,
-                    exportMonthlyIncomes, incomeEntries, exportMonthlyCategoryPlans
+                    exportMonthlyIncomes, incomeEntries, exportMonthlyCategoryPlans,
+                    firstPeriodStartDay, firstPeriodEndDay
                 )
                 "Excel-отчёт успешно сохранён."
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
