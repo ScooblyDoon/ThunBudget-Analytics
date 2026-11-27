@@ -98,7 +98,7 @@ internal object ThunBudgetPalette {
         onPrimary = Color(0xFF1A1421),
         primaryContainer = Color(0xFF473A57),
         onPrimaryContainer = Color(0xFFF4EFF8),
-        secondary = Color(0xFF6BA88E),
+        secondary = Color(0xFF168A72),
         onSecondary = Color(0xFF10251D),
         secondaryContainer = Color(0xFF3C344B),
         onSecondaryContainer = Color(0xFFF4EFF8),
@@ -106,7 +106,7 @@ internal object ThunBudgetPalette {
         onTertiary = Color(0xFF171821),
         tertiaryContainer = Color(0xFF563746),
         onTertiaryContainer = Color(0xFFF8EAF0),
-        positive = Color(0xFF6BA88E),
+        positive = Color(0xFF168A72),
         warning = Color(0xFFDFA44B),
         danger = Color(0xFFFF817A),
         outline = Color(0xFF5A5067),
@@ -145,4 +145,14 @@ internal fun thunBudgetCategoryCardSurface(): Color =
         ThunBudgetPalette.Dark.categoryCardSurface
     } else {
         ThunBudgetPalette.Light.categoryCardSurface
+    }
+
+
+/** Dark-plum track for actual expense execution indicators. */
+@Composable
+internal fun thunBudgetProgressTrackColor(): Color =
+    if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+        ThunBudgetPalette.Dark.progressTrack
+    } else {
+        ThunBudgetPalette.Light.progressTrack
     }
