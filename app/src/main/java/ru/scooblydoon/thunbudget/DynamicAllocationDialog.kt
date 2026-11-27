@@ -121,7 +121,7 @@ internal fun DynamicAllocationDialog(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "Доли рассчитываются относительно доступного бюджета каждого отчётного периода. Если расходы ниже текущей доли, предложение сохраняет запас в 2 процентных пункта.",
+                    "Взвешивание учитывает доступный остаток на входе в первое выбранное окно и новый доход следующих периодов. Переносы не считаются повторно; для долей ниже текущих сохраняется запас 2 процентных пункта.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
