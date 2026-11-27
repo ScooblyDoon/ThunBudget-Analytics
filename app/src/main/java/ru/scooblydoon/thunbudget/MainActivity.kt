@@ -799,7 +799,10 @@ private fun ThunBudgetApp() {
     var selectedMonthBreakdownCategoryNames by rememberSaveable { mutableStateOf("") }
     var selectedAnnualBreakdownCategoryNames by rememberSaveable { mutableStateOf("") }
     var showPeriodBreakdown by rememberUiExpanded(context, "chart_period_breakdown", true)
+    var showPeriodBreakdownPicker by rememberUiExpanded(context, "chart_period_breakdown_picker", true)
+    var showMonthBreakdownPicker by rememberUiExpanded(context, "chart_month_breakdown_picker", true)
     var showAnnualBreakdown by rememberUiExpanded(context, "chart_annual_breakdown", true)
+    var showAnnualBreakdownPicker by rememberUiExpanded(context, "chart_annual_breakdown_picker", true)
 
     var showHistoryFilters by rememberUiExpanded(context, "history_filters")
     var quickActionsExpanded by rememberUiExpanded(context, "quick_actions_panel", true)
@@ -2147,10 +2150,14 @@ private fun ThunBudgetApp() {
                         firstPeriodEndDay = firstPeriodEndDay,
                         selectedPeriodBreakdownCategoryNames = selectedPeriodBreakdownCategoryNames,
                         onSelectedPeriodBreakdownCategoryNamesChange = { selectedPeriodBreakdownCategoryNames = it },
+                        showPeriodBreakdownPicker = showPeriodBreakdownPicker,
+                        onShowPeriodBreakdownPickerChange = { showPeriodBreakdownPicker = it; persistUiExpanded(context, "chart_period_breakdown_picker", it) },
                         showPeriodBreakdown = showPeriodBreakdown,
                         onShowPeriodBreakdownChange = { showPeriodBreakdown = it; persistUiExpanded(context, "chart_period_breakdown", it) },
                         selectedMonthBreakdownCategoryNames = selectedMonthBreakdownCategoryNames,
                         onSelectedMonthBreakdownCategoryNamesChange = { selectedMonthBreakdownCategoryNames = it },
+                        showMonthBreakdownPicker = showMonthBreakdownPicker,
+                        onShowMonthBreakdownPickerChange = { showMonthBreakdownPicker = it; persistUiExpanded(context, "chart_month_breakdown_picker", it) },
                         showPie = showPieChart,
                         onShowPieChange = { showPieChart = it; persistUiExpanded(context, "chart_pie", it) },
                         selectedChartCategoryNames = selectedChartCategoryNames,
@@ -2164,6 +2171,8 @@ private fun ThunBudgetApp() {
                         onSelectedAnnualCategoryNamesChange = { selectedAnnualChartCategoryNames = it },
                         selectedAnnualBreakdownCategoryNames = selectedAnnualBreakdownCategoryNames,
                         onSelectedAnnualBreakdownCategoryNamesChange = { selectedAnnualBreakdownCategoryNames = it },
+                        showAnnualBreakdownPicker = showAnnualBreakdownPicker,
+                        onShowAnnualBreakdownPickerChange = { showAnnualBreakdownPicker = it; persistUiExpanded(context, "chart_annual_breakdown_picker", it) },
                         showAnnualBreakdown = showAnnualBreakdown,
                         onShowAnnualBreakdownChange = { showAnnualBreakdown = it; persistUiExpanded(context, "chart_annual_breakdown", it) },
                         showAnnualCategoryCharts = showAnnualCategoryCharts,
@@ -3134,10 +3143,14 @@ private fun ChartsScreen(
     firstPeriodEndDay: Int,
     selectedPeriodBreakdownCategoryNames: String,
     onSelectedPeriodBreakdownCategoryNamesChange: (String) -> Unit,
+    showPeriodBreakdownPicker: Boolean,
+    onShowPeriodBreakdownPickerChange: (Boolean) -> Unit,
     showPeriodBreakdown: Boolean,
     onShowPeriodBreakdownChange: (Boolean) -> Unit,
     selectedMonthBreakdownCategoryNames: String,
     onSelectedMonthBreakdownCategoryNamesChange: (String) -> Unit,
+    showMonthBreakdownPicker: Boolean,
+    onShowMonthBreakdownPickerChange: (Boolean) -> Unit,
     showPie: Boolean,
     onShowPieChange: (Boolean) -> Unit,
     selectedChartCategoryNames: String,
@@ -3151,6 +3164,8 @@ private fun ChartsScreen(
     onSelectedAnnualCategoryNamesChange: (String) -> Unit,
     selectedAnnualBreakdownCategoryNames: String,
     onSelectedAnnualBreakdownCategoryNamesChange: (String) -> Unit,
+    showAnnualBreakdownPicker: Boolean,
+    onShowAnnualBreakdownPickerChange: (Boolean) -> Unit,
     showAnnualBreakdown: Boolean,
     onShowAnnualBreakdownChange: (Boolean) -> Unit,
     showAnnualCategoryCharts: Boolean,
@@ -3173,7 +3188,11 @@ private fun ChartsScreen(
         expenses.filter { it.date >= selectedPeriod.start.toString() && it.date <= periodVisibleEnd.toString() }
     }
     val periodTotal = periodExpenses.sumOf { it.amount }
-    val selectedDailyCategories = selectedChartCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
+    val selectedDailyCategories = when {
+        selectedMonthBreakdownCategoryNames == "__NONE__" -> emptySet()
+        selectedMonthBreakdownCategoryNames.isBlank() -> categories.map { it.name }.toSet()
+        else -> selectedMonthBreakdownCategoryNames.split("|").filter { it.isNotBlank() }.toSet()
+    }
     val monthDaysVisible = if (monthEnd.isBefore(monthStart)) 0 else monthEnd.dayOfMonth
 
     LazyColumn(
@@ -3217,6 +3236,8 @@ private fun ChartsScreen(
                 },
                 selectedCategoryNames = selectedPeriodBreakdownCategoryNames,
                 onSelectedCategoryNamesChange = onSelectedPeriodBreakdownCategoryNamesChange,
+                pickerExpanded = showPeriodBreakdownPicker,
+                onPickerExpandedChange = onShowPeriodBreakdownPickerChange,
                 expanded = showPeriodBreakdown,
                 onExpandedChange = onShowPeriodBreakdownChange,
                 emptyText = "За выбранный отчётный период расходов нет."
@@ -3243,26 +3264,6 @@ private fun ChartsScreen(
             }
         }
         if (showCategoryCharts) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Выберите категории, чтобы добавить или убрать их графики.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    categories.chunked(2).forEach { group ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            group.forEach { category ->
-                                FilterChip(
-                                    selected = selectedDailyCategories.contains(category.name),
-                                    onClick = {
-                                        val next = if (selectedDailyCategories.contains(category.name)) selectedDailyCategories - category.name
-                                            else selectedDailyCategories + category.name
-                                        onSelectedChartCategoryNamesChange(next.joinToString("|"))
-                                    },
-                                    label = { Text(category.name) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
             items(
                 selectedDailyCategories.filter { name -> categories.any { it.name == name } }.toList(),
                 key = { "category-daily-" + it }
@@ -3306,6 +3307,8 @@ private fun ChartsScreen(
                 },
                 selectedCategoryNames = selectedMonthBreakdownCategoryNames,
                 onSelectedCategoryNamesChange = onSelectedMonthBreakdownCategoryNamesChange,
+                pickerExpanded = showMonthBreakdownPicker,
+                onPickerExpandedChange = onShowMonthBreakdownPickerChange,
                 expanded = showPie,
                 onExpandedChange = onShowPieChange,
                 emptyText = "За выбранный месяц расходов пока нет."
@@ -3332,6 +3335,7 @@ private fun ChartsScreen(
     }
 }
 
+
 @Composable
 private fun CategoryDonutBreakdown(
     title: String,
@@ -3339,6 +3343,8 @@ private fun CategoryDonutBreakdown(
     amounts: Map<String, Double>,
     selectedCategoryNames: String,
     onSelectedCategoryNamesChange: (String) -> Unit,
+    pickerExpanded: Boolean,
+    onPickerExpandedChange: (Boolean) -> Unit,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     emptyText: String
@@ -3363,12 +3369,23 @@ private fun CategoryDonutBreakdown(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             TextButton(onClick = { onExpandedChange(!expanded) }) {
-                Text(if (expanded) "Скрыть ▲" else "Показать ▼")
+                Text(if (expanded) "Скрыть график ▲" else "Показать график ▼")
             }
         }
-        if (expanded) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Категории диаграммы", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { onPickerExpandedChange(!pickerExpanded) }) {
+                Text(if (pickerExpanded) "Скрыть ▲" else "Выбрать ▼")
+            }
+        }
+
+        if (pickerExpanded) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Выберите категории, которые должны отображаться на диаграмме.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Выберите категории, которые должны отображаться на диаграмме.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 available.chunked(2).forEach { group ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         group.forEach { category ->
@@ -3389,6 +3406,9 @@ private fun CategoryDonutBreakdown(
                     }
                 }
             }
+        }
+
+        if (expanded) {
             Card {
                 Column(
                     Modifier.fillMaxWidth().padding(16.dp),
@@ -3520,6 +3540,8 @@ private fun AnnualChartsSection(
             },
             selectedCategoryNames = selectedBreakdownCategoryNames,
             onSelectedCategoryNamesChange = onSelectedBreakdownCategoryNamesChange,
+            pickerExpanded = showAnnualBreakdownPicker,
+            onPickerExpandedChange = onShowAnnualBreakdownPickerChange,
             expanded = showBreakdown,
             onExpandedChange = onShowBreakdownChange,
             emptyText = "За выбранный год расходов пока нет."
