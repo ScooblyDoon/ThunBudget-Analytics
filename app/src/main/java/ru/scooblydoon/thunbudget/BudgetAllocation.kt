@@ -163,7 +163,7 @@ object BudgetAllocationCalculator {
      */
     fun weightedPercentOfIncome(spendAndIncomeByPeriod: List<Pair<Double, Double>>): Double? {
         val valid = spendAndIncomeByPeriod.filter { (spent, income) ->
-            spent.isFinite() && income.isFinite() && spent >= 0.0 && income > 0.0
+            spent.isFinite() && income.isFinite() && spent >= 0.0 && income >= 0.0
         }
         val totalIncome = valid.sumOf { it.second }
         if (totalIncome <= 0.0) return null
