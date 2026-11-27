@@ -12,6 +12,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -55,7 +56,8 @@ internal data class PeriodIncome(
     val end: String,
     val amount: Double,
     val earnedAmount: Double = amount,
-    val carryoverAmount: Double = 0.0
+    val carryoverAmount: Double = 0.0,
+    val additionalAmount: Double = 0.0
 )
 
 internal class BudgetStore(context: Context) {
@@ -130,20 +132,21 @@ internal class BudgetStore(context: Context) {
                         end = period.second,
                         amount = rows.sumOf { it.amount },
                         earnedAmount = rows.filterNot { it.isCarryover }.sumOf { it.amount },
-                        carryoverAmount = rows.filter { it.isCarryover }.sumOf { it.amount }
+                        carryoverAmount = rows.filter { it.isCarryover }.sumOf { it.amount },
+                        additionalAmount = rows.filter { it.isAdditional }.sumOf { it.amount }
                     )
                 }
                 .sortedBy { it.start }
         }
         return runCatching {
             val a = JSONArray(prefs.getString("period_incomes", "[]") ?: "[]")
-            (0 until a.length()).map { val o=a.getJSONObject(it); val amount=o.getDouble("amount"); PeriodIncome(o.getString("start"),o.getString("end"),amount,o.optDouble("earnedAmount",amount),o.optDouble("carryoverAmount",0.0)) }
+            (0 until a.length()).map { val o=a.getJSONObject(it); val amount=o.getDouble("amount"); PeriodIncome(o.getString("start"),o.getString("end"),amount,o.optDouble("earnedAmount",amount),o.optDouble("carryoverAmount",0.0),o.optDouble("additionalAmount",0.0)) }
         }.getOrDefault(emptyList())
     }
 
     private fun writeLegacyIncomeMirror() {
         val a = JSONArray()
-        loadPeriodIncomes().forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount).put("earnedAmount",it.earnedAmount).put("carryoverAmount",it.carryoverAmount)) }
+        loadPeriodIncomes().forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount).put("earnedAmount",it.earnedAmount).put("carryoverAmount",it.carryoverAmount).put("additionalAmount",it.additionalAmount)) }
         prefs.edit().putString("period_incomes",a.toString()).commit()
     }
 
@@ -154,11 +157,12 @@ internal class BudgetStore(context: Context) {
         start: String,
         end: String,
         isCarryover: Boolean = false,
-        linkedExpenseId: Long? = null
+        linkedExpenseId: Long? = null,
+        isAdditional: Boolean = false
     ) {
         incomeLedger.add(
             title, amount, LocalDate.parse(date), LocalDate.parse(start), LocalDate.parse(end),
-            isCarryover, linkedExpenseId
+            isCarryover, linkedExpenseId, isAdditional
         )
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
@@ -167,13 +171,15 @@ internal class BudgetStore(context: Context) {
     fun setPeriodIncomeTotal(start: String, end: String, amount: Double) {
         require(amount.isFinite() && amount >= 0.0)
         val currentEntries = incomeLedger.load()
-        val carryoverEntries = currentEntries.filter { it.periodStart == start && it.periodEnd == end && it.isCarryover }
+        val preservedEntries = currentEntries.filter {
+            it.periodStart == start && it.periodEnd == end && (it.isCarryover || it.isAdditional)
+        }
         val retained = currentEntries.filterNot { it.periodStart == start && it.periodEnd == end }
         val earnedEntry = if (amount > 0.0) listOf(IncomeEntry(
             id = "manual-$start-$end", title = "Доход за период", amount = amount,
             date = end, periodStart = start, periodEnd = end
         )) else emptyList()
-        check(incomeLedger.save(retained + carryoverEntries + earnedEntry)) { "Не удалось обновить доход за период." }
+        check(incomeLedger.save(retained + preservedEntries + earnedEntry)) { "Не удалось обновить доход за период." }
         writeLegacyIncomeMirror()
         saveAutomaticBackup()
     }
@@ -204,7 +210,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun savePeriodIncomes(items: List<PeriodIncome>) {
-        val a=JSONArray(); items.forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount).put("earnedAmount",it.earnedAmount).put("carryoverAmount",it.carryoverAmount)) }
+        val a=JSONArray(); items.forEach { a.put(JSONObject().put("start",it.start).put("end",it.end).put("amount",it.amount).put("earnedAmount",it.earnedAmount).put("carryoverAmount",it.carryoverAmount).put("additionalAmount",it.additionalAmount)) }
         prefs.edit().putString("period_incomes",a.toString()).commit()
         saveAutomaticBackup()
     }
@@ -769,6 +775,7 @@ private fun ThunBudgetApp() {
     }
     var showPeriodEditor by remember { mutableStateOf(false) }
     var showPeriodIncomeEditor by remember { mutableStateOf(false) }
+    var showAdditionalIncomeEditor by remember { mutableStateOf(false) }
     var showCarryoverConfirmation by remember { mutableStateOf(false) }
     var carryoverAmount by remember { mutableDoubleStateOf(0.0) }
     var showCategoryManager by remember { mutableStateOf(false) }
@@ -865,7 +872,7 @@ private fun ThunBudgetApp() {
     val formatter= remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     val periodIncomeRow = periodIncomes.firstOrNull { it.start==periodStart && it.end==periodEnd }
     val periodIncome = periodIncomeRow?.amount ?: 0.0
-    val periodEarnedIncome = periodIncomeRow?.earnedAmount ?: periodIncome
+    val periodEarnedIncome = periodIncomeRow?.let { (it.earnedAmount - it.additionalAmount).coerceAtLeast(0.0) } ?: periodIncome
     val carryoverIncome = AnalyticsBudgetCalculator.carryoverBefore(periodStart, periodIncomes, expenses, firstPeriodStartDay, firstPeriodEndDay)
     val effectivePeriodIncome = periodIncome + carryoverIncome
     val analyticsMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(
@@ -1459,7 +1466,7 @@ private fun ThunBudgetApp() {
                                 firstEndDay = firstPeriodEndDay
                             ) }
                                 .getOrDefault(entries.sumOf { it.earnedAmount })
-                        })
+                        }, incomeEntries)
                 "Excel-отчёт успешно сохранён."
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
         }
@@ -1770,14 +1777,22 @@ private fun ThunBudgetApp() {
                                             Text(if(showIncomeEntries) "Скрыть ▲" else "Показать ▼")
                                         }
                                     }
+                                    OutlinedButton(
+                                        onClick = { showAdditionalIncomeEditor = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Outlined.Add, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Дополнительный доход")
+                                    }
                                     if(showIncomeEntries) {
                                         val visibleIncomeEntries=incomeEntries.filter{it.periodStart==periodStart&&it.periodEnd==periodEnd}.sortedByDescending{it.date}
-                                        if(visibleIncomeEntries.isEmpty()) Text("Отдельных поступлений пока нет. Добавь доход голосом или через кнопку ₽+.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if(visibleIncomeEntries.isEmpty()) Text("Отдельных поступлений пока нет. Добавь доход голосом или кнопкой «Дополнительный доход».",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                         else visibleIncomeEntries.forEach { entry ->
                                             Row(verticalAlignment=Alignment.CenterVertically) {
                                                 Column(Modifier.weight(1f)) {
                                                     Text(entry.title,fontWeight=FontWeight.Medium)
-                                                    Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}${if(entry.isCarryover) " · перенос средств" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Text("${entry.date}${if(entry.isLegacyAggregate) " · перенесено из старой версии" else ""}${if(entry.isAdditional) " · дополнительный доход" else ""}${if(entry.isCarryover) " · перенос средств" else ""}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
                                                 Text(money(entry.amount),fontWeight=FontWeight.SemiBold)
                                                 TextButton(onClick={selectedIncomeEntry=entry}) { Text("Изменить") }
@@ -2665,8 +2680,10 @@ private fun ThunBudgetApp() {
                     draft.isIncomeEdit -> {
                         val amount = confirmedAmount ?: return@Button
                         store.prepareUndoSnapshot(); canUndo=true
-                        val latestEntry = incomeEntries.filter { it.periodStart == periodStart && it.periodEnd == periodEnd }
-                            .maxByOrNull { it.date }
+                        val latestEntry = incomeEntries.filter {
+                            it.periodStart == periodStart && it.periodEnd == periodEnd &&
+                                !it.isCarryover && !it.isAdditional
+                        }.maxByOrNull { it.date }
                         if (latestEntry != null) {
                             store.updateIncomeEntry(latestEntry.copy(amount = amount))
                             voiceMessage = "Последняя запись дохода «${latestEntry.title}» изменена на ${money(amount)}."
@@ -2722,10 +2739,10 @@ private fun ThunBudgetApp() {
                             incomeDate.dayOfMonth >= 24 -> incomeDate.withDayOfMonth(24).toString() to incomeDate.plusMonths(1).withDayOfMonth(8).toString()
                             else -> incomeDate.minusMonths(1).withDayOfMonth(24).toString() to incomeDate.withDayOfMonth(8).toString()
                         }
-                        store.addIncomeEntry(draft.title, amount, confirmedDate, incomePeriod.first, incomePeriod.second)
+                        store.addIncomeEntry(draft.title, amount, confirmedDate, incomePeriod.first, incomePeriod.second, isAdditional = true)
                         periodIncomes = store.loadPeriodIncomes()
                         incomeEntries = store.loadIncomeEntries()
-                        voiceMessage = "Доход ${money(amount)} сохранён отдельной операцией за отчётный период. Общий доход за период: ${money(effectivePeriodIncome + amount)}."
+                        voiceMessage = "Дополнительный доход ${money(amount)} сохранён за отчётный период. Доступный бюджет с учётом поступления: ${money(effectivePeriodIncome + amount)}."
                     }
                     else -> {
                         val amount = confirmedAmount ?: return@Button
@@ -2875,6 +2892,27 @@ private fun ThunBudgetApp() {
         incomeEntries = store.loadIncomeEntries()
         showPeriodIncomeEditor=false
     })
+    if (showAdditionalIncomeEditor) AdditionalIncomeDialog(
+        start = periodStart,
+        end = periodEnd,
+        onDismiss = { showAdditionalIncomeEditor = false },
+        onSave = { title, amount, date ->
+            store.prepareUndoSnapshot()
+            canUndo = true
+            store.addIncomeEntry(
+                title = title,
+                amount = amount,
+                date = date,
+                start = periodStart,
+                end = periodEnd,
+                isAdditional = true
+            )
+            periodIncomes = store.loadPeriodIncomes()
+            incomeEntries = store.loadIncomeEntries()
+            showAdditionalIncomeEditor = false
+            Toast.makeText(context, "Дополнительный доход добавлен: ${money(amount)}", Toast.LENGTH_SHORT).show()
+        }
+    )
     if (showCarryoverConfirmation) {
         AppAlertDialog(
                         onDismissRequest = { showCarryoverConfirmation = false },
