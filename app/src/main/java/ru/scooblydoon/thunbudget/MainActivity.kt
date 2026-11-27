@@ -3419,7 +3419,7 @@ private fun PeriodIncomeDialog(start:String,end:String,current:Double,onDismiss:
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text("${LocalDate.parse(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${LocalDate.parse(end).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",style=MaterialTheme.typography.bodySmall)
             OutlinedTextField(value=amount,onValueChange={amount=it},label={Text("Заработанный доход, ₽")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),singleLine=true, colors = themedDialogOutlinedTextFieldColors())
-            Text("Доходы за два отчётных периода автоматически суммируются в месячный доход. Перенос средств учитывается отдельно и не увеличивает заработанный доход.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Основной и дополнительный заработок двух отчётных периодов суммируются в месячный доход. Дополнительные поступления влияют на фактический бюджет, но не используются для прогноза регулярного заработка. Перенос учитывается в доступном бюджете отдельно и не увеличивает заработанный доход.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
     },confirmButton={Button(onClick={if(parsed!=null&&parsed>=0) onSave(parsed)},enabled=parsed!=null&&parsed>=0){Text("Сохранить")}},dismissButton={
         Row { if(current>0) TextButton(onClick={onSave(0.0)}) { Text("Очистить") }; TextButton(onClick=onDismiss){Text("Отмена")} }
