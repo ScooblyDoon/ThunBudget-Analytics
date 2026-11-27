@@ -963,6 +963,53 @@ private fun ThunBudgetApp() {
 
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
+
+        val aliasTeaching = AssistantRecognitionDictionary.parseTeachingCommand(phrase)
+        if (aliasTeaching != null) {
+            val category = categories.firstOrNull {
+                AssistantRecognitionDictionary.normalize(it.name) ==
+                    AssistantRecognitionDictionary.normalize(aliasTeaching.category)
+            }
+            if (category == null) {
+                voiceMessage = "Категория «${aliasTeaching.category}» не найдена. Укажи точное название категории из приложения."
+            } else {
+                runCatching {
+                    assistantRecognitionRepository.rememberCategoryAlias(
+                        aliasTeaching.alias,
+                        category.name,
+                        categories.map { it.name }
+                    )
+                }.onSuccess {
+                    voiceMessage = "Запомнил: «${aliasTeaching.alias}» теперь распознаётся как категория «${category.name}». Старые операции не изменены."
+                }.onFailure {
+                    voiceMessage = it.message ?: "Не удалось сохранить синоним."
+                }
+            }
+            return
+        }
+
+        val aliasToRemove = AssistantRecognitionDictionary.parseAliasRemovalCommand(phrase)
+        if (aliasToRemove != null) {
+            assistantRecognitionRepository.removeCategoryAlias(aliasToRemove)
+            voiceMessage = "Удалил пользовательский синоним «$aliasToRemove». Встроенные правила и операции не изменены."
+            return
+        }
+
+        if (listOf("покажи мои синонимы", "какие синонимы я сохранил", "мой словарь категорий").any { normalizedPhrase.contains(it) }) {
+            val aliases = assistantRecognitionRepository.loadCategoryAliases()
+            voiceMessage = if (aliases.isEmpty()) {
+                "Пользовательских синонимов пока нет. Можно добавить командой: «Запомни синоним кофейня для категории Кафе и развлечения»."
+            } else {
+                "Сохранённые синонимы:\\n" + aliases.toSortedMap().entries.joinToString("\\n") { (alias, category) -> "• $alias → $category" }
+            }
+            return
+        }
+
+        if (listOf("очисти словарь синонимов", "удали все мои синонимы", "сбрось словарь категорий").any { normalizedPhrase.contains(it) }) {
+            assistantRecognitionRepository.clear()
+            voiceMessage = "Пользовательский словарь синонимов очищен. Встроенное распознавание категорий сохранено."
+            return
+        }
         if (listOf("очисти память помощника", "сбрось контекст помощника", "забудь предыдущий период").any { normalizedPhrase.contains(it) }) {
             assistantMemoryRepository.clear()
             assistantMemory = AssistantMemoryState()
@@ -970,7 +1017,7 @@ private fun ThunBudgetApp() {
             return
         }
         if (listOf("что я могу сказать", "какие команды", "помощь", "справка").any { normalizedPhrase.contains(it) }) {
-            voiceMessage = "Я умею добавлять доходы и расходы, искать операции, считать остаток до зарплаты, находить самые затратные дни и категории, показывать крупнейшие и средние траты, строить графики и давать рекомендации. Также могу формировать полный отчёт, пересчитывать доход и строить графики по сохранённым свободным периодам. Например: «Покажи отчёт за Отпуск», «А теперь только доход», «Построй график по категориям», «Сравни этот период с предыдущим»."
+            voiceMessage = "Я умею добавлять доходы и расходы, искать операции, считать остаток до зарплаты, находить самые затратные дни и категории, показывать крупнейшие и средние траты, строить графики и давать рекомендации. Также могу формировать отчёты и пересчитывать доход по свободным периодам, сравнивать их и запоминать контекст коротких уточнений. Можно обучить меня синонимам: «Запомни синоним кофейня для категории Кафе и развлечения». Примеры: «Покажи отчёт за Отпуск», «А теперь только доход», «Построй график по категориям», «Сравни этот период с предыдущим», «Покажи мои синонимы»."
             return
         }
         val rememberedPeriodName = assistantMemory.lastPeriodId
