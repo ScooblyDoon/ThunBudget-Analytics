@@ -19,6 +19,11 @@ enum class AssistantIntent(val wireValue: String, val isMutation: Boolean = fals
     QUERY_MIN_EXPENSE("query_min_expense"),
     QUERY_AVERAGE_SPENDING("query_average_spending"),
     QUERY_CHART("query_chart"),
+    QUERY_FLEXIBLE_PERIOD_LIST("query_flexible_period_list"),
+    QUERY_FLEXIBLE_PERIOD_REPORT("query_flexible_period_report"),
+    QUERY_FLEXIBLE_PERIOD_INCOME("query_flexible_period_income"),
+    QUERY_FLEXIBLE_PERIOD_CHART("query_flexible_period_chart"),
+    QUERY_FLEXIBLE_PERIOD_COMPARE("query_flexible_period_compare"),
     FORECAST("forecast"),
     UPDATE_EXPENSE("update_expense", true),
     DELETE_EXPENSE("delete_expense", true),
@@ -40,6 +45,10 @@ data class AssistantCommand(
     val periodEnd: String? = null,
     /** Human-readable selector only, e.g. "last_expense"; never a database ID from the model. */
     val target: String? = null,
+    /** Saved human-readable period name; never an internal database ID from a model. */
+    val periodName: String? = null,
+    /** Optional second saved period name for explicit comparisons. */
+    val comparePeriodName: String? = null,
     val confidence: Double = 0.0,
     val missingFields: List<String> = emptyList(),
     val requiresConfirmation: Boolean = intent.isMutation
@@ -59,7 +68,8 @@ object AssistantCommandValidator {
     fun validate(
         input: AssistantCommand,
         availableCategories: List<String>,
-        today: LocalDate = LocalDate.now()
+        today: LocalDate = LocalDate.now(),
+        availablePeriodNames: List<String> = emptyList()
     ): AssistantCommandValidation {
         if (!input.confidence.isFinite() || input.confidence !in 0.0..1.0) {
             return AssistantCommandValidation.Rejected("Некорректная уверенность интерпретации.")
@@ -107,6 +117,19 @@ object AssistantCommandValidator {
             }
         }
 
+        val normalizedPeriodName = input.periodName?.trim()?.let { requested ->
+            availablePeriodNames.firstOrNull { it.equals(requested, ignoreCase = true) }
+        }
+        if (input.periodName != null && normalizedPeriodName == null) {
+            return AssistantCommandValidation.NeedsClarification("Свободный период «${input.periodName}» не найден.")
+        }
+        val normalizedComparePeriodName = input.comparePeriodName?.trim()?.let { requested ->
+            availablePeriodNames.firstOrNull { it.equals(requested, ignoreCase = true) }
+        }
+        if (input.comparePeriodName != null && normalizedComparePeriodName == null) {
+            return AssistantCommandValidation.NeedsClarification("Период для сравнения «${input.comparePeriodName}» не найден.")
+        }
+
         val normalizedDate = input.date?.let { raw ->
             if (!datePattern.matches(raw)) return AssistantCommandValidation.Rejected("Дата должна быть в формате ГГГГ-ММ-ДД.")
             val parsed = runCatching { LocalDate.parse(raw) }.getOrNull()
@@ -138,6 +161,8 @@ object AssistantCommandValidator {
             periodStart = start?.toString(),
             periodEnd = end?.toString(),
             target = safeTarget,
+            periodName = normalizedPeriodName,
+            comparePeriodName = normalizedComparePeriodName,
             requiresConfirmation = input.intent.isMutation
         )
         return AssistantCommandValidation.Valid(command)
