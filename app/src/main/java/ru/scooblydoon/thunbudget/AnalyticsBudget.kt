@@ -261,7 +261,8 @@ internal object AnalyticsBudgetCalculator {
             val end = runCatching { java.time.LocalDate.parse(row.end) }.getOrNull() ?: return@mapNotNull null
             val earned = row.earnedAmount
             if (end.isBefore(start) || !earned.isFinite() || earned <= 0.0) return@mapNotNull null
-            IncomePeriod(start, end, earned, (earned - row.additionalAmount.coerceAtLeast(0.0)).coerceAtLeast(0.0))
+            val additional = row.additionalAmount.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+            IncomePeriod(start, end, earned, (earned - additional).coerceAtLeast(0.0))
         }
         // Prefer periods matching the configured reporting cycle. This prevents
         // an old overlapping monthly/legacy aggregate from filling days that
