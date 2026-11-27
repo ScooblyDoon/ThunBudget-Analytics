@@ -18,7 +18,7 @@
 - Do not merge to main, publish to stores, or release outside the branch.
 
 ## Review Focus
-- Dark theme keeps graphite dialogs and input fills while the accent changes to #89849A.
+- Dark theme keeps graphite dialogs and input fills, uses the calm violet accent #A58EC6, and applies a violet-tinted surface hierarchy.
 - Category colors remain consistent between overview, period, month and annual charts.
 - Empty and single-category charts render without divide-by-zero or missing legend labels.
 - Long category names and large ruble values remain readable on compact screens.
