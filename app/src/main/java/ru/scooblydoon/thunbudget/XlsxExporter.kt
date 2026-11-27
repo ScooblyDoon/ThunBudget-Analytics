@@ -131,12 +131,7 @@ object XlsxExporter {
             val cycle = ReportingPeriodCalculator.propose(ym, firstPeriodStartDay, firstPeriodEndDay)
             val from = cycle.first.start
             val cycleEnd = cycle.second.end
-            val currentMonth = YearMonth.from(asOf)
-            val actualEnd = when {
-                ym.isAfter(currentMonth) -> from.minusDays(1)
-                ym == currentMonth -> minOf(cycleEnd, asOf)
-                else -> cycleEnd
-            }
+            val actualEnd = minOf(cycleEnd, asOf)
             val monthIncome = monthlyIncomes[ym.toString()]?.takeIf { it.isFinite() && it > 0.0 } ?: income
             cashCategories.forEach { category ->
                 val fact = if (actualEnd.isBefore(from)) 0.0 else expenses.asSequence()
