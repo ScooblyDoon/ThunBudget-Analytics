@@ -93,7 +93,7 @@ object AssistantLocalParser {
         ).any { normalized.contains(it) } &&
             !listOf("отчет", "отчёт", "график", "доход", "расход", "сравни").any { normalized.contains(it) }
 
-        if (asksPeriodList && mentionsFlexiblePeriods) {
+        if (asksPeriodList) {
             return command(
                 AssistantIntent.QUERY_FLEXIBLE_PERIOD_LIST,
                 confidence = 0.96
@@ -106,6 +106,17 @@ object AssistantLocalParser {
                 !listOf("добавь", "добавить", "запиши", "внеси", "получил", "получила", "мне перевели").any { normalized.contains(it) }
             val asksNamedCategory = category != null && listOf("сколько", "потрат", "расход", "ушло", "затрат").any { normalized.contains(it) }
             val asksSpending = listOf("сколько потратил", "сколько потратила", "расходы", "потрачено", "сколько ушло").any { normalized.contains(it) }
+            if (contextFollowUp && category != null &&
+                !listOf("график", "диаграм", "доход", "сравни", "отчет", "отчёт").any { normalized.contains(it) }) {
+                return command(
+                    AssistantIntent.QUERY_CATEGORY_SPENDING,
+                    category = category,
+                    periodStart = customPeriodStart,
+                    periodEnd = customPeriodEnd,
+                    periodName = resolvedPeriod?.name,
+                    confidence = 0.91
+                )
+            }
             if (asksNamedCategory) {
                 return command(
                     AssistantIntent.QUERY_CATEGORY_SPENDING,
