@@ -68,4 +68,22 @@ class AssistantAnalyticsTest {
         assertEquals(500.0, recommendations.sumOf { it.suggestedReduction }, 0.001)
     }
 
+
+    @Test
+    fun generalSpendingAnalyticsExcludeInternalPeriodCarryoverButKeepSavings() {
+        val rows = listOf(
+            Expense(20, "Покупка", "Продукты", 1000.0, "2026-03-05"),
+            Expense(21, "На накопительный счёт", "Накопления", 10000.0, "2026-03-06"),
+            Expense(22, "Перенос остатка", "Перенос средств", 5000.0, "2026-03-07")
+        )
+
+        val categories = AssistantAnalytics.categoryTotals(rows).toMap()
+        assertEquals(1000.0, categories["Продукты"]!!, 0.001)
+        assertEquals(10000.0, categories["Накопления"]!!, 0.001)
+        assertEquals(false, categories.containsKey("Перенос средств"))
+
+        val months = AssistantAnalytics.monthlyTotals(rows)
+        assertEquals(11000.0, months.single().second, 0.001)
+    }
+
 }
