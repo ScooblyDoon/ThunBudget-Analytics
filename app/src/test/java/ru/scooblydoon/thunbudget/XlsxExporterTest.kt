@@ -157,7 +157,8 @@ class XlsxExporterTest {
             Expense(1, "Покупка", "Продукты", 1000.0, "2026-11-10"),
             Expense(2, "На накопительный счёт", "Накопления", 10000.0, "2026-11-11"),
             Expense(3, "В резерв", "Резервные средства", 3000.0, "2026-11-12"),
-            Expense(4, "Перенос остатка", "Перенос средств", 5000.0, "2026-11-23")
+            Expense(4, "Перенос остатка", "Перенос средств", 5000.0, "2026-11-23"),
+            Expense(5, "Будущая покупка", "Продукты", 800.0, "2026-11-28")
         )
         val rows = XlsxExporter.months(
             expenses = expenses,
@@ -169,7 +170,8 @@ class XlsxExporterTest {
             ),
             income = 100000.0,
             year = 2026,
-            monthlyIncomes = mapOf("2026-11" to 100000.0)
+            monthlyIncomes = mapOf("2026-11" to 100000.0),
+            asOf = LocalDate.parse("2026-11-27")
         )
         val november = rows.drop(1).dropLast(1)
             .filter { it[0] == "2026-11" }
