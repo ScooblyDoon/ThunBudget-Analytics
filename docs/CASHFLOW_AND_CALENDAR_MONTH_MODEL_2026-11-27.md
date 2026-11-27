@@ -38,21 +38,23 @@ For reporting period (P):
 
 Carryover is not new earned income. It is a budget balance imported from the previous period.
 
-### Calendar-month actual income
+### Calendar-month income allocation
 
-Regular income is entered as a total for its reporting period. When the period crosses a calendar-month boundary, distribute the regular amount across the inclusive dates of the period:
+The regular-income input stores one amount for the entire reporting period; it does not currently store the exact bank posting date of the salary. To make calendar-month budgets comparable when a reporting period crosses month boundaries, the app allocates the regular amount evenly across the inclusive calendar dates of that reporting period:
 
-`regularIncomeInMonth(M) = Σ regularIncome(P) × D(P,M) / D(P)`
+`regularIncomeAllocatedToMonth(M) = Σ regularIncome(P) × D(P,M) / D(P)`
 
-Additional income is a dated event, not a recurring daily rate:
+This is a **calendar-month allocation for budget analysis**, not a claim that the salary was deposited on every one of those dates. Exact bank-statement cash-flow for regular salary would require a separate salary receipt date. The current product model deliberately uses period allocation for regular income, consistent with the configured reporting-period budget.
+
+Additional income is different: it is a dated event, not a recurring daily rate:
 
 `additionalIncomeInMonth(M) = Σ amount(entry), where entry.isAdditional and entry.date ∈ M`
 
 Thus:
 
-`calendarMonthActualIncome(M) = regularIncomeInMonth(M) + additionalIncomeInMonth(M)`
+`calendarMonthIncomeEntered(M) = regularIncomeAllocatedToMonth(M) + additionalIncomeInMonth(M)`
 
-The carryover from the preceding reporting period is not counted as new monthly income; the original income was already counted when it entered the cash pool.
+The carryover from the preceding reporting period is not counted as new monthly income; the original income was already included when allocated to its original reporting-period dates.
 
 ### Monthly income forecast
 
@@ -65,7 +67,7 @@ The carryover from the preceding reporting period is not counted as new monthly 
 
 `calendarMonthForecast(M) = medianCompletedRegularDailyRate × uncoveredFutureDays(M)`
 
-`calendarMonthProjectedIncome(M) = calendarMonthActualIncome(M) + calendarMonthForecast(M)`
+`calendarMonthProjectedIncome(M) = calendarMonthIncomeEntered(M) + calendarMonthForecast(M)`
 
 The report should label actual and forecast amounts separately. It must not present projected income as money already received.
 
@@ -121,8 +123,8 @@ Implemented on the working branch:
 - Legacy aggregate additional-income amounts without dated ledger detail retain a compatibility fallback.
 - Dedicated calendar-month cash expense helpers exclude internal `Перенос средств` only; savings/reserve remain included.
 - Monthly and yearly analytics totals/charts use the calendar cash-expense basis.
-- The monthly income selector shows the amount allocated to elapsed calendar dates, the forecast for uncovered future dates, and the combined expected income as separate figures.
-- Excel month/year category sheets use the same cash-expense basis; the raw Operations sheet keeps every transaction visible for audit, including technical carryover rows. The period report retains carryover for reporting-period closure.
+- The monthly income selector shows income allocated from entered reporting periods, the forecast for uncovered future dates, and the combined expected income as separate figures.
+- Excel month/year category sheets use the same cash-expense basis and saved period-specific category shares; the raw Operations sheet keeps every transaction visible for audit, including technical carryover rows. The period report retains carryover for reporting-period closure.
 - Reporting-period carryover calculation and per-period budget closure remain unchanged.
 
 ## 7. Regression tests
