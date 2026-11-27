@@ -146,7 +146,7 @@ class XlsxExporterTest {
         assertEquals("Перенос средств", rows[3][2])
         assertEquals(5000.0, rows[2][3] as Double, 0.001)
         assertEquals("ИТОГО", rows.last()[0])
-        assertEquals(43000.0, rows.last()[3] as Double, 0.001)
+        assertTrue(rows.last()[3].toString().contains("SUM(D2:D4)"))
     }
 
 }
