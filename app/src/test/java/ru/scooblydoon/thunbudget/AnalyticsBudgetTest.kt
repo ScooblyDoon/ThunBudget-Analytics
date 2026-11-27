@@ -797,4 +797,19 @@ class AnalyticsBudgetTest {
         )
     }
 
+
+    @Test
+    fun dynamicShareWindowCountsOpeningCarryoverOnceAndOnlyNewIncomeLater() {
+        // Opening available amount in the first sampled period is 70,000 ₽.
+        // The next period has 40,000 ₽ new income plus a 20,000 ₽ rollover.
+        // The combined share denominator must be 110,000 ₽, not 130,000 ₽.
+        val weighted = BudgetAllocationCalculator.weightedPercentOfIncome(
+            listOf(
+                14000.0 to 70000.0,
+                8000.0 to 40000.0
+            )
+        )
+        assertEquals(20.0, weighted!!, 0.001)
+    }
+
 }
