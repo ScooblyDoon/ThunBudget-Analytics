@@ -887,8 +887,11 @@ private fun ThunBudgetApp() {
         periodIncomes, analyticsCycleIncome.secondStart, analyticsCycleIncome.secondEnd,
         expenses, firstPeriodStartDay, firstPeriodEndDay
     )
+    // For the combined two-period plan, count opening funds in period 1
+    // and new earned income in period 2. Period-1 carryover in period 2 is
+    // the same money, so it must not be added to the cycle total a second time.
+    val analyticsCyclePlanIncome = analyticsCycleFirstAvailableIncome + analyticsCycleIncome.secondIncome
     val analyticsCycleAvailableIncome = analyticsCycleFirstAvailableIncome + analyticsCycleSecondAvailableIncome
-    val analyticsCyclePlanIncome = analyticsCycleAvailableIncome.takeIf { it > 0.0 } ?: if (analyticsCycleIncome.totalIncome > 0.0) analyticsCycleIncome.totalIncome else income.coerceAtLeast(0.0)
     val analyticsCycleCarryover = (analyticsCycleFirstAvailableIncome - analyticsCycleIncome.firstIncome).coerceAtLeast(0.0) +
         (analyticsCycleSecondAvailableIncome - analyticsCycleIncome.secondIncome).coerceAtLeast(0.0)
     // The primary monthly budget uses both complete reporting periods.
@@ -932,10 +935,12 @@ private fun ThunBudgetApp() {
         secondStart = analyticsCycleIncome.secondStart,
         secondEnd = analyticsCycleIncome.secondEnd,
         firstIncome = analyticsCycleFirstAvailableIncome,
-        secondIncome = analyticsCycleSecondAvailableIncome
+        secondIncome = analyticsCycleIncome.secondIncome
     )
+    val effectiveAnalyticsCyclePlanIncome = analyticsCyclePlanIncome.takeIf { it > 0.0 }
+        ?: if (analyticsCycleIncome.totalIncome > 0.0) analyticsCycleIncome.totalIncome else income.coerceAtLeast(0.0)
     val analyticsCyclePlanAmounts = currentCategoryShares.associate { (name, _) ->
-        name to analyticsCyclePlanIncome.coerceAtLeast(0.0) *
+        name to effectiveAnalyticsCyclePlanIncome.coerceAtLeast(0.0) *
             (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0
     }
     val hasMonthlyIncomePeriods = periodIncomes.any { row ->
