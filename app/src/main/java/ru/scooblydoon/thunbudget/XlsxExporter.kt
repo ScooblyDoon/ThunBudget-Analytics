@@ -8,7 +8,12 @@ import java.time.temporal.ChronoUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-data class BudgetCategory(val name: String, val percent: Double)
+data class BudgetCategory(
+    val name: String,
+    val percent: Double,
+    /** null keeps legacy name-based protection defaults; true/false is an explicit user choice. */
+    val protectedFromRedistribution: Boolean? = null
+)
 data class Expense(val id: Long, val title: String, val category: String, val amount: Double, val date: String)
 private data class FormulaCell(val expression: String)
 

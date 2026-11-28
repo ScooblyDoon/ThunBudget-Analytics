@@ -197,6 +197,37 @@ class BudgetRedistributionEngineTest {
         }
     }
 
+
+    @Test
+    fun explicitFalseCanUnprotectANameBasedDefaultButNeverSavings() {
+        val proposal = BudgetRedistributionCalculator.calculate(
+            start, end, 10_000.0,
+            listOf(
+                category("Транспорт", 100.0, actual = 500.0),
+                category("Жильё и ЖКХ", 2_000.0, protected = false),
+                category("Накопления", 3_000.0, protected = false),
+                category("Покупки", 1_000.0, actual = 200.0)
+            )
+        )
+        assertTrue(proposal.transfers.isNotEmpty())
+        assertTrue(proposal.transfers.none { it.fromCategory == "Накопления" })
+        assertTrue(proposal.transfers.any { it.fromCategory == "Жильё и ЖКХ" })
+    }
+
+    @Test
+    fun absentProtectionOverrideUsesNameBasedDefaults() {
+        val proposal = BudgetRedistributionCalculator.calculate(
+            start, end, 10_000.0,
+            listOf(
+                category("Транспорт", 100.0, actual = 500.0),
+                category("Жильё и ЖКХ", 2_000.0, protected = null),
+                category("Покупки", 1_000.0, actual = 200.0)
+            )
+        )
+        assertTrue(proposal.transfers.isNotEmpty())
+        assertTrue(proposal.transfers.none { it.fromCategory == "Жильё и ЖКХ" })
+    }
+
     @Test
     fun netAdjustmentsAreIsolatedToExactReportingPeriod() {
         val transfers = listOf(

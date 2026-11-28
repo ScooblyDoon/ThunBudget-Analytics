@@ -61,6 +61,10 @@ internal data class PeriodIncome(
 )
 
 internal class BudgetStore(context: Context) {
+    companion object {
+        const val AUTO_REDISTRIBUTION_ENABLED_KEY = "budget_auto_redistribution_enabled"
+        const val REDISTRIBUTION_LEDGER_KEY = "budget_redistribution_ledger_v1"
+    }
     private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     private val incomeLedger = IncomeLedgerRepository(prefs)
@@ -234,22 +238,62 @@ internal class BudgetStore(context: Context) {
             BudgetCategory("Накопления", 10.0), BudgetCategory("Прочее", 10.0)
         )
         return runCatching {
-            val a = JSONArray(raw); (0 until a.length()).map { val o=a.getJSONObject(it); BudgetCategory(o.getString("name"),o.getDouble("percent")) }
+            val a = JSONArray(raw); (0 until a.length()).map { val o=a.getJSONObject(it)
+                BudgetCategory(
+                    o.getString("name"), o.getDouble("percent"),
+                    if (o.has("protectedFromRedistribution") && !o.isNull("protectedFromRedistribution"))
+                        o.getBoolean("protectedFromRedistribution") else null
+                )
+            }
         }.getOrDefault(emptyList())
     }
     fun loadAutoAllocationEnabled(): Boolean = prefs.getBoolean("analytics_auto_allocation", false)
     fun saveAutoAllocationEnabled(enabled: Boolean) { prefs.edit().putBoolean("analytics_auto_allocation", enabled).commit() }
+    fun loadAutoRedistributionEnabled(): Boolean = prefs.getBoolean(AUTO_REDISTRIBUTION_ENABLED_KEY, false)
+    fun saveAutoRedistributionEnabled(enabled: Boolean) {
+        check(prefs.edit().putBoolean(AUTO_REDISTRIBUTION_ENABLED_KEY, enabled).commit()) {
+            "Не удалось сохранить настройку автоматического перераспределения."
+        }
+        saveAutomaticBackup()
+    }
+    fun loadBudgetRedistributionLedger(): List<AppliedBudgetRedistributionTransfer> =
+        BudgetRedistributionLedgerCodec.decode(
+            prefs.getString(REDISTRIBUTION_LEDGER_KEY, null)
+                ?: BudgetRedistributionLedgerCodec.encode(emptyList())
+        )
+    fun applyBudgetRedistribution(
+        proposal: BudgetRedistributionProposal,
+        appliedAt: String
+    ): List<AppliedBudgetRedistributionTransfer> {
+        val updated = BudgetRedistributionCalculator.appendAppliedTransfers(
+            proposal, loadBudgetRedistributionLedger(), appliedAt
+        )
+        val encoded = BudgetRedistributionLedgerCodec.encode(updated)
+        check(prefs.edit().putString(REDISTRIBUTION_LEDGER_KEY, encoded).commit()) {
+            "Не удалось сохранить переводы между категориями."
+        }
+        saveAutomaticBackup()
+        return updated
+    }
     fun loadManualAllocationSnapshot(): List<BudgetCategory>? = runCatching {
         val raw = prefs.getString("analytics_manual_allocation_snapshot", null) ?: return null
         val array = JSONArray(raw)
         (0 until array.length()).map { index ->
             val row = array.getJSONObject(index)
-            BudgetCategory(row.getString("name"), row.getDouble("percent"))
+            BudgetCategory(
+                row.getString("name"), row.getDouble("percent"),
+                if (row.has("protectedFromRedistribution") && !row.isNull("protectedFromRedistribution"))
+                    row.getBoolean("protectedFromRedistribution") else null
+            )
         }
     }.getOrNull()
     fun saveManualAllocationSnapshot(items: List<BudgetCategory>) {
         val array = JSONArray()
-        items.forEach { array.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+        items.forEach { item ->
+            val row = JSONObject().put("name", item.name).put("percent", item.percent)
+            item.protectedFromRedistribution?.let { row.put("protectedFromRedistribution", it) }
+            array.put(row)
+        }
         check(prefs.edit().putString("analytics_manual_allocation_snapshot", array.toString()).commit())
     }
     fun loadReportingPeriodCategoryPlans(): Map<Pair<String, String>, Map<String, Double>> = runCatching {
@@ -300,7 +344,10 @@ internal class BudgetStore(context: Context) {
     fun saveCategories(items: List<BudgetCategory>, planStart: String? = null, planEnd: String? = null) {
         val previous = loadCategories()
         val normalizedPairs = BudgetAllocationCalculator.withReserve(items.map { it.name to it.percent })
-        val normalized = normalizedPairs.map { BudgetCategory(it.first, it.second) }
+        val normalized = normalizedPairs.map { pair ->
+            val source = items.firstOrNull { it.name.trim().equals(pair.first.trim(), ignoreCase = true) }
+            BudgetCategory(pair.first, pair.second, source?.protectedFromRedistribution)
+        }
         fun planShares(categories: List<BudgetCategory>) = categories
             .filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
             .associate { it.name.lowercase(Locale.ROOT) to it.percent }
@@ -339,7 +386,11 @@ internal class BudgetStore(context: Context) {
 
     private fun persistCategories(items: List<BudgetCategory>) {
         val a = JSONArray()
-        items.forEach { a.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+        items.forEach { item ->
+            val row = JSONObject().put("name", item.name).put("percent", item.percent)
+            item.protectedFromRedistribution?.let { row.put("protectedFromRedistribution", it) }
+            a.put(row)
+        }
         check(prefs.edit().putString("categories", a.toString()).commit()) {
             "Не удалось сохранить доли категорий."
         }
@@ -371,7 +422,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1")
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1", AUTO_REDISTRIBUTION_ENABLED_KEY, REDISTRIBUTION_LEDGER_KEY)
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -435,7 +486,9 @@ internal class BudgetStore(context: Context) {
         if (!data.has("period_incomes")) data.put("period_incomes", "[]")
         if (!data.has("categories")) {
             val defaults = JSONArray()
-            loadCategories().forEach { defaults.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+            loadCategories().forEach { defaults.put(JSONObject().put("name", it.name).put("percent", it.percent).apply {
+                it.protectedFromRedistribution?.let { protected -> put("protectedFromRedistribution", protected) }
+            }) }
             data.put("categories", defaults.toString())
         }
         return JSONObject()
@@ -499,13 +552,13 @@ internal class BudgetStore(context: Context) {
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1")) {
+            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1", AUTO_REDISTRIBUTION_ENABLED_KEY, REDISTRIBUTION_LEDGER_KEY)) {
                 "В резервной копии обнаружено неизвестное поле."
             }
             val value = data.get(key)
             when (value) {
                 is String -> if (key != "_pre_restore_backup") editor.putString(key, value)
-                is Boolean -> if (key == "dark_theme" || key == IncomeLedgerRepository.MIGRATION_KEY) editor.putBoolean(key, value) else error("Некорректный формат данных резервной копии.")
+                is Boolean -> if (key == "dark_theme" || key == IncomeLedgerRepository.MIGRATION_KEY || key == AUTO_REDISTRIBUTION_ENABLED_KEY) editor.putBoolean(key, value) else error("Некорректный формат данных резервной копии.")
                 else -> error("Некорректный формат данных резервной копии.")
             }
         }
@@ -537,9 +590,20 @@ internal class BudgetStore(context: Context) {
             require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
             val percent = row.getDouble("percent")
             require(percent.isFinite() && percent >= 0.0)
+            if (row.has("protectedFromRedistribution") && !row.isNull("protectedFromRedistribution")) {
+                require(row.get("protectedFromRedistribution") is Boolean)
+            }
             categoryPercentTotal += percent
         }
         require(categoryPercentTotal <= 100.0)
+        val ledgerRaw = data.optString(
+            BudgetStore.REDISTRIBUTION_LEDGER_KEY,
+            BudgetRedistributionLedgerCodec.encode(emptyList())
+        )
+        BudgetRedistributionLedgerCodec.decode(ledgerRaw)
+        if (data.has(BudgetStore.AUTO_REDISTRIBUTION_ENABLED_KEY)) {
+            require(data.get(BudgetStore.AUTO_REDISTRIBUTION_ENABLED_KEY) is Boolean)
+        }
         val recurringPayments = JSONArray(data.optString("recurring_payments_v1", "[]"))
         val recurringIds = mutableSetOf<String>()
         for (i in 0 until recurringPayments.length()) {
