@@ -1963,7 +1963,7 @@ private fun ThunBudgetApp() {
                                             Text("Предлагаемые переносы", fontWeight = FontWeight.SemiBold)
                                             currentBudgetRedistributionProposal.transfers.forEach { transfer ->
                                                 Text(
-                                                    "«${transfer.toCategory}»: +${money(transfer.amount)} из «${transfer.fromCategory}» · свободный остаток до переноса ${String.format(Locale("ru", "RU"), "%.1f", transfer.donorFreePercent)}%",
+                                                    "«${transfer.toCategory}»: +${money(transfer.amount)} из «${transfer.fromCategory}» · доступно к переносу ${money(transfer.availableBeforeTransfer)} · свободно ${String.format(Locale("ru", "RU"), "%.1f", transfer.donorFreePercent)}%",
                                                     style = MaterialTheme.typography.bodySmall
                                                 )
                                             }
@@ -1994,7 +1994,7 @@ private fun ThunBudgetApp() {
                                 }
                                 val currentPeriodTransfers = redistributionLedger.filter {
                                     it.periodStart == selectedOverviewPeriodStart && it.periodEnd == selectedOverviewPeriodEnd
-                                }.sortedByDescending { it.appliedAt }
+                                }.sortedByDescending { java.time.Instant.parse(it.appliedAt) }
                                 val latestCurrentProposalFingerprint = currentPeriodTransfers.firstOrNull()?.proposalFingerprint
                                 if (redistributionLedger.isNotEmpty()) {
                                     Divider()
@@ -3419,7 +3419,7 @@ private fun ThunBudgetApp() {
                 showUndoRedistributionConfirmation = false
                 val fingerprint = redistributionLedger
                     .filter { it.periodStart == selectedOverviewPeriodStart && it.periodEnd == selectedOverviewPeriodEnd }
-                    .maxByOrNull { it.appliedAt }?.proposalFingerprint
+                    .maxByOrNull { java.time.Instant.parse(it.appliedAt) }?.proposalFingerprint
                 if (fingerprint != null) {
                     runCatching {
                         store.prepareUndoSnapshot()
@@ -3445,7 +3445,7 @@ private fun ThunBudgetApp() {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Период: ${selectedOverviewPeriodStart.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${selectedOverviewPeriodEnd.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}")
                 currentBudgetRedistributionProposal.transfers.forEach { transfer ->
-                    Text("${transfer.fromCategory} → ${transfer.toCategory}: ${money(transfer.amount)}")
+                    Text("${transfer.fromCategory} → ${transfer.toCategory}: ${money(transfer.amount)} (доступно на этом шаге: ${money(transfer.availableBeforeTransfer)})")
                 }
                 Text("Всего будет перераспределено: ${money(currentBudgetRedistributionProposal.totalTransferred)}.", fontWeight = FontWeight.SemiBold)
                 if (currentBudgetRedistributionProposal.totalUncovered > 0.0001) {

@@ -200,6 +200,24 @@ class BudgetRedistributionEngineTest {
 
 
 
+
+    @Test
+    fun proposalExposesTransferableAmountAfterGlobalSafetyBuffer() {
+        val proposal = BudgetRedistributionCalculator.calculate(
+            start, end, 10_000.0,
+            listOf(
+                category("Продукты", 1_000.0, actual = 1_200.0),
+                category("Покупки", 2_000.0, actual = 1_400.0)
+            )
+        )
+        val transfer = proposal.transfers.single()
+        assertEquals("Покупки", transfer.fromCategory)
+        assertEquals("Продукты", transfer.toCategory)
+        assertEquals(200.0, transfer.amount, 0.001)
+        assertEquals(400.0, transfer.availableBeforeTransfer, 0.001)
+        assertEquals(30.0, transfer.donorFreePercent, 0.001)
+    }
+
     @Test
     fun displayedCategoryPercentReflectsTransferredPlanWithoutChangingSavedShares() {
         assertEquals(17.0, BudgetRedistributionCalculator.effectiveCategoryPercent(1_700.0, 10_000.0, 20.0), 0.001)

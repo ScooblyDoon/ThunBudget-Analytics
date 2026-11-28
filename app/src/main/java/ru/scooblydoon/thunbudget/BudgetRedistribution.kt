@@ -35,7 +35,9 @@ data class BudgetRedistributionTransfer(
     val fromCategory: String,
     val toCategory: String,
     val amount: Double,
-    val donorFreePercent: Double
+    val donorFreePercent: Double,
+    /** Maximum amount available to move from this donor at this allocation step, after safety rules. */
+    val availableBeforeTransfer: Double = amount
 )
 
 data class BudgetRedistributionProposal(
@@ -196,7 +198,8 @@ object BudgetRedistributionCalculator {
                     fromCategory = donor.name,
                     toCategory = deficit.category,
                     amount = money(moved),
-                    donorFreePercent = donor.freePercent
+                    donorFreePercent = donor.freePercent,
+                    availableBeforeTransfer = money(available)
                 )
                 donorRemaining[donor.name] = donorRemainingCents - moved
                 if (!donor.reserve) ordinaryPoolRemaining -= moved
