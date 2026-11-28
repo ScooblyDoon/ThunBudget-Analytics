@@ -202,6 +202,32 @@ class BudgetRedistributionEngineTest {
 
 
     @Test
+    fun automaticApplyRequiresEnabledSwitchAndAnUnappliedTransferProposal() {
+        val proposal = BudgetRedistributionCalculator.calculate(
+            start, end, 1_000.0,
+            listOf(
+                category("Транспорт", 100.0, actual = 300.0),
+                category("Резервные средства", 500.0)
+            )
+        )
+        assertTrue(proposal.transfers.isNotEmpty())
+        assertFalse(BudgetRedistributionCalculator.shouldApplyAutomatically(false, proposal, emptyList()))
+        assertTrue(BudgetRedistributionCalculator.shouldApplyAutomatically(true, proposal, emptyList()))
+
+        val applied = BudgetRedistributionCalculator.appendAppliedTransfers(
+            proposal, emptyList(), "2026-11-28T10:00:00Z"
+        )
+        assertFalse(BudgetRedistributionCalculator.shouldApplyAutomatically(true, proposal, applied))
+
+        val noTransferProposal = BudgetRedistributionCalculator.calculate(
+            start, end, 1_000.0,
+            listOf(category("Продукты", 500.0, actual = 100.0))
+        )
+        assertTrue(noTransferProposal.transfers.isEmpty())
+        assertFalse(BudgetRedistributionCalculator.shouldApplyAutomatically(true, noTransferProposal, emptyList()))
+    }
+
+    @Test
     fun proposalExposesTransferableAmountAfterGlobalSafetyBuffer() {
         val proposal = BudgetRedistributionCalculator.calculate(
             start, end, 10_000.0,

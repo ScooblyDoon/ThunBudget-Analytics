@@ -266,6 +266,15 @@ object BudgetRedistributionCalculator {
             .filterValues { it != 0.0 }
     }
 
+    fun shouldApplyAutomatically(
+        enabled: Boolean,
+        proposal: BudgetRedistributionProposal,
+        existingLedger: List<AppliedBudgetRedistributionTransfer>
+    ): Boolean =
+        enabled &&
+            proposal.transfers.isNotEmpty() &&
+            existingLedger.none { it.proposalFingerprint == proposal.fingerprint }
+
     fun appendAppliedTransfers(
         proposal: BudgetRedistributionProposal,
         existingLedger: List<AppliedBudgetRedistributionTransfer>,

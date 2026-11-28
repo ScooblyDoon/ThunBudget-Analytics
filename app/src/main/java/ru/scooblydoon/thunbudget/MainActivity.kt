@@ -841,8 +841,6 @@ private fun ThunBudgetApp() {
     }
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
-    var showRedistributionConfirmation by remember { mutableStateOf(false) }
-    var showUndoRedistributionConfirmation by remember { mutableStateOf(false) }
     var showResetConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
@@ -1135,6 +1133,42 @@ private fun ThunBudgetApp() {
             periodIncome = redistributionPeriodBudget,
             categories = inputs
         )
+    }
+
+    LaunchedEffect(
+        autoRedistributionEnabled,
+        selectedOverviewPeriodStart,
+        selectedOverviewPeriodEnd,
+        redistributionPeriodBudget,
+        categories,
+        expenses,
+        recurringPayments,
+        redistributionForecast.categories,
+        today
+    ) {
+        if (!BudgetRedistributionCalculator.shouldApplyAutomatically(
+                enabled = autoRedistributionEnabled,
+                proposal = currentBudgetRedistributionProposal,
+                existingLedger = redistributionLedger
+            )
+        ) return@LaunchedEffect
+
+        runCatching {
+            store.prepareUndoSnapshot()
+            store.applyBudgetRedistribution(
+                currentBudgetRedistributionProposal,
+                java.time.Instant.now().toString()
+            )
+        }.onSuccess { updated ->
+            redistributionLedger = updated
+            canUndo = true
+        }.onFailure { error ->
+            Toast.makeText(
+                context,
+                error.message ?: "Не удалось автоматически перераспределить бюджет.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     fun handleAssistantPhrase(phrase: String) {
@@ -1934,96 +1968,6 @@ private fun ThunBudgetApp() {
             when(tab) {
                 0 -> LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=24.dp)) {
                     item { Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text("Автоматически подбирать компенсацию", fontWeight = FontWeight.SemiBold)
-                                        Text("По прогнозу расходов за выбранный отчётный период", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    Switch(
-                                        checked = autoRedistributionEnabled,
-                                        onCheckedChange = { enabled ->
-                                            autoRedistributionEnabled = enabled
-                                            store.saveAutoRedistributionEnabled(enabled)
-                                        }
-                                    )
-                                }
-                                if (autoRedistributionEnabled) {
-                                    if (currentBudgetRedistributionProposal.deficits.isEmpty()) {
-                                        Text("По прогнозу категории укладываются в план. Переносы не требуются.", style = MaterialTheme.typography.bodySmall)
-                                    } else {
-                                        Text("Ожидаемое превышение плана", fontWeight = FontWeight.SemiBold)
-                                        currentBudgetRedistributionProposal.deficits.forEach { deficit ->
-                                            Text(
-                                                "«${deficit.category}»: факт ${money(deficit.actualSpend)}, прогноз ${money(deficit.projectedSpend)} при плане ${money(deficit.plannedAmount)}. Не хватает ${money(deficit.amount)}.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                        if (currentBudgetRedistributionProposal.transfers.isNotEmpty()) {
-                                            Text("Предлагаемые переносы", fontWeight = FontWeight.SemiBold)
-                                            currentBudgetRedistributionProposal.transfers.forEach { transfer ->
-                                                Text(
-                                                    "«${transfer.toCategory}»: +${money(transfer.amount)} из «${transfer.fromCategory}» · доступно к переносу ${money(transfer.availableBeforeTransfer)} · свободно ${String.format(Locale("ru", "RU"), "%.1f", transfer.donorFreePercent)}%",
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
-                                            Text(
-                                                "Сначала используется резерв. Обязательные платежи учитываются в прогнозе, накопления защищены, обычным категориям сохраняется общий запас 2% дохода.",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            FilledTonalButton(
-                                                onClick = { showRedistributionConfirmation = true },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) { Text("Проверить и подтвердить переносы") }
-                                        } else {
-                                            Text(
-                                                "Подходящих свободных средств не найдено. Защищённые категории и категории без истории не используются как доноры.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (currentBudgetRedistributionProposal.totalUncovered > 0.0001) {
-                                            Text(
-                                                "Останется не покрыто: ${money(currentBudgetRedistributionProposal.totalUncovered)}.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                    }
-                                }
-                                val currentPeriodTransfers = redistributionLedger.filter {
-                                    it.periodStart == selectedOverviewPeriodStart && it.periodEnd == selectedOverviewPeriodEnd
-                                }.sortedByDescending { java.time.Instant.parse(it.appliedAt) }
-                                val latestCurrentProposalFingerprint = currentPeriodTransfers.firstOrNull()?.proposalFingerprint
-                                if (redistributionLedger.isNotEmpty()) {
-                                    Divider()
-                                    Text("История переносов бюджета", fontWeight = FontWeight.SemiBold)
-                                    redistributionLedger.sortedByDescending { it.appliedAt }.take(5).forEach { movement ->
-                                        Text(
-                                            "${movement.fromCategory} → ${movement.toCategory}: ${money(movement.amount)} · ${runCatching { java.time.Instant.parse(movement.appliedAt).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd.MM HH:mm")) }.getOrDefault(movement.appliedAt)}",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                    if (redistributionLedger.size > 5) {
-                                        Text("Показаны последние 5 из ${redistributionLedger.size} переносов.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    if (latestCurrentProposalFingerprint != null) {
-                                        OutlinedButton(
-                                            onClick = { showUndoRedistributionConfirmation = true },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text("Отменить последний перенос этого периода") }
-                                    }
-                                }
-                            }
-                        }
-                    }
                     items(dashboardOrder,key={it}) { section ->
                         when(section) {
                             "period" -> Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -2054,8 +1998,7 @@ private fun ThunBudgetApp() {
                                     Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                         Text("Доступно в бюджете",color=visualPalette.budgetCardContent.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
                                         Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=visualPalette.budgetCardContent)
-                                        Text("Факт: ${money(totalActualSpent)} · Запланировано на будущее: ${money(futureEnteredPeriodExpenses)}",color=visualPalette.budgetCardContent.copy(alpha=.86f))
-                                         if (carryoverIncome > 0.0) Text("Перенос остатка с прошлых периодов: +${money(carryoverIncome)}", color = visualPalette.budgetCardContent.copy(alpha = .88f), style = MaterialTheme.typography.bodySmall)
+                                        Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=visualPalette.budgetCardContent.copy(alpha=.86f))
                                         val periodEndDate=LocalDate.parse(periodEnd)
                                         val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
                                         val averageRemainingPerDay=if(remainingDays>0) remaining.coerceAtLeast(0.0)/remainingDays else 0.0
@@ -2153,13 +2096,45 @@ private fun ThunBudgetApp() {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Автоматическая компенсация превышений", fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "Переносит свободные остатки в категории, где прогноз расходов выше плана.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(
+                                        checked = autoRedistributionEnabled,
+                                        onCheckedChange = { enabled ->
+                                            autoRedistributionEnabled = enabled
+                                            store.saveAutoRedistributionEnabled(enabled)
+                                        }
+                                    )
+                                }
+                            }
                             OutlinedButton(onClick = { showAllocationDialog = true }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Рассчитать доли по истории расходов")
                             }
                             Card {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
-                                        Text("Использовать сохранённые доли периодов", fontWeight = FontWeight.SemiBold)
+                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text("Учитывать сохранённые доли каждого периода", fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                "Для периода с отдельным сохранённым планом применяются его проценты; иначе — текущие доли категорий.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                     Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
                                         if (enabled) {
@@ -3428,75 +3403,6 @@ private fun ThunBudgetApp() {
         confirmButton={Button(onClick={showRestoreConfirmation=false;backupImportLauncher.launch(arrayOf("application/json","text/*"))}) { Text("Выбрать файл") }},
         dismissButton={TextButton(onClick={showRestoreConfirmation=false}) { Text("Отмена") }}
     )
-    if (showUndoRedistributionConfirmation) AppAlertDialog(
-        onDismissRequest = { showUndoRedistributionConfirmation = false },
-        title = { Text("Отменить последний перенос бюджета?") },
-        text = {
-            Text("Будут отменены все движения последнего подтверждённого предложения за выбранный период. Остальные переносы и реальные расходы останутся без изменений.")
-        },
-        confirmButton = {
-            Button(onClick = {
-                showUndoRedistributionConfirmation = false
-                val fingerprint = redistributionLedger
-                    .filter { it.periodStart == selectedOverviewPeriodStart && it.periodEnd == selectedOverviewPeriodEnd }
-                    .maxByOrNull { java.time.Instant.parse(it.appliedAt) }?.proposalFingerprint
-                if (fingerprint != null) {
-                    runCatching {
-                        store.prepareUndoSnapshot()
-                        store.removeBudgetRedistributionProposal(fingerprint)
-                    }.onSuccess { updated ->
-                        redistributionLedger = updated
-                        canUndo = true
-                        backupMessage = "Последний перенос бюджета отменён."
-                    }.onFailure { error ->
-                        canUndo = store.hasUndoSnapshot()
-                        backupMessage = error.message ?: "Не удалось отменить перенос."
-                    }
-                }
-            }) { Text("Отменить перенос") }
-        },
-        dismissButton = { TextButton(onClick = { showUndoRedistributionConfirmation = false }) { Text("Оставить") } }
-    )
-
-    if (showRedistributionConfirmation) AppAlertDialog(
-        onDismissRequest = { showRedistributionConfirmation = false },
-        title = { Text("Подтвердить переносы между категориями?") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Период: ${selectedOverviewPeriodStart.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${selectedOverviewPeriodEnd.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}")
-                currentBudgetRedistributionProposal.transfers.forEach { transfer ->
-                    Text("${transfer.fromCategory} → ${transfer.toCategory}: ${money(transfer.amount)} (доступно на этом шаге: ${money(transfer.availableBeforeTransfer)})")
-                }
-                Text("Всего будет перераспределено: ${money(currentBudgetRedistributionProposal.totalTransferred)}.", fontWeight = FontWeight.SemiBold)
-                if (currentBudgetRedistributionProposal.totalUncovered > 0.0001) {
-                    Text("После переноса останется не покрыто: ${money(currentBudgetRedistributionProposal.totalUncovered)}.", color = MaterialTheme.colorScheme.error)
-                }
-                Text(
-                    "Это изменит только плановые суммы категорий. Реальные расходы, доходы и банковские операции не добавляются и не изменяются. Перенос можно отменить через «Отменить последнее действие» на главном экране.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                showRedistributionConfirmation = false
-                runCatching {
-                    store.prepareUndoSnapshot()
-                    store.applyBudgetRedistribution(currentBudgetRedistributionProposal, java.time.Instant.now().toString())
-                }.onSuccess { updated ->
-                    redistributionLedger = updated
-                    canUndo = true
-                    backupMessage = "Переносы бюджета применены. Реальные операции не изменены."
-                }.onFailure { error ->
-                    canUndo = store.hasUndoSnapshot()
-                    backupMessage = error.message ?: "Не удалось применить переносы бюджета."
-                }
-            }) { Text("Подтвердить переносы") }
-        },
-        dismissButton = { TextButton(onClick = { showRedistributionConfirmation = false }) { Text("Назад") } }
-    )
-
     if(showUndoConfirmation) AppAlertDialog(
                 onDismissRequest={showUndoConfirmation=false},
         title={Text("Отменить последнее действие?")},
