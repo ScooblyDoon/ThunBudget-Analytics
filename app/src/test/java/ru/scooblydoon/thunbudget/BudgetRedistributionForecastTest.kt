@@ -122,6 +122,25 @@ class BudgetRedistributionForecastTest {
         assertFalse(inputs.hasEvidence)
     }
 
+
+    @Test
+    fun scheduledBillIsIncludedAsAnUnpaidCommitmentForItsCurrentPeriod() {
+        val payment = RecurringPayment(
+            id = "rent", title = "Аренда", amount = 1_500.0,
+            category = "Жильё и ЖКХ", dayOfMonth = 20
+        )
+        val inputs = BudgetRedistributionForecastAssembler.buildInputs(
+            start, end, today,
+            listOf(category("Транспорт"), category("Жильё и ЖКХ")),
+            emptyList(), listOf(payment),
+            listOf(forecast("Транспорт"), forecast("Жильё и ЖКХ")),
+            mapOf("Транспорт" to 100.0, "Жильё и ЖКХ" to 2_000.0)
+        )
+        val rent = inputs.first { it.name == "Жильё и ЖКХ" }
+        assertEquals(1_500.0, rent.unpaidRecurringPayments, 0.001)
+        assertEquals(0.0, rent.actualToDate, 0.001)
+    }
+
     @Test
     fun pastReportingPeriodHasNoFutureForecastWhenForecastRangeIsEmpty() {
         val pastEnd = LocalDate.parse("2026-11-08")
@@ -134,6 +153,7 @@ class BudgetRedistributionForecastTest {
 
         assertEquals(100.0, inputs.actualToDate, 0.001)
         assertEquals(0.0, inputs.knownFutureExpenses, 0.001)
-        assertEquals(50.0, inputs.variableForecast, 0.001)
+        assertEquals(0.0, inputs.variableForecast, 0.001)
+        assertEquals(0.0, inputs.variableForecastUpper, 0.001)
     }
 }

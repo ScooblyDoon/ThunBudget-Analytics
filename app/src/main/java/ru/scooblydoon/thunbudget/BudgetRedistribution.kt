@@ -184,13 +184,13 @@ object BudgetRedistributionCalculator {
                     return@donorLoop
                 }
                 val donorRemainingCents = donorRemaining[donor.name] ?: 0L
-                if (donorRemainingCents <= EPSILON_CENTS) return@forEach
+                if (donorRemainingCents <= EPSILON_CENTS) return@donorLoop
                 val available = if (donor.reserve) {
                     donorRemainingCents
                 } else {
                     minOf(donorRemainingCents, ordinaryPoolRemaining)
                 }
-                if (available <= EPSILON_CENTS) return@forEach
+                if (available <= EPSILON_CENTS) return@donorLoop
                 val moved = minOf(need, available)
                 transfers += BudgetRedistributionTransfer(
                     fromCategory = donor.name,
@@ -213,6 +213,23 @@ object BudgetRedistributionCalculator {
             transfers = transfers,
             uncoveredByCategory = uncovered
         )
+    }
+
+    /** Sums budget-only adjustments for a cycle made up of exact reporting periods. */
+    fun netAdjustmentsForPeriods(
+        periods: List<Pair<LocalDate, LocalDate>>,
+        appliedTransfers: List<AppliedBudgetRedistributionTransfer>
+    ): Map<String, Double> {
+        require(periods.all { !it.second.isBefore(it.first) })
+        val periodSet = periods.toSet()
+        val adjustments = linkedMapOf<String, Long>()
+        appliedTransfers.filter { (it.periodStart to it.periodEnd) in periodSet }.forEach { transfer ->
+            validateTransfer(transfer)
+            val amount = toCents(transfer.amount)
+            adjustments[transfer.fromCategory] = (adjustments[transfer.fromCategory] ?: 0L) - amount
+            adjustments[transfer.toCategory] = (adjustments[transfer.toCategory] ?: 0L) + amount
+        }
+        return adjustments.mapValues { (_, cents) -> cents / 100.0 }.filterValues { it != 0.0 }
     }
 
     fun netAdjustments(

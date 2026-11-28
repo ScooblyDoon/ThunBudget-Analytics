@@ -139,9 +139,14 @@ object BudgetRedistributionForecastAssembler {
                     unpaidRecurringPayments = commitments.entries.firstOrNull {
                         normalize(it.key) == normalizedCategory
                     }?.value ?: 0.0,
-                    variableForecast = forecast?.forecastForPeriod?.coerceAtLeast(0.0) ?: 0.0,
-                    variableForecastUpper = forecast?.forecastHighForPeriod?.coerceAtLeast(0.0)
-                        ?: forecast?.forecastForPeriod?.coerceAtLeast(0.0) ?: 0.0,
+                    // Ended periods have no remaining variable-spend horizon.
+                    variableForecast = if (periodEnd.isAfter(today)) {
+                        forecast?.forecastForPeriod?.coerceAtLeast(0.0) ?: 0.0
+                    } else 0.0,
+                    variableForecastUpper = if (periodEnd.isAfter(today)) {
+                        forecast?.forecastHighForPeriod?.coerceAtLeast(0.0)
+                            ?: forecast?.forecastForPeriod?.coerceAtLeast(0.0) ?: 0.0
+                    } else 0.0,
                     hasEvidence = forecast?.hasHistory == true || (forecast?.positiveHistoryPeriods ?: 0) > 0,
                     protectedFromRedistribution = explicitlyOrByDefaultProtected
                 )

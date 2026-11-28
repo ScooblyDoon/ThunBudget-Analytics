@@ -198,6 +198,25 @@ class BudgetRedistributionEngineTest {
     }
 
 
+
+    @Test
+    fun netAdjustmentsForReportingCycleIncludeOnlyItsExactTwoPeriods() {
+        val secondStart = end.plusDays(1)
+        val secondEnd = secondStart.plusDays(14)
+        val transfers = listOf(
+            AppliedBudgetRedistributionTransfer(start, end, "Продукты", "Транспорт", 250.0, "a".repeat(64), "2026-11-27T12:00:00Z"),
+            AppliedBudgetRedistributionTransfer(secondStart, secondEnd, "Продукты", "Здоровье", 100.0, "b".repeat(64), "2026-11-27T12:00:00Z"),
+            AppliedBudgetRedistributionTransfer(secondEnd.plusDays(1), secondEnd.plusDays(15), "Продукты", "Покупки", 75.0, "c".repeat(64), "2026-11-27T12:00:00Z")
+        )
+        val selected = BudgetRedistributionCalculator.netAdjustmentsForPeriods(
+            listOf(start to end, secondStart to secondEnd), transfers
+        )
+        assertEquals(-350.0, selected["Продукты"]!!, 0.001)
+        assertEquals(250.0, selected["Транспорт"]!!, 0.001)
+        assertEquals(100.0, selected["Здоровье"]!!, 0.001)
+        assertFalse(selected.containsKey("Покупки"))
+    }
+
     @Test
     fun explicitFalseCanUnprotectANameBasedDefaultButNeverSavings() {
         val proposal = BudgetRedistributionCalculator.calculate(
