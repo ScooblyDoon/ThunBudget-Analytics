@@ -6,6 +6,67 @@ import org.junit.Test
 import java.time.YearMonth
 
 class AnalyticsBudgetTest {
+    @Test fun calendarMonthIncomeAllocatesOnlyReportingPeriodDaysInsideSelectedMonth() {
+        val periods = listOf(
+            PeriodIncome("2026-11-09", "2026-11-23", 60854.0),
+            PeriodIncome("2026-11-24", "2026-12-08", 36881.0)
+        )
+        val monthIncome = AnalyticsBudgetCalculator.calendarMonthIncome(
+            periodIncomes = periods,
+            month = YearMonth.of(2026, 11),
+            asOf = java.time.LocalDate.of(2026, 11, 28),
+            firstStartDay = 9,
+            firstEndDay = 23
+        )
+        val twoPeriodIncome = AnalyticsBudgetCalculator.reportingCycleIncome(
+            periodIncomes = periods,
+            month = YearMonth.of(2026, 11),
+            firstStartDay = 9,
+            firstEndDay = 23
+        ).totalIncome
+
+        // November includes all of Nov 9–23 and 7 of the 15 days in Nov 24–Dec 8.
+        assertEquals(78065.133333, monthIncome.totalIncome, 0.001)
+        assertEquals(97735.0, twoPeriodIncome, 0.001)
+        assertEquals(19669.866667, twoPeriodIncome - monthIncome.totalIncome, 0.001)
+    }
+
+    @Test fun analyticsIncomeSourceUsesFixedMonthlyValueWhenMonthlySelected() {
+        assertEquals(
+            78065.0,
+            AnalyticsBudgetCalculator.analyticsBudgetIncome(
+                monthlyIncome = 78065.0,
+                twoPeriodIncome = 97735.0,
+                useTwoPeriods = false
+            ),
+            0.001
+        )
+    }
+
+    @Test fun analyticsIncomeSourceUsesTwoPeriodTotalWhenSelected() {
+        assertEquals(
+            97735.0,
+            AnalyticsBudgetCalculator.analyticsBudgetIncome(
+                monthlyIncome = 78065.0,
+                twoPeriodIncome = 97735.0,
+                useTwoPeriods = true
+            ),
+            0.001
+        )
+    }
+
+    @Test fun analyticsIncomeSourceFallsBackToMonthlyValueWhenPeriodsMissing() {
+        assertEquals(
+            78065.0,
+            AnalyticsBudgetCalculator.analyticsBudgetIncome(
+                monthlyIncome = 78065.0,
+                twoPeriodIncome = 0.0,
+                useTwoPeriods = true
+            ),
+            0.001
+        )
+    }
+
     @Test fun monthlyIncomeCanUseFixedMonthlySetting() {
         val result = AnalyticsBudgetCalculator.monthlyIncome(
             120000.0,

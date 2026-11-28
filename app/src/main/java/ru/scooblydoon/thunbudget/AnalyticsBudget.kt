@@ -570,6 +570,16 @@ internal object AnalyticsBudgetCalculator {
         )
     }
 
+    fun analyticsBudgetIncome(
+        monthlyIncome: Double,
+        twoPeriodIncome: Double,
+        useTwoPeriods: Boolean
+    ): Double {
+        val monthly = monthlyIncome.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        if (!useTwoPeriods) return monthly
+        return twoPeriodIncome.takeIf { it.isFinite() && it > 0.0 } ?: monthly
+    }
+
     fun monthlyIncome(
         fixedMonthlyIncome: Double,
         periodIncomes: List<PeriodIncome>,
