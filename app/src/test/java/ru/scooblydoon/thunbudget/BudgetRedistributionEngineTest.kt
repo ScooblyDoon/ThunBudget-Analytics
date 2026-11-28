@@ -49,6 +49,29 @@ class BudgetRedistributionEngineTest {
     }
 
     @Test
+    fun actualOverspendingIsCompensatedFromCurrentUnusedCategoryBalances() {
+        val proposal = BudgetRedistributionCalculator.calculate(
+            start, end, 31_000.0,
+            listOf(
+                category("Транспорт", 2_582.0, actual = 3_528.0),
+                category("Непредвиденные расходы", 3_319.0, actual = 4_500.0),
+                category("Кафе и развлечения", 7_376.0),
+                category("Личные расходы", 7_376.0, actual = 824.0),
+                category("Здоровье", 5_532.0, actual = 3_640.0),
+                category("Накопления", 369.0, protected = false),
+                category("Жильё и ЖКХ", 2_582.0, protected = true)
+            )
+        )
+
+        assertEquals(2_127.0, proposal.totalTransferred, 0.001)
+        assertEquals(946.0, proposal.transfers.filter { it.toCategory == "Транспорт" }.sumOf { it.amount }, 0.001)
+        assertEquals(1_181.0, proposal.transfers.filter { it.toCategory == "Непредвиденные расходы" }.sumOf { it.amount }, 0.001)
+        assertTrue(proposal.transfers.none { it.fromCategory.equals("Накопления", true) })
+        assertTrue(proposal.transfers.none { it.fromCategory.equals("Жильё и ЖКХ", true) })
+        assertEquals(0.0, proposal.totalUncovered, 0.001)
+    }
+
+    @Test
     fun reserveIsUsedBeforeOrdinaryDonors() {
         val proposal = BudgetRedistributionCalculator.calculate(
             start, end, 10_000.0,

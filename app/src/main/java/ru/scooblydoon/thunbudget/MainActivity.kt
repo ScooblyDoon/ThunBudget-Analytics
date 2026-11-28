@@ -1123,7 +1123,8 @@ private fun ThunBudgetApp() {
             expenses = expenses,
             recurringPayments = recurringPayments,
             forecasts = redistributionForecast.categories,
-            plannedAmounts = redistributionPlannedAmounts
+            plannedAmounts = redistributionPlannedAmounts,
+            includeStatisticalForecast = false
         )
         BudgetRedistributionCalculator.calculate(
             periodStart = selectedOverviewPeriodStart,
@@ -2115,7 +2116,7 @@ private fun ThunBudgetApp() {
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         Text("Автоматическая компенсация превышений", fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            "Переносит свободные остатки в категории, где прогноз расходов выше плана.",
+                                            "Компенсирует уже возникший перерасход с учётом внесённых будущих и регулярных платежей.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

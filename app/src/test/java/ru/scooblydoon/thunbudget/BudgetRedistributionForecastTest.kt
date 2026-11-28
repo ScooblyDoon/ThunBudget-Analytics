@@ -112,6 +112,35 @@ class BudgetRedistributionForecastTest {
     }
 
     @Test
+    fun redistributionCanIgnoreStatisticalForecastButKeepsActualAndKnownCommitments() {
+        val payment = RecurringPayment(
+            id = "insurance", title = "Страховка", amount = 200.0,
+            category = "Здоровье", dayOfMonth = 22
+        )
+        val expenses = listOf(
+            Expense(1, "Факт", "Продукты", 100.0, "2026-11-16"),
+            Expense(2, "Запланировано", "Продукты", 50.0, "2026-11-17")
+        )
+        val input = BudgetRedistributionForecastAssembler.buildInputs(
+            start, end, today,
+            listOf(category("Продукты"), category("Здоровье")),
+            expenses, listOf(payment),
+            listOf(forecast("Продукты", 900.0, 1_200.0), forecast("Здоровье", 300.0, 500.0)),
+            mapOf("Продукты" to 500.0, "Здоровье" to 700.0),
+            includeStatisticalForecast = false
+        )
+        val products = input.first { it.name == "Продукты" }
+        val health = input.first { it.name == "Здоровье" }
+
+        assertEquals(100.0, products.actualToDate, 0.001)
+        assertEquals(50.0, products.knownFutureExpenses, 0.001)
+        assertEquals(0.0, products.variableForecast, 0.001)
+        assertEquals(0.0, products.variableForecastUpper, 0.001)
+        assertEquals(200.0, health.unpaidRecurringPayments, 0.001)
+        assertEquals(0.0, health.variableForecast, 0.001)
+    }
+
+    @Test
     fun missingForecastHistoryDoesNotBecomeDonorEvidence() {
         val inputs = BudgetRedistributionForecastAssembler.buildInputs(
             start, end, today, listOf(category("Новая категория")),

@@ -84,7 +84,8 @@ object BudgetRedistributionForecastAssembler {
         expenses: List<Expense>,
         recurringPayments: List<RecurringPayment>,
         forecasts: List<CategoryForecast>,
-        plannedAmounts: Map<String, Double>
+        plannedAmounts: Map<String, Double>,
+        includeStatisticalForecast: Boolean = true
     ): List<RedistributionCategoryInput> {
         require(!periodEnd.isBefore(periodStart))
         val actualEnd = minOf(today, periodEnd)
@@ -139,11 +140,13 @@ object BudgetRedistributionForecastAssembler {
                     unpaidRecurringPayments = commitments.entries.firstOrNull {
                         normalize(it.key) == normalizedCategory
                     }?.value ?: 0.0,
-                    // Ended periods have no remaining variable-spend horizon.
-                    variableForecast = if (periodEnd.isAfter(today)) {
+                    // Statistical forecast remains available to Analytics, but is
+                    // optional for redistribution. The compensation engine can use
+                    // actual spending and known commitments only.
+                    variableForecast = if (includeStatisticalForecast && periodEnd.isAfter(today)) {
                         forecast?.forecastForPeriod?.coerceAtLeast(0.0) ?: 0.0
                     } else 0.0,
-                    variableForecastUpper = if (periodEnd.isAfter(today)) {
+                    variableForecastUpper = if (includeStatisticalForecast && periodEnd.isAfter(today)) {
                         forecast?.forecastHighForPeriod?.coerceAtLeast(0.0)
                             ?: forecast?.forecastForPeriod?.coerceAtLeast(0.0) ?: 0.0
                     } else 0.0,

@@ -127,7 +127,8 @@ object BudgetRedistributionCalculator {
         }
 
         val deficits = categories.mapNotNull { input ->
-            if (isReserve(input.name)) return@mapNotNull null
+            // Reserve is a preferred donor when it has free money, but can also
+            // receive compensation when its own recorded/committed expenses exceed plan.
             val planned = budgets.getValue(input.name)
             val projected = projectedSpend.getValue(input.name)
             val deficit = (projected - planned).coerceAtLeast(0L)
