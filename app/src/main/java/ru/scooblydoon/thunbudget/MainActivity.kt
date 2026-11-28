@@ -812,6 +812,7 @@ private fun ThunBudgetApp() {
     }
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
+    var showRedistributionConfirmation by remember { mutableStateOf(false) }
     var showResetConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
@@ -841,6 +842,8 @@ private fun ThunBudgetApp() {
     var showExpenseForecast by rememberSaveable { mutableStateOf(false) }
     var analyticsIncomeMode by rememberSaveable(key = "analytics_income_source_mode_v2") { mutableIntStateOf(0) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
+    var autoRedistributionEnabled by remember { mutableStateOf(store.loadAutoRedistributionEnabled()) }
+    var redistributionLedger by remember { mutableStateOf(store.loadBudgetRedistributionLedger()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
@@ -963,15 +966,23 @@ private fun ThunBudgetApp() {
             it.key.equals(categoryName, ignoreCase = true)
         }?.value ?: 0.0
     
-    fun overviewCategoryBudget(categoryName: String): Double =
+    val selectedOverviewPeriodStart = LocalDate.parse(periodStart)
+    val selectedOverviewPeriodEnd = LocalDate.parse(periodEnd)
+    val selectedPeriodRedistributionAdjustments = BudgetRedistributionCalculator.netAdjustments(
+        selectedOverviewPeriodStart, selectedOverviewPeriodEnd, redistributionLedger
+    )
+    fun overviewCategoryBaseBudget(categoryName: String): Double =
         AnalyticsBudgetCalculator.periodCategoryBudget(
             periodIncome = effectivePeriodIncome,
             monthlyIncomeFallback = calculatedMonthlyIncome,
             categoryPercent = overviewCategoryPercent(categoryName),
-            start = LocalDate.parse(periodStart),
-            end = LocalDate.parse(periodEnd),
+            start = selectedOverviewPeriodStart,
+            end = selectedOverviewPeriodEnd,
             periodIncomeIsDefined = periodIncomeRow != null || carryoverIncome != 0.0
         )
+    fun overviewCategoryBudget(categoryName: String): Double =
+        overviewCategoryBaseBudget(categoryName) +
+            (selectedPeriodRedistributionAdjustments[categoryName] ?: 0.0)
     val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
         currentShares = currentCategoryShares,
         savedPlans = plansForAnalytics,
@@ -1006,6 +1017,80 @@ private fun ThunBudgetApp() {
         expenses, YearMonth.from(today), today, firstPeriodStartDay, firstPeriodEndDay
     )
     val monthTotal = monthExpenses.sumOf { it.amount }
+
+    // Reuse the calibrated variable-spend model that Analytics uses.
+    val redistributionForecastFrom = maxOf(today.plusDays(1), selectedOverviewPeriodStart)
+    val redistributionForecastDays = if (redistributionForecastFrom.isAfter(selectedOverviewPeriodEnd)) 0 else
+        (java.time.temporal.ChronoUnit.DAYS.between(redistributionForecastFrom, selectedOverviewPeriodEnd) + 1L).toInt()
+    val redistributionRecurringHistoryKeys = recurringPayments.map {
+        it.title.trim().lowercase(Locale.ROOT) to it.category.trim().lowercase(Locale.ROOT)
+    }.toSet()
+    val redistributionVariableHistoryExpenses = expenses.filterNot { row ->
+        row.category.equals("Перенос средств", true) ||
+            (row.title.trim().lowercase(Locale.ROOT) to row.category.trim().lowercase(Locale.ROOT)) in redistributionRecurringHistoryKeys
+    }
+    val redistributionForecastRows = redistributionVariableHistoryExpenses.mapNotNull { row ->
+        runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+    }
+    val redistributionForecastBacktest = remember(
+        redistributionVariableHistoryExpenses, categories, today, firstPeriodStartDay, firstPeriodEndDay
+    ) {
+        BudgetForecastBacktester.evaluate(
+            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+            expenses = redistributionForecastRows,
+            asOf = today,
+            firstStartDay = firstPeriodStartDay,
+            firstEndDay = firstPeriodEndDay
+        )
+    }
+    val redistributionForecast = remember(
+        redistributionForecastRows, categories, today, firstPeriodStartDay, firstPeriodEndDay,
+        redistributionForecastDays, redistributionForecastBacktest.calibration, selectedOverviewPeriodEnd
+    ) {
+        BudgetForecastCalculator.calculate(
+            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+            expenses = redistributionForecastRows,
+            asOf = today,
+            firstStartDay = firstPeriodStartDay,
+            firstEndDay = firstPeriodEndDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = redistributionForecastDays,
+            calibration = redistributionForecastBacktest.calibration,
+            forecastStartDate = redistributionForecastFrom.takeIf { redistributionForecastDays > 0 },
+            forecastEndDate = selectedOverviewPeriodEnd.takeIf { redistributionForecastDays > 0 }
+        )
+    }
+    val redistributionPeriodBudget =
+        if (periodIncomeRow != null || carryoverIncome != 0.0) effectivePeriodIncome else planned
+    val redistributionPlannedAmounts = categories
+        .filterNot { it.name.equals("Перенос средств", true) }
+        .associate { category ->
+            category.name to (
+                overviewCategoryBaseBudget(category.name) +
+                    (selectedPeriodRedistributionAdjustments[category.name] ?: 0.0)
+                ).coerceAtLeast(0.0)
+        }
+    val currentBudgetRedistributionProposal = remember(
+        selectedOverviewPeriodStart, selectedOverviewPeriodEnd, redistributionPeriodBudget,
+        categories, expenses, recurringPayments, redistributionForecast, redistributionPlannedAmounts, today
+    ) {
+        val inputs = BudgetRedistributionForecastAssembler.buildInputs(
+            periodStart = selectedOverviewPeriodStart,
+            periodEnd = selectedOverviewPeriodEnd,
+            today = today,
+            categories = categories,
+            expenses = expenses,
+            recurringPayments = recurringPayments,
+            forecasts = redistributionForecast.categories,
+            plannedAmounts = redistributionPlannedAmounts
+        )
+        BudgetRedistributionCalculator.calculate(
+            periodStart = selectedOverviewPeriodStart,
+            periodEnd = selectedOverviewPeriodEnd,
+            periodIncome = redistributionPeriodBudget,
+            categories = inputs
+        )
+    }
 
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
