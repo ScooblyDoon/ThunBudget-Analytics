@@ -1885,6 +1885,89 @@ private fun ThunBudgetApp() {
             when(tab) {
                 0 -> LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding).padding(horizontal=16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(top=12.dp,bottom=24.dp)) {
                     item { Text("Обзор",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold) }
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Автоматически подбирать компенсацию", fontWeight = FontWeight.SemiBold)
+                                        Text("По прогнозу расходов за выбранный отчётный период", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Switch(
+                                        checked = autoRedistributionEnabled,
+                                        onCheckedChange = { enabled ->
+                                            autoRedistributionEnabled = enabled
+                                            store.saveAutoRedistributionEnabled(enabled)
+                                        }
+                                    )
+                                }
+                                if (autoRedistributionEnabled) {
+                                    if (currentBudgetRedistributionProposal.deficits.isEmpty()) {
+                                        Text("По прогнозу категории укладываются в план. Переносы не требуются.", style = MaterialTheme.typography.bodySmall)
+                                    } else {
+                                        Text("Ожидаемое превышение плана", fontWeight = FontWeight.SemiBold)
+                                        currentBudgetRedistributionProposal.deficits.forEach { deficit ->
+                                            Text(
+                                                "«\${deficit.category}»: факт \${money(deficit.actualSpend)}, прогноз \${money(deficit.projectedSpend)} при плане \${money(deficit.plannedAmount)}. Не хватает \${money(deficit.amount)}.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                        if (currentBudgetRedistributionProposal.transfers.isNotEmpty()) {
+                                            Text("Предлагаемые переносы", fontWeight = FontWeight.SemiBold)
+                                            currentBudgetRedistributionProposal.transfers.forEach { transfer ->
+                                                Text(
+                                                    "«\${transfer.toCategory}»: +\${money(transfer.amount)} из «\${transfer.fromCategory}» · свободный остаток до переноса \${String.format(Locale(\"ru\", \"RU\"), \"%.1f\", transfer.donorFreePercent)}%",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                            Text(
+                                                "Сначала используется резерв. Обязательные платежи учитываются в прогнозе, накопления защищены, обычным категориям сохраняется общий запас 2% дохода.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            FilledTonalButton(
+                                                onClick = { showRedistributionConfirmation = true },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) { Text("Проверить и подтвердить переносы") }
+                                        } else {
+                                            Text(
+                                                "Подходящих свободных средств не найдено. Защищённые категории и категории без истории не используются как доноры.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (currentBudgetRedistributionProposal.totalUncovered > 0.0001) {
+                                            Text(
+                                                "Останется не покрыто: \${money(currentBudgetRedistributionProposal.totalUncovered)}.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
+                                }
+                                val currentPeriodTransfers = redistributionLedger.filter {
+                                    it.periodStart == selectedOverviewPeriodStart && it.periodEnd == selectedOverviewPeriodEnd
+                                }.sortedByDescending { it.appliedAt }
+                                if (currentPeriodTransfers.isNotEmpty()) {
+                                    Divider()
+                                    Text("История переносов бюджета", fontWeight = FontWeight.SemiBold)
+                                    currentPeriodTransfers.take(5).forEach { movement ->
+                                        Text(
+                                            "\${movement.fromCategory} → \${movement.toCategory}: \${money(movement.amount)} · \${runCatching { java.time.Instant.parse(movement.appliedAt).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(\"dd.MM HH:mm\")) }.getOrDefault(movement.appliedAt)}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    if (currentPeriodTransfers.size > 5) {
+                                        Text("Показаны последние 5 из \${currentPeriodTransfers.size} переносов.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
                     items(dashboardOrder,key={it}) { section ->
                         when(section) {
                             "period" -> Column(verticalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -2500,169 +2583,7 @@ private fun ThunBudgetApp() {
                             )
                         } }
                     }
-                    if (autoAllocationEnabled) {
-                        item {
-                            Row(verticalAlignment=Alignment.CenterVertically) {
-                                Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
-                                TextButton(onClick={showAdvice=!showAdvice; persistUiExpanded(context,"analytics_advice",showAdvice)}) {
-                                    Text(if(showAdvice) "Скрыть" else "Показать")
-                                }
-                            }
-                        }
-                        if(showAdvice) item {
-                            val selectedStart = LocalDate.parse(periodStart)
-                            val selectedEnd = LocalDate.parse(periodEnd)
-                            val actualEnd = minOf(today, selectedEnd)
-                            val spendingCategories = categories.filterNot { it.name.equals("Перенос средств", true) }
-
-                            // Actual-to-date excludes future-dated entries. Those entries are
-                            // commitments and are added separately to the end-of-period forecast.
-                            val periodFacts = spendingCategories.associate { category ->
-                                category.name to expenses.asSequence()
-                                    .filter { it.category.equals(category.name, true) }
-                                    .filter { it.date >= selectedStart.toString() && it.date <= actualEnd.toString() }
-                                    .sumOf { it.amount.coerceAtLeast(0.0) }
-                            }
-                            val futureEnteredByCategory = expenses.asSequence()
-                                .filter { row ->
-                                    !row.category.equals("Перенос средств", true) &&
-                                        row.date > today.toString() &&
-                                        row.date >= selectedStart.toString() &&
-                                        row.date <= selectedEnd.toString()
-                                }
-                                .groupBy { it.category }
-                                .mapValues { (_, rows) -> rows.sumOf { it.amount.coerceAtLeast(0.0) } }
-
-                            val forecastFrom = maxOf(today.plusDays(1), selectedStart)
-                            val forecastDays = if (forecastFrom.isAfter(selectedEnd)) 0 else
-                                (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, selectedEnd) + 1L).toInt()
-                            val periodForecast = BudgetForecastCalculator.calculate(
-                                categories = spendingCategories.map { it.name },
-                                expenses = expenses.filterNot { it.category.equals("Перенос средств", true) }.mapNotNull { row ->
-                                    runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
-                                },
-                                asOf = today,
-                                firstStartDay = firstPeriodStartDay,
-                                firstEndDay = firstPeriodEndDay,
-                                monthsToAnalyze = 6,
-                                nextPeriodDays = forecastDays,
-                                forecastStartDate = forecastFrom.takeIf { forecastDays > 0 },
-                                forecastEndDate = selectedEnd.takeIf { forecastDays > 0 }
-                            )
-
-                            // Unpaid recurring commitments inside the selected period are included
-                            // once; a recorded transaction or completed payment suppresses them.
-                            val recurringByCategory = mutableMapOf<String, Double>()
-                            if (!selectedEnd.isBefore(today)) {
-                                recurringPayments.filter { it.active }.forEach { payment ->
-                                    var month = YearMonth.from(selectedStart)
-                                    val lastMonth = YearMonth.from(selectedEnd)
-                                    while (!month.isAfter(lastMonth)) {
-                                        val dueDate = payment.dueDate(month)
-                                        val alreadyRecorded = expenses.any { row ->
-                                            row.title.equals(payment.title, true) &&
-                                                row.category.equals(payment.category, true) &&
-                                                row.date == dueDate.toString()
-                                        }
-                                        if (!dueDate.isBefore(selectedStart) &&
-                                            !dueDate.isAfter(selectedEnd) &&
-                                            !payment.isCompleted(month) &&
-                                            !alreadyRecorded
-                                        ) {
-                                            recurringByCategory[payment.category] =
-                                                (recurringByCategory[payment.category] ?: 0.0) + payment.amount
-                                        }
-                                        month = month.plusMonths(1)
-                                    }
-                                }
-                            }
-
-                            val projectedSpend = spendingCategories.associate { category ->
-                                val variableForecast = periodForecast.categories
-                                    .firstOrNull { it.category.equals(category.name, true) }
-                                    ?.forecastForPeriod ?: 0.0
-                                category.name to (
-                                    (periodFacts[category.name] ?: 0.0) +
-                                        (futureEnteredByCategory[category.name] ?: 0.0) +
-                                        (recurringByCategory[category.name] ?: 0.0) +
-                                        variableForecast
-                                    )
-                            }
-
-                            // The limit is based on the exact saved shares of this period,
-                            // weighted by this period's income (including carryover).
-                            val periodAllocationPlan = selectedOverviewPeriodCategoryPlan.entries
-                                .filterNot { it.key.equals("Перенос средств", true) }
-                                .map { it.key to it.value }
-                            val budgetPerPercent = when {
-                                effectivePeriodIncome.isFinite() && effectivePeriodIncome > 0.0 ->
-                                    effectivePeriodIncome / 100.0
-                                periodIncomeRow != null || carryoverIncome != 0.0 -> 0.0
-                                else -> plannedForPeriod(income, 1.0, periodStart, periodEnd)
-                            }
-                            val redistribution = BudgetAllocationCalculator.redistribute(
-                                categories = periodAllocationPlan,
-                                spentByCategory = periodFacts,
-                                budgetPerPercent = budgetPerPercent,
-                                forecastSpentByCategory = projectedSpend,
-                                safetyBufferPercent = 2.0
-                            )
-
-                            Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    "Прогноз до ${selectedEnd.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}. Учтены фактические расходы, внесённые будущие расходы, регулярные платежи и прогноз переменных расходов.",
-                                    style=MaterialTheme.typography.bodySmall,
-                                    color=MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (redistribution.deficits.isEmpty()) {
-                                    Text("По прогнозу все категории укладываются в свои лимиты. Перераспределение не требуется.")
-                                } else {
-                                    Text("Ожидаемый перерасход по категориям:",fontWeight=FontWeight.SemiBold)
-                                    redistribution.deficits.forEach { deficit ->
-                                        Text(
-                                            "«${deficit.category}»: факт ${money(deficit.actualSpend)}, прогноз ${money(deficit.projectedSpend)} при плане ${money(deficit.plannedAmount)}. Прогнозируемое превышение: ${money(deficit.amount)}.",
-                                            style=MaterialTheme.typography.bodySmall,
-                                            color=MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                    if (redistribution.transfers.isNotEmpty()) {
-                                        Text("Предлагаемое покрытие за счёт свободного бюджета:",fontWeight=FontWeight.SemiBold)
-                                        redistribution.transfers.forEach { transfer ->
-                                            Text(
-                                                "«${transfer.toCategory}»: +${money(transfer.amount)} из «${transfer.fromCategory}» (свободный остаток до переноса: ${String.format(Locale("ru","RU"), "%.1f", transfer.donorFreePercent)}%).",
-                                                style=MaterialTheme.typography.bodySmall
-                                            )
-                                        }
-                                        Text(
-                                            "Приоритет: резервные средства, затем категории с наибольшим прогнозируемым остатком (20%, 15%, 10%, далее выше 5%). Обычным категориям оставляется запас 2% дохода; накопления и обычные категории с остатком 5% или меньше защищены. Резерв учитывает уже спрогнозированные расходы.",
-                                            style=MaterialTheme.typography.labelSmall,
-                                            color=MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        FilledTonalButton(
-                                            onClick = {
-                                                store.prepareUndoSnapshot(); canUndo = true
-                                                categories = categories.map { category ->
-                                                    category.copy(percent = redistribution.updatedPercents[category.name] ?: category.percent)
-                                                }
-                                                store.saveCategories(categories, periodStart, periodEnd)
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text("Применить предложенное распределение") }
-                                    } else {
-                                        Text("Подходящих категорий-доноров нет. Накопления защищены; обычные категории с прогнозируемым остатком 5% или меньше не используются.")
-                                    }
-                                    if (redistribution.totalUncovered > 0.0001) {
-                                        Text(
-                                            "После доступных переносов останется не покрыто: ${money(redistribution.totalUncovered)}.",
-                                            style=MaterialTheme.typography.bodySmall,
-                                            color=MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
+                                        item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
                 }
                 2 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     ChartsScreen(
