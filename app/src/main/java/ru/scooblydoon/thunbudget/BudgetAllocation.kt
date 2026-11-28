@@ -263,7 +263,7 @@ object BudgetRedistributionProtectionDefaults {
             .lowercase(java.util.Locale.ROOT)
             .replace('ё', 'е')
         val protectedTerms = listOf(
-            "жиль", "аренд", "коммун", "ипотек", "кредит",
+            "жиль", "аренд", "коммун", "жкх", "ипотек", "кредит", "долг",
             "страх", "налог", "накоп"
         )
         return protectedTerms.any(normalized::contains)

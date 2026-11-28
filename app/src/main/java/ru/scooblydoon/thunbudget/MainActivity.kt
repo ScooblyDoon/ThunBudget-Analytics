@@ -2098,8 +2098,12 @@ private fun ThunBudgetApp() {
                                 }
                                 categories.forEach { cat ->
                                     val spent=expenses.filter{it.category==cat.name&&it.date>=periodStart&&it.date<=periodEnd}.sumOf{it.amount}
-                                    val planPercent = overviewCategoryPercent(cat.name)
                                     val cap = overviewCategoryBudget(cat.name)
+                                    val planPercent = BudgetRedistributionCalculator.effectiveCategoryPercent(
+                                        adjustedCategoryBudget = cap,
+                                        totalPeriodBudget = planned,
+                                        fallbackPercent = overviewCategoryPercent(cat.name)
+                                    )
                                     Card(onClick={selectedCategory=cat.name}, colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface), shape=RoundedCornerShape(16.dp)) {
                                         Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                             if (cat.name.equals("Перенос средств", ignoreCase = true)) {
@@ -2113,7 +2117,7 @@ private fun ThunBudgetApp() {
                                                         Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                                                     }
                                                     IconButton(onClick={editingCategory=cat}) { Icon(Icons.Outlined.Edit, contentDescription = "Изменить категорию", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) }
-                                                    Text("${planPercent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurface,fontWeight=FontWeight.SemiBold)
+                                                    Text("${String.format(Locale("ru", "RU"), "%.1f", planPercent)}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurface,fontWeight=FontWeight.SemiBold)
                                                 }
                                                 LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
                                                 Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive) }

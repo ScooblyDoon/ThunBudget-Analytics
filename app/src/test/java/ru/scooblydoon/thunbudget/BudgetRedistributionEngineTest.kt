@@ -199,6 +199,17 @@ class BudgetRedistributionEngineTest {
 
 
 
+
+    @Test
+    fun displayedCategoryPercentReflectsTransferredPlanWithoutChangingSavedShares() {
+        assertEquals(17.0, BudgetRedistributionCalculator.effectiveCategoryPercent(1_700.0, 10_000.0, 20.0), 0.001)
+        assertEquals(13.0, BudgetRedistributionCalculator.effectiveCategoryPercent(1_300.0, 10_000.0, 20.0), 0.001)
+        assertEquals(20.0, BudgetRedistributionCalculator.effectiveCategoryPercent(0.0, 0.0, 20.0), 0.001)
+        assertEquals(100.0, listOf(1_700.0, 1_300.0, 7_000.0).sumOf {
+            BudgetRedistributionCalculator.effectiveCategoryPercent(it, 10_000.0, 0.0)
+        }, 0.001)
+    }
+
     @Test
     fun netAdjustmentsForReportingCycleIncludeOnlyItsExactTwoPeriods() {
         val secondStart = end.plusDays(1)

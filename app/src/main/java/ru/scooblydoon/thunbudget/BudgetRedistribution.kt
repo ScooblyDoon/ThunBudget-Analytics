@@ -216,6 +216,17 @@ object BudgetRedistributionCalculator {
     }
 
     /** Sums budget-only adjustments for a cycle made up of exact reporting periods. */
+    fun effectiveCategoryPercent(
+        adjustedCategoryBudget: Double,
+        totalPeriodBudget: Double,
+        fallbackPercent: Double
+    ): Double {
+        require(adjustedCategoryBudget.isFinite() && totalPeriodBudget.isFinite() && fallbackPercent.isFinite())
+        return if (totalPeriodBudget > 0.0) {
+            adjustedCategoryBudget.coerceAtLeast(0.0) / totalPeriodBudget * 100.0
+        } else fallbackPercent
+    }
+
     fun netAdjustmentsForPeriods(
         periods: List<Pair<LocalDate, LocalDate>>,
         appliedTransfers: List<AppliedBudgetRedistributionTransfer>
