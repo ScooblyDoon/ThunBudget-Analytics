@@ -32,7 +32,9 @@ object XlsxExporter {
         incomeEntries: List<IncomeEntry> = emptyList(),
         monthlyCategoryPlans: Map<String, Map<String, Double>> = emptyMap(),
         firstPeriodStartDay: Int = 9,
-        firstPeriodEndDay: Int = 23
+        firstPeriodEndDay: Int = 23,
+        reportingPeriodCategoryPlan: Map<String, Double> = emptyMap(),
+        budgetRedistributionTransfers: List<AppliedBudgetRedistributionTransfer> = emptyList()
     ) {
         val from = LocalDate.parse(periodStart)
         val to = LocalDate.parse(periodEnd)
@@ -40,14 +42,20 @@ object XlsxExporter {
         val sheets = listOf(
             "Операции" to operations(expenses),
             "Доходы" to incomes(incomeEntries),
-            "Отчётный период" to periods(expenses, categories, income, from, to, periodIncome),
+            "Отчётный период" to periods(
+                expenses, categories, income, from, to, periodIncome,
+                categoryPlan = reportingPeriodCategoryPlan,
+                budgetTransfers = budgetRedistributionTransfers
+            ),
             "Месяцы" to months(
                 expenses, categories, income, year, monthlyIncomes,
                 categoryPlans = monthlyCategoryPlans,
                 firstPeriodStartDay = firstPeriodStartDay,
-                firstPeriodEndDay = firstPeriodEndDay
+                firstPeriodEndDay = firstPeriodEndDay,
+                budgetTransfers = budgetRedistributionTransfers
             ),
             "Год по категориям" to annual(expenses, categories, income, year),
+            "Переводы бюджета" to budgetMovements(budgetRedistributionTransfers),
             "Рекомендации" to recommendations(expenses, categories, income, from, to)
         )
         context.contentResolver.openOutputStream(uri)?.use { output ->
@@ -94,18 +102,26 @@ object XlsxExporter {
         income: Double,
         start: LocalDate,
         end: LocalDate,
-        periodIncome: Double
+        periodIncome: Double,
+        categoryPlan: Map<String, Double> = emptyMap(),
+        budgetTransfers: List<AppliedBudgetRedistributionTransfer> = emptyList(),
+        asOf: LocalDate = LocalDate.now()
     ): List<List<Any>> {
         require(!end.isBefore(start))
         val rows = mutableListOf<List<Any>>(
             listOf("Начало", "Окончание", "Категория", "План, ₽", "Факт, ₽", "Не выбрано, ₽", "Превышение, ₽")
         )
         cats.forEach { category ->
-            val fact = expenses.asSequence()
-                .filter { it.category == category.name && it.date >= start.toString() && it.date <= end.toString() }
+            val actualEnd = minOf(end, asOf)
+            val fact = if (actualEnd.isBefore(start)) 0.0 else expenses.asSequence()
+                .filter { it.category == category.name && it.date >= start.toString() && it.date <= actualEnd.toString() }
                 .sumOf { it.amount }
-            val plan = if (periodIncome > 0.0) periodIncome * category.percent / 100.0
-                else planned(income, category.percent, start, end)
+            val percent = categoryPlan[category.name]
+                ?.takeIf { it.isFinite() && it >= 0.0 } ?: category.percent
+            val basePlan = if (periodIncome > 0.0) periodIncome * percent / 100.0
+                else planned(income, percent, start, end)
+            val planAdjustments = BudgetRedistributionCalculator.netAdjustments(start, end, budgetTransfers)
+            val plan = (basePlan + (planAdjustments[category.name] ?: 0.0)).coerceAtLeast(0.0)
             rows.add(
                 listOf(
                     start.toString(), end.toString(), category.name, plan, fact,
@@ -125,7 +141,8 @@ object XlsxExporter {
         asOf: LocalDate = LocalDate.now(),
         categoryPlans: Map<String, Map<String, Double>> = emptyMap(),
         firstPeriodStartDay: Int = 9,
-        firstPeriodEndDay: Int = 23
+        firstPeriodEndDay: Int = 23,
+        budgetTransfers: List<AppliedBudgetRedistributionTransfer> = emptyList()
     ): List<List<Any>> {
         val cashCategories = cats.filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
         val rows = mutableListOf<List<Any>>(
@@ -142,6 +159,10 @@ object XlsxExporter {
                 else -> asOf
             }
             val monthIncome = monthlyIncomes[ym.toString()]?.takeIf { it.isFinite() && it > 0.0 } ?: income
+            val cycleBudgetAdjustments = BudgetRedistributionCalculator.netAdjustmentsForPeriods(
+                listOf(cycle.first.start to cycle.first.end, cycle.second.start to cycle.second.end),
+                budgetTransfers
+            )
             cashCategories.forEach { category ->
                 val fact = if (actualEnd.isBefore(from)) 0.0 else expenses.asSequence()
                     .filter {
@@ -149,9 +170,10 @@ object XlsxExporter {
                             it.date >= from.toString() && it.date <= actualEnd.toString()
                     }
                     .sumOf { it.amount }
-                val plan = categoryPlans[ym.toString()]?.get(category.name)
+                val basePlan = categoryPlans[ym.toString()]?.get(category.name)
                     ?.takeIf { it.isFinite() && it >= 0.0 }
                     ?: monthIncome * category.percent / 100.0
+                val plan = (basePlan + (cycleBudgetAdjustments[category.name] ?: 0.0)).coerceAtLeast(0.0)
                 rows.add(
                     listOf(
                         ym.toString(), category.name, plan, fact,
@@ -161,6 +183,21 @@ object XlsxExporter {
             }
         }
         return withTotals(rows, listOf(2, 3, 4, 5))
+    }
+
+    internal fun budgetMovements(transfers: List<AppliedBudgetRedistributionTransfer>): List<List<Any>> {
+        val rows = mutableListOf<List<Any>>(
+            listOf("Начало периода", "Конец периода", "Откуда", "Куда", "Сумма, ₽", "Время применения", "Идентификатор предложения")
+        )
+        transfers.sortedWith(compareBy<AppliedBudgetRedistributionTransfer> { it.periodStart }.thenBy { it.appliedAt })
+            .forEach { movement ->
+                rows.add(listOf(
+                    movement.periodStart.toString(), movement.periodEnd.toString(),
+                    movement.fromCategory, movement.toCategory, movement.amount,
+                    movement.appliedAt, movement.proposalFingerprint
+                ))
+            }
+        return rows
     }
 
     private fun annual(

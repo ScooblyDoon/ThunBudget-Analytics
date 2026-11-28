@@ -993,9 +993,18 @@ private fun ThunBudgetApp() {
         firstIncome = analyticsCycleIncome.firstIncome,
         secondIncome = analyticsCycleIncome.secondIncome
     )
+    val analyticsCycleLedgerAdjustments = BudgetRedistributionCalculator.netAdjustmentsForPeriods(
+        listOf(
+            analyticsCycleIncome.firstStart to analyticsCycleIncome.firstEnd,
+            analyticsCycleIncome.secondStart to analyticsCycleIncome.secondEnd
+        ), redistributionLedger
+    )
     val analyticsCyclePlanAmounts = currentCategoryShares.associate { (name, _) ->
-        name to calculatedMonthlyIncome.coerceAtLeast(0.0) *
-            (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0
+        name to (
+            calculatedMonthlyIncome.coerceAtLeast(0.0) *
+                (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0 +
+                (analyticsCycleLedgerAdjustments[name] ?: 0.0)
+            ).coerceAtLeast(0.0)
     }
     // All reporting-month category views use the same two-period plan.
     val analyticsMonthPlanAmounts = analyticsCyclePlanAmounts
@@ -1622,7 +1631,9 @@ private fun ThunBudgetApp() {
                     context, uri, expenses, categories, income, exportYear,
                     periodStart, periodEnd, effectivePeriodIncome,
                     exportMonthlyIncomes, incomeEntries, exportMonthlyCategoryPlans,
-                    firstPeriodStartDay, firstPeriodEndDay
+                    firstPeriodStartDay, firstPeriodEndDay,
+                    reportingPeriodCategoryPlan = selectedOverviewPeriodCategoryPlan,
+                    budgetRedistributionTransfers = redistributionLedger
                 )
                 "Excel-отчёт успешно сохранён."
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
@@ -2494,7 +2505,7 @@ private fun ThunBudgetApp() {
                         val pPlanPercent = selectedPeriodCategoryPlan.entries.firstOrNull {
                             it.key.equals(cat.name, ignoreCase = true)
                         }?.value ?: cat.percent
-                        val plan = AnalyticsBudgetCalculator.periodCategoryBudget(
+                        val basePlan = AnalyticsBudgetCalculator.periodCategoryBudget(
                             periodIncome = pEffectiveIncome,
                             monthlyIncomeFallback = calculatedMonthlyIncome,
                             categoryPercent = pPlanPercent,
@@ -2502,6 +2513,8 @@ private fun ThunBudgetApp() {
                             end = pEnd,
                             periodIncomeIsDefined = periodIncomes.any { it.start == pStart.toString() && it.end == pEnd.toString() } || pCarryover != 0.0
                         )
+                        val periodAdjustments = BudgetRedistributionCalculator.netAdjustments(pStart, pEnd, redistributionLedger)
+                        val plan = (basePlan + (periodAdjustments[cat.name] ?: 0.0)).coerceAtLeast(0.0)
                         Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)

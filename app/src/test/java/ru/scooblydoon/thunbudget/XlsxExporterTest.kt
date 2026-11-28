@@ -10,6 +10,72 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class XlsxExporterTest {
+
+    @Test
+    fun currentReportingPeriodPlanUsesExactSharesAndBudgetOnlyTransfers() {
+        val start = LocalDate.parse("2026-11-09")
+        val end = LocalDate.parse("2026-11-23")
+        val transfer = AppliedBudgetRedistributionTransfer(
+            start, end, "Продукты", "Транспорт", 300.0,
+            "a".repeat(64), "2026-11-20T12:00:00Z"
+        )
+        val rows = XlsxExporter.periods(
+            expenses = emptyList(),
+            cats = listOf(BudgetCategory("Продукты", 50.0), BudgetCategory("Транспорт", 50.0)),
+            income = 30_000.0,
+            start = start,
+            end = end,
+            periodIncome = 10_000.0,
+            categoryPlan = mapOf("Продукты" to 20.0, "Транспорт" to 10.0),
+            budgetTransfers = listOf(transfer)
+        )
+        val data = rows.drop(1).dropLast(1).associateBy { it[2].toString() }
+        assertEquals(1_700.0, data["Продукты"]!![3] as Double, 0.001)
+        assertEquals(1_300.0, data["Транспорт"]!![3] as Double, 0.001)
+        assertEquals(3_000.0, data.values.sumOf { it[3] as Double }, 0.001)
+    }
+
+    @Test
+    fun monthlyPlanIncludesMovementsFromBothExactReportingPeriodsOnly() {
+        val firstStart = LocalDate.parse("2026-11-09")
+        val firstEnd = LocalDate.parse("2026-11-23")
+        val secondStart = LocalDate.parse("2026-11-24")
+        val secondEnd = LocalDate.parse("2026-12-08")
+        val transfers = listOf(
+            AppliedBudgetRedistributionTransfer(firstStart, firstEnd, "Продукты", "Транспорт", 300.0, "a".repeat(64), "2026-11-20T12:00:00Z"),
+            AppliedBudgetRedistributionTransfer(secondStart, secondEnd, "Транспорт", "Здоровье", 100.0, "b".repeat(64), "2026-11-25T12:00:00Z"),
+            AppliedBudgetRedistributionTransfer(LocalDate.parse("2026-12-09"), LocalDate.parse("2026-12-23"), "Продукты", "Покупки", 75.0, "c".repeat(64), "2026-12-10T12:00:00Z")
+        )
+        val rows = XlsxExporter.months(
+            expenses = emptyList(),
+            cats = listOf(BudgetCategory("Продукты", 20.0), BudgetCategory("Транспорт", 10.0), BudgetCategory("Здоровье", 10.0), BudgetCategory("Покупки", 10.0)),
+            income = 100_000.0,
+            year = 2026,
+            monthlyIncomes = mapOf("2026-11" to 100_000.0),
+            asOf = LocalDate.parse("2026-11-28"),
+            categoryPlans = mapOf("2026-11" to mapOf("Продукты" to 20_000.0, "Транспорт" to 10_000.0, "Здоровье" to 10_000.0, "Покупки" to 10_000.0)),
+            budgetTransfers = transfers
+        )
+        val november = rows.drop(1).dropLast(1).filter { it[0] == "2026-11" }.associateBy { it[1].toString() }
+        assertEquals(19_700.0, november["Продукты"]!![2] as Double, 0.001)
+        assertEquals(10_200.0, november["Транспорт"]!![2] as Double, 0.001)
+        assertEquals(10_100.0, november["Здоровье"]!![2] as Double, 0.001)
+        assertEquals(10_000.0, november["Покупки"]!![2] as Double, 0.001)
+    }
+
+    @Test
+    fun budgetTransferHistoryIsExportedSeparatelyFromExpenseRows() {
+        val transfer = AppliedBudgetRedistributionTransfer(
+            LocalDate.parse("2026-11-09"), LocalDate.parse("2026-11-23"),
+            "Продукты", "Транспорт", 300.0, "a".repeat(64), "2026-11-20T12:00:00Z"
+        )
+        val rows = XlsxExporter.budgetMovements(listOf(transfer))
+        assertEquals("Откуда", rows.first()[2])
+        assertEquals("Продукты", rows[1][2])
+        assertEquals("Транспорт", rows[1][3])
+        assertEquals(300.0, rows[1][4] as Double, 0.001)
+    }
+
     @Test
     fun reportUsesExactlyTheConfiguredStartAndEndDates() {
         val expenses = listOf(
