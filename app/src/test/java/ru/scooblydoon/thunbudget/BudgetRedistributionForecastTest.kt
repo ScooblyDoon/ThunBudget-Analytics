@@ -123,6 +123,19 @@ class BudgetRedistributionForecastTest {
     }
 
 
+
+    @Test
+    fun specialCarryoverTransferCategoryIsExcludedFromForecastInputs() {
+        val inputs = BudgetRedistributionForecastAssembler.buildInputs(
+            start, end, today,
+            listOf(category("Продукты"), category("Перенос средств")),
+            listOf(Expense(11, "Перенос", "Перенос средств", 2_000.0, "2026-11-12")),
+            emptyList(), listOf(forecast("Продукты")),
+            mapOf("Продукты" to 1_000.0)
+        )
+        assertEquals(listOf("Продукты"), inputs.map { it.name })
+    }
+
     @Test
     fun scheduledBillIsIncludedAsAnUnpaidCommitmentForItsCurrentPeriod() {
         val payment = RecurringPayment(
