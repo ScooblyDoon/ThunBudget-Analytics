@@ -6,6 +6,31 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 class BudgetAllocationTest {
+
+    @Test fun renamingBudgetCategoryAlsoRenamesRecurringPaymentCategory() {
+        val payment = RecurringPayment(
+            id = "rent", title = "Аренда", amount = 15000.0,
+            category = "Жильё и ЖКХ", dayOfMonth = 20,
+            completedMonths = setOf("2026-10")
+        )
+        val untouched = RecurringPayment(
+            id = "internet", title = "Интернет", amount = 800.0,
+            category = "Связь", dayOfMonth = 5
+        )
+
+        val renamed = renameRecurringPaymentCategories(
+            listOf(payment, untouched),
+            mapOf("жильё и жкх" to "Жильё")
+        )
+
+        assertEquals("Жильё", renamed[0].category)
+        assertEquals(payment.completedMonths, renamed[0].completedMonths)
+        assertEquals(payment.id, renamed[0].id)
+        assertEquals(untouched, renamed[1])
+        assertEquals("Жильё и ЖКХ", payment.category)
+    }
+
+
     @Test fun decemberUsesJuneThroughNovember() {
         val window = BudgetAllocationCalculator.windowFor(LocalDate.of(2026, 12, 20))
         assertEquals(LocalDate.of(2026, 6, 1), window.from)

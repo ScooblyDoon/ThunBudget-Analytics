@@ -3215,6 +3215,8 @@ private fun ThunBudgetApp() {
                 store.prepareUndoSnapshot(); canUndo=true
                 categories=categories.map{if(it.name==oldCat.name) it.copy(name=name,percent=percent) else it}
                 expenses=expenses.map{if(it.category==oldCat.name) it.copy(category=name) else it}
+                recurringPayments = renameRecurringPaymentCategories(recurringPayments, mapOf(oldCat.name to name))
+                store.saveRecurringPayments(recurringPayments)
                 store.renameBudgetRedistributionCategories(mapOf(oldCat.name to name))
                 redistributionLedger=store.loadBudgetRedistributionLedger()
                 store.saveCategories(categories, periodStart, periodEnd); store.saveExpenses(expenses)
@@ -3345,6 +3347,8 @@ private fun ThunBudgetApp() {
         if (renameMap.isNotEmpty()) {
             expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
             store.saveExpenses(expenses)
+            recurringPayments = renameRecurringPaymentCategories(recurringPayments, renameMap)
+            store.saveRecurringPayments(recurringPayments)
             store.renameBudgetRedistributionCategories(renameMap)
             redistributionLedger = store.loadBudgetRedistributionLedger()
         }
