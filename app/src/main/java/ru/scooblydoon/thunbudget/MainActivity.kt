@@ -422,7 +422,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1", AUTO_REDISTRIBUTION_ENABLED_KEY, REDISTRIBUTION_LEDGER_KEY)
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1", REDISTRIBUTION_LEDGER_KEY)
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -4425,7 +4425,7 @@ private fun SettingsDialog(
                                     }) { Text("Удалить",color=MaterialTheme.colorScheme.error) }
                                 }
                                 val category = cats[index]
-                                val alwaysProtected = category.name.trim().equals("Накопления", ignoreCase = true)
+                                val alwaysProtected = category.name.trim().lowercase(Locale.ROOT).contains("накоп")
                                 val isProtected = category.protectedFromRedistribution
                                     ?: BudgetRedistributionProtectionDefaults.isProtectedByDefault(category.name)
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
