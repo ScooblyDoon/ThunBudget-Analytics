@@ -1137,6 +1137,8 @@ private fun ThunBudgetApp() {
 
     LaunchedEffect(
         autoRedistributionEnabled,
+        autoAllocationEnabled,
+        selectedOverviewPeriodCategoryPlan,
         selectedOverviewPeriodStart,
         selectedOverviewPeriodEnd,
         redistributionPeriodBudget,
@@ -2126,15 +2128,13 @@ private fun ThunBudgetApp() {
                             }
                             Card {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                            Text("Учитывать сохранённые доли каждого периода", fontWeight = FontWeight.SemiBold)
-                                            Text(
-                                                "Для периода с отдельным сохранённым планом применяются его проценты; иначе — текущие доли категорий.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Учитывать сохранённые доли каждого периода", fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "Для периода с отдельным сохранённым планом применяются его проценты; иначе — текущие доли категорий.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                     Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
                                         if (enabled) {
