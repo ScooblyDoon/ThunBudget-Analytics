@@ -1684,6 +1684,8 @@ private fun ThunBudgetApp() {
                 income = store.loadIncome()
                 savingsGoal = store.loadSavingsGoal()
                 categories = store.loadCategories()
+                autoRedistributionEnabled = store.loadAutoRedistributionEnabled()
+                redistributionLedger = store.loadBudgetRedistributionLedger()
                 expenses = store.loadExpenses()
                 recurringPayments = store.loadRecurringPayments()
                 periodIncomes = store.loadPeriodIncomes()
@@ -3267,6 +3269,7 @@ private fun ThunBudgetApp() {
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
+            autoRedistributionEnabled=store.loadAutoRedistributionEnabled(); redistributionLedger=store.loadBudgetRedistributionLedger()
             expenses=store.loadExpenses(); recurringPayments=store.loadRecurringPayments(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1; store.saveSelectedPeriod(-1); backupMessage="Автоматическая резервная копия восстановлена."
@@ -3278,6 +3281,7 @@ private fun ThunBudgetApp() {
         val restored = store.restorePreviousBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
+            autoRedistributionEnabled=store.loadAutoRedistributionEnabled(); redistributionLedger=store.loadBudgetRedistributionLedger()
             expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1
@@ -3304,6 +3308,8 @@ private fun ThunBudgetApp() {
                     income=store.loadIncome()
                     savingsGoal=store.loadSavingsGoal()
                     categories=store.loadCategories()
+                    autoRedistributionEnabled=store.loadAutoRedistributionEnabled()
+                    redistributionLedger=store.loadBudgetRedistributionLedger()
                     expenses=store.loadExpenses()
                     periodIncomes=store.loadPeriodIncomes()
                     incomeEntries=store.loadIncomeEntries()
@@ -3340,6 +3346,45 @@ private fun ThunBudgetApp() {
         confirmButton={Button(onClick={showRestoreConfirmation=false;backupImportLauncher.launch(arrayOf("application/json","text/*"))}) { Text("Выбрать файл") }},
         dismissButton={TextButton(onClick={showRestoreConfirmation=false}) { Text("Отмена") }}
     )
+    if (showRedistributionConfirmation) AppAlertDialog(
+        onDismissRequest = { showRedistributionConfirmation = false },
+        title = { Text("Подтвердить переносы между категориями?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Период: \${selectedOverviewPeriodStart.format(DateTimeFormatter.ofPattern(\"dd.MM.yyyy\"))} — \${selectedOverviewPeriodEnd.format(DateTimeFormatter.ofPattern(\"dd.MM.yyyy\"))}")
+                currentBudgetRedistributionProposal.transfers.forEach { transfer ->
+                    Text("\${transfer.fromCategory} → \${transfer.toCategory}: \${money(transfer.amount)}")
+                }
+                Text("Всего будет перераспределено: \${money(currentBudgetRedistributionProposal.totalTransferred)}.", fontWeight = FontWeight.SemiBold)
+                if (currentBudgetRedistributionProposal.totalUncovered > 0.0001) {
+                    Text("После переноса останется не покрыто: \${money(currentBudgetRedistributionProposal.totalUncovered)}.", color = MaterialTheme.colorScheme.error)
+                }
+                Text(
+                    "Это изменит только плановые суммы категорий. Реальные расходы, доходы и банковские операции не добавляются и не изменяются. Перенос можно отменить через «Отменить последнее действие» на главном экране.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                showRedistributionConfirmation = false
+                runCatching {
+                    store.prepareUndoSnapshot()
+                    store.applyBudgetRedistribution(currentBudgetRedistributionProposal, java.time.Instant.now().toString())
+                }.onSuccess { updated ->
+                    redistributionLedger = updated
+                    canUndo = true
+                    backupMessage = "Переносы бюджета применены. Реальные операции не изменены."
+                }.onFailure { error ->
+                    canUndo = store.hasUndoSnapshot()
+                    backupMessage = error.message ?: "Не удалось применить переносы бюджета."
+                }
+            }) { Text("Подтвердить переносы") }
+        },
+        dismissButton = { TextButton(onClick = { showRedistributionConfirmation = false }) { Text("Назад") } }
+    )
+
     if(showUndoConfirmation) AppAlertDialog(
                 onDismissRequest={showUndoConfirmation=false},
         title={Text("Отменить последнее действие?")},
@@ -3350,6 +3395,8 @@ private fun ThunBudgetApp() {
                 expenses=store.loadExpenses(); categories=store.loadCategories(); recurringPayments=store.loadRecurringPayments()
                 periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods(); income=store.loadIncome()
                 savingsGoal=store.loadSavingsGoal()
+                autoRedistributionEnabled=store.loadAutoRedistributionEnabled()
+                redistributionLedger=store.loadBudgetRedistributionLedger()
                 periodStart=store.loadPeriodStart() ?: periodStart
                 periodEnd=store.loadPeriodEnd() ?: periodEnd
                 canUndo=false
@@ -4363,6 +4410,27 @@ private fun SettingsDialog(
                                         categoryPercentTexts=categoryPercentTexts.filterIndexed{idx,_->idx!=index}
                                         sourceNames=sourceNames.filterIndexed{idx,_->idx!=index}
                                     }) { Text("Удалить",color=MaterialTheme.colorScheme.error) }
+                                }
+                                val category = cats[index]
+                                val alwaysProtected = category.name.trim().equals("Накопления", ignoreCase = true)
+                                val isProtected = category.protectedFromRedistribution
+                                    ?: BudgetRedistributionProtectionDefaults.isProtectedByDefault(category.name)
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        if (alwaysProtected) "Накопления всегда защищены" else "Не использовать как источник средств",
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Switch(
+                                        checked = isProtected || alwaysProtected,
+                                        enabled = !alwaysProtected,
+                                        onCheckedChange = { checked ->
+                                            cats = cats.toMutableList().also {
+                                                it[index] = it[index].copy(protectedFromRedistribution = checked)
+                                            }
+                                        }
+                                    )
                                 }
                             }
                         }
