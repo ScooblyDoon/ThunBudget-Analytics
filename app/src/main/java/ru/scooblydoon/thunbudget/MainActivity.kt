@@ -1038,7 +1038,9 @@ private fun ThunBudgetApp() {
     }
     // All reporting-month category views use the same two-period plan.
     val analyticsMonthPlanAmounts = analyticsCyclePlanAmounts
-    val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
+    val totalSpent=expenses.filter {
+        it.date >= periodStart && it.date <= periodEnd && it.date <= today.toString()
+    }.sumOf { it.amount }
     val planned = AnalyticsBudgetCalculator.periodCategoryBudget(
         periodIncome = effectivePeriodIncome,
         monthlyIncomeFallback = calculatedMonthlyIncome,
@@ -2097,7 +2099,9 @@ private fun ThunBudgetApp() {
                                     IconButton(onClick={showCategoryManager=true}) { Icon(Icons.Outlined.Add, contentDescription = "Управление категориями", tint = MaterialTheme.colorScheme.primary) }
                                 }
                                 categories.forEach { cat ->
-                                    val spent=expenses.filter{it.category==cat.name&&it.date>=periodStart&&it.date<=periodEnd}.sumOf{it.amount}
+                                    val spent=expenses.filter {
+                                        it.category==cat.name && it.date>=periodStart && it.date<=periodEnd && it.date<=today.toString()
+                                    }.sumOf{it.amount}
                                     val cap = overviewCategoryBudget(cat.name)
                                     val planPercent = BudgetRedistributionCalculator.effectiveCategoryPercent(
                                         adjustedCategoryBudget = cap,

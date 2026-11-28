@@ -269,11 +269,13 @@ class BudgetRedistributionEngineTest {
             listOf(
                 category("Транспорт", 100.0, actual = 500.0),
                 category("Жильё и ЖКХ", 2_000.0, protected = null),
+                category("ЖКХ", 1_000.0, protected = null),
                 category("Покупки", 1_000.0, actual = 200.0)
             )
         )
         assertTrue(proposal.transfers.isNotEmpty())
         assertTrue(proposal.transfers.none { it.fromCategory == "Жильё и ЖКХ" })
+        assertTrue(proposal.transfers.none { it.fromCategory == "ЖКХ" })
     }
 
     @Test
