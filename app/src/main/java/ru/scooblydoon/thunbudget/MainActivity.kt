@@ -1924,7 +1924,7 @@ private fun ThunBudgetApp() {
                                         Text("Ожидаемое превышение плана", fontWeight = FontWeight.SemiBold)
                                         currentBudgetRedistributionProposal.deficits.forEach { deficit ->
                                             Text(
-                                                "«\${deficit.category}»: факт \${money(deficit.actualSpend)}, прогноз \${money(deficit.projectedSpend)} при плане \${money(deficit.plannedAmount)}. Не хватает \${money(deficit.amount)}.",
+                                                "«${deficit.category}»: факт ${money(deficit.actualSpend)}, прогноз ${money(deficit.projectedSpend)} при плане ${money(deficit.plannedAmount)}. Не хватает ${money(deficit.amount)}.",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.error
                                             )
@@ -1933,7 +1933,7 @@ private fun ThunBudgetApp() {
                                             Text("Предлагаемые переносы", fontWeight = FontWeight.SemiBold)
                                             currentBudgetRedistributionProposal.transfers.forEach { transfer ->
                                                 Text(
-                                                    "«\${transfer.toCategory}»: +\${money(transfer.amount)} из «\${transfer.fromCategory}» · свободный остаток до переноса \${String.format(Locale(\"ru\", \"RU\"), \"%.1f\", transfer.donorFreePercent)}%",
+                                                    "«${transfer.toCategory}»: +${money(transfer.amount)} из «${transfer.fromCategory}» · свободный остаток до переноса ${String.format(Locale("ru", "RU"), "%.1f", transfer.donorFreePercent)}%",
                                                     style = MaterialTheme.typography.bodySmall
                                                 )
                                             }
@@ -1955,7 +1955,7 @@ private fun ThunBudgetApp() {
                                         }
                                         if (currentBudgetRedistributionProposal.totalUncovered > 0.0001) {
                                             Text(
-                                                "Останется не покрыто: \${money(currentBudgetRedistributionProposal.totalUncovered)}.",
+                                                "Останется не покрыто: ${money(currentBudgetRedistributionProposal.totalUncovered)}.",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.error
                                             )
@@ -1970,12 +1970,12 @@ private fun ThunBudgetApp() {
                                     Text("История переносов бюджета", fontWeight = FontWeight.SemiBold)
                                     currentPeriodTransfers.take(5).forEach { movement ->
                                         Text(
-                                            "\${movement.fromCategory} → \${movement.toCategory}: \${money(movement.amount)} · \${runCatching { java.time.Instant.parse(movement.appliedAt).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(\"dd.MM HH:mm\")) }.getOrDefault(movement.appliedAt)}",
+                                            "${movement.fromCategory} → ${movement.toCategory}: ${money(movement.amount)} · ${runCatching { java.time.Instant.parse(movement.appliedAt).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd.MM HH:mm")) }.getOrDefault(movement.appliedAt)}",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }
                                     if (currentPeriodTransfers.size > 5) {
-                                        Text("Показаны последние 5 из \${currentPeriodTransfers.size} переносов.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("Показаны последние 5 из ${currentPeriodTransfers.size} переносов.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
@@ -3364,13 +3364,13 @@ private fun ThunBudgetApp() {
         title = { Text("Подтвердить переносы между категориями?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Период: \${selectedOverviewPeriodStart.format(DateTimeFormatter.ofPattern(\"dd.MM.yyyy\"))} — \${selectedOverviewPeriodEnd.format(DateTimeFormatter.ofPattern(\"dd.MM.yyyy\"))}")
+                Text("Период: ${selectedOverviewPeriodStart.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))} — ${selectedOverviewPeriodEnd.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}")
                 currentBudgetRedistributionProposal.transfers.forEach { transfer ->
-                    Text("\${transfer.fromCategory} → \${transfer.toCategory}: \${money(transfer.amount)}")
+                    Text("${transfer.fromCategory} → ${transfer.toCategory}: ${money(transfer.amount)}")
                 }
-                Text("Всего будет перераспределено: \${money(currentBudgetRedistributionProposal.totalTransferred)}.", fontWeight = FontWeight.SemiBold)
+                Text("Всего будет перераспределено: ${money(currentBudgetRedistributionProposal.totalTransferred)}.", fontWeight = FontWeight.SemiBold)
                 if (currentBudgetRedistributionProposal.totalUncovered > 0.0001) {
-                    Text("После переноса останется не покрыто: \${money(currentBudgetRedistributionProposal.totalUncovered)}.", color = MaterialTheme.colorScheme.error)
+                    Text("После переноса останется не покрыто: ${money(currentBudgetRedistributionProposal.totalUncovered)}.", color = MaterialTheme.colorScheme.error)
                 }
                 Text(
                     "Это изменит только плановые суммы категорий. Реальные расходы, доходы и банковские операции не добавляются и не изменяются. Перенос можно отменить через «Отменить последнее действие» на главном экране.",
