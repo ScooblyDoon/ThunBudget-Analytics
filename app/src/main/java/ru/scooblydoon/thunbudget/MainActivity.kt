@@ -1038,9 +1038,13 @@ private fun ThunBudgetApp() {
     }
     // All reporting-month category views use the same two-period plan.
     val analyticsMonthPlanAmounts = analyticsCyclePlanAmounts
-    val totalSpent=expenses.filter {
+    val totalActualSpent=expenses.filter {
         it.date >= periodStart && it.date <= periodEnd && it.date <= today.toString()
     }.sumOf { it.amount }
+    val futureEnteredPeriodExpenses=expenses.filter {
+        it.date >= periodStart && it.date <= periodEnd && it.date > today.toString()
+    }.sumOf { it.amount }
+    val totalSpent = totalActualSpent + futureEnteredPeriodExpenses
     val planned = AnalyticsBudgetCalculator.periodCategoryBudget(
         periodIncome = effectivePeriodIncome,
         monthlyIncomeFallback = calculatedMonthlyIncome,
@@ -2050,7 +2054,7 @@ private fun ThunBudgetApp() {
                                     Column(Modifier.fillMaxWidth().padding(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                         Text("Доступно в бюджете",color=visualPalette.budgetCardContent.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
                                         Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=visualPalette.budgetCardContent)
-                                        Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=visualPalette.budgetCardContent.copy(alpha=.86f))
+                                        Text("Факт: ${money(totalActualSpent)} · Запланировано на будущее: ${money(futureEnteredPeriodExpenses)}",color=visualPalette.budgetCardContent.copy(alpha=.86f))
                                          if (carryoverIncome > 0.0) Text("Перенос остатка с прошлых периодов: +${money(carryoverIncome)}", color = visualPalette.budgetCardContent.copy(alpha = .88f), style = MaterialTheme.typography.bodySmall)
                                         val periodEndDate=LocalDate.parse(periodEnd)
                                         val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
@@ -2102,6 +2106,10 @@ private fun ThunBudgetApp() {
                                     val spent=expenses.filter {
                                         it.category==cat.name && it.date>=periodStart && it.date<=periodEnd && it.date<=today.toString()
                                     }.sumOf{it.amount}
+                                    val futurePlanned=expenses.filter {
+                                        it.category==cat.name && it.date>=periodStart && it.date<=periodEnd && it.date>today.toString()
+                                    }.sumOf{it.amount}
+                                    val committed = spent + futurePlanned
                                     val cap = overviewCategoryBudget(cat.name)
                                     val planPercent = BudgetRedistributionCalculator.effectiveCategoryPercent(
                                         adjustedCategoryBudget = cap,
@@ -2117,14 +2125,22 @@ private fun ThunBudgetApp() {
                                                 Row(verticalAlignment=Alignment.CenterVertically) {
                                                     Column(Modifier.weight(1f)) {
                                                         Text(cat.name,fontWeight=FontWeight.SemiBold)
-                                                        val free=BudgetAllocationCalculator.freePercent(cap,spent)
-                                                        Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        val free=BudgetAllocationCalculator.freePercent(cap,committed)
+                                                        Text(free?.let{if(it>=0.0) "После будущих платежей свободно: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение с учётом будущих платежей: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                                                     }
                                                     IconButton(onClick={editingCategory=cat}) { Icon(Icons.Outlined.Edit, contentDescription = "Изменить категорию", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) }
                                                     Text("${String.format(Locale("ru", "RU"), "%.1f", planPercent)}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurface,fontWeight=FontWeight.SemiBold)
                                                 }
-                                                LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
-                                                Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive) }
+                                                LinearProgressIndicator(progress={if(cap>0)(committed/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(committed>cap) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
+                                                Row {
+                                                    Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall)
+                                                    Spacer(Modifier.weight(1f))
+                                                    Text("Будущие платежи: ${money(futurePlanned)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Row {
+                                                    Spacer(Modifier.weight(1f))
+                                                    Text(if(committed>cap) "Превышение: ${money(committed-cap)}" else "Осталось: ${money(cap-committed)}",style=MaterialTheme.typography.bodySmall,color=if(committed>cap) MaterialTheme.colorScheme.error else visualPalette.positive)
+                                                }
                                             }
                                         }
                                     }
