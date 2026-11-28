@@ -261,6 +261,35 @@ internal class BudgetStore(context: Context) {
             prefs.getString(REDISTRIBUTION_LEDGER_KEY, null)
                 ?: BudgetRedistributionLedgerCodec.encode(emptyList())
         )
+    fun removeBudgetRedistributionProposal(fingerprint: String): List<AppliedBudgetRedistributionTransfer> {
+        require(fingerprint.matches(Regex("[0-9a-f]{64}"))) { "Некорректный идентификатор переноса." }
+        val previous = loadBudgetRedistributionLedger()
+        val updated = previous.filterNot { it.proposalFingerprint == fingerprint }
+        check(updated.size < previous.size) { "Перенос уже отменён или не найден." }
+        val encoded = BudgetRedistributionLedgerCodec.encode(updated)
+        check(prefs.edit().putString(REDISTRIBUTION_LEDGER_KEY, encoded).commit()) {
+            "Не удалось отменить перенос бюджета."
+        }
+        saveAutomaticBackup()
+        return updated
+    }
+
+    fun renameBudgetRedistributionCategories(renameMap: Map<String, String>) {
+        if (renameMap.isEmpty()) return
+        val updated = loadBudgetRedistributionLedger().map { row ->
+            row.copy(
+                fromCategory = renameMap[row.fromCategory] ?: row.fromCategory,
+                toCategory = renameMap[row.toCategory] ?: row.toCategory
+            )
+        }
+        if (updated == loadBudgetRedistributionLedger()) return
+        val encoded = BudgetRedistributionLedgerCodec.encode(updated)
+        check(prefs.edit().putString(REDISTRIBUTION_LEDGER_KEY, encoded).commit()) {
+            "Не удалось обновить журнал переносов после переименования категории."
+        }
+        saveAutomaticBackup()
+    }
+
     fun applyBudgetRedistribution(
         proposal: BudgetRedistributionProposal,
         appliedAt: String
@@ -813,6 +842,7 @@ private fun ThunBudgetApp() {
     var canUndo by remember { mutableStateOf(store.hasUndoSnapshot()) }
     var showUndoConfirmation by remember { mutableStateOf(false) }
     var showRedistributionConfirmation by remember { mutableStateOf(false) }
+    var showUndoRedistributionConfirmation by remember { mutableStateOf(false) }
     var showResetConfirmation by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var darkTheme by remember { mutableStateOf(store.loadDarkTheme()) }
@@ -1965,17 +1995,24 @@ private fun ThunBudgetApp() {
                                 val currentPeriodTransfers = redistributionLedger.filter {
                                     it.periodStart == selectedOverviewPeriodStart && it.periodEnd == selectedOverviewPeriodEnd
                                 }.sortedByDescending { it.appliedAt }
-                                if (currentPeriodTransfers.isNotEmpty()) {
+                                val latestCurrentProposalFingerprint = currentPeriodTransfers.firstOrNull()?.proposalFingerprint
+                                if (redistributionLedger.isNotEmpty()) {
                                     Divider()
                                     Text("История переносов бюджета", fontWeight = FontWeight.SemiBold)
-                                    currentPeriodTransfers.take(5).forEach { movement ->
+                                    redistributionLedger.sortedByDescending { it.appliedAt }.take(5).forEach { movement ->
                                         Text(
                                             "${movement.fromCategory} → ${movement.toCategory}: ${money(movement.amount)} · ${runCatching { java.time.Instant.parse(movement.appliedAt).atZone(java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd.MM HH:mm")) }.getOrDefault(movement.appliedAt)}",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }
-                                    if (currentPeriodTransfers.size > 5) {
-                                        Text("Показаны последние 5 из ${currentPeriodTransfers.size} переносов.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (redistributionLedger.size > 5) {
+                                        Text("Показаны последние 5 из ${redistributionLedger.size} переносов.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    if (latestCurrentProposalFingerprint != null) {
+                                        OutlinedButton(
+                                            onClick = { showUndoRedistributionConfirmation = true },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("Отменить последний перенос этого периода") }
                                     }
                                 }
                             }
@@ -3178,6 +3215,8 @@ private fun ThunBudgetApp() {
                 store.prepareUndoSnapshot(); canUndo=true
                 categories=categories.map{if(it.name==oldCat.name) it.copy(name=name,percent=percent) else it}
                 expenses=expenses.map{if(it.category==oldCat.name) it.copy(category=name) else it}
+                store.renameBudgetRedistributionCategories(mapOf(oldCat.name to name))
+                redistributionLedger=store.loadBudgetRedistributionLedger()
                 store.saveCategories(categories, periodStart, periodEnd); store.saveExpenses(expenses)
             }
             editingCategory=null
@@ -3306,6 +3345,8 @@ private fun ThunBudgetApp() {
         if (renameMap.isNotEmpty()) {
             expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
             store.saveExpenses(expenses)
+            store.renameBudgetRedistributionCategories(renameMap)
+            redistributionLedger = store.loadBudgetRedistributionLedger()
         }
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; selectedPeriod=-1; store.saveSelectedPeriod(-1); store.savePeriod(start,end)
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories, periodStart, periodEnd); showSettings=false    })
@@ -3359,6 +3400,36 @@ private fun ThunBudgetApp() {
         confirmButton={Button(onClick={showRestoreConfirmation=false;backupImportLauncher.launch(arrayOf("application/json","text/*"))}) { Text("Выбрать файл") }},
         dismissButton={TextButton(onClick={showRestoreConfirmation=false}) { Text("Отмена") }}
     )
+    if (showUndoRedistributionConfirmation) AppAlertDialog(
+        onDismissRequest = { showUndoRedistributionConfirmation = false },
+        title = { Text("Отменить последний перенос бюджета?") },
+        text = {
+            Text("Будут отменены все движения последнего подтверждённого предложения за выбранный период. Остальные переносы и реальные расходы останутся без изменений.")
+        },
+        confirmButton = {
+            Button(onClick = {
+                showUndoRedistributionConfirmation = false
+                val fingerprint = redistributionLedger
+                    .filter { it.periodStart == selectedOverviewPeriodStart && it.periodEnd == selectedOverviewPeriodEnd }
+                    .maxByOrNull { it.appliedAt }?.proposalFingerprint
+                if (fingerprint != null) {
+                    runCatching {
+                        store.prepareUndoSnapshot()
+                        store.removeBudgetRedistributionProposal(fingerprint)
+                    }.onSuccess { updated ->
+                        redistributionLedger = updated
+                        canUndo = true
+                        backupMessage = "Последний перенос бюджета отменён."
+                    }.onFailure { error ->
+                        canUndo = store.hasUndoSnapshot()
+                        backupMessage = error.message ?: "Не удалось отменить перенос."
+                    }
+                }
+            }) { Text("Отменить перенос") }
+        },
+        dismissButton = { TextButton(onClick = { showUndoRedistributionConfirmation = false }) { Text("Оставить") } }
+    )
+
     if (showRedistributionConfirmation) AppAlertDialog(
         onDismissRequest = { showRedistributionConfirmation = false },
         title = { Text("Подтвердить переносы между категориями?") },
