@@ -6,6 +6,42 @@ import org.junit.Test
 import java.time.YearMonth
 
 class AnalyticsBudgetTest {
+    @Test fun analyticsIncomeSourceUsesFixedMonthlyValueWhenMonthlySelected() {
+        assertEquals(
+            78065.0,
+            AnalyticsBudgetCalculator.analyticsBudgetIncome(
+                monthlyIncome = 78065.0,
+                twoPeriodIncome = 97735.0,
+                useTwoPeriods = false
+            ),
+            0.001
+        )
+    }
+
+    @Test fun analyticsIncomeSourceUsesTwoPeriodTotalWhenSelected() {
+        assertEquals(
+            97735.0,
+            AnalyticsBudgetCalculator.analyticsBudgetIncome(
+                monthlyIncome = 78065.0,
+                twoPeriodIncome = 97735.0,
+                useTwoPeriods = true
+            ),
+            0.001
+        )
+    }
+
+    @Test fun analyticsIncomeSourceFallsBackToMonthlyValueWhenPeriodsMissing() {
+        assertEquals(
+            78065.0,
+            AnalyticsBudgetCalculator.analyticsBudgetIncome(
+                monthlyIncome = 78065.0,
+                twoPeriodIncome = 0.0,
+                useTwoPeriods = true
+            ),
+            0.001
+        )
+    }
+
     @Test fun monthlyIncomeCanUseFixedMonthlySetting() {
         val result = AnalyticsBudgetCalculator.monthlyIncome(
             120000.0,
