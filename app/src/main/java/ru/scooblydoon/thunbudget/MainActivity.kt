@@ -882,6 +882,7 @@ private fun ThunBudgetApp() {
     var firstPeriodStartDay by remember { mutableIntStateOf(store.loadFirstPeriodStartDay()) }
     var firstPeriodEndDay by remember { mutableIntStateOf(store.loadFirstPeriodEndDay()) }
     var showIncomeEntries by rememberUiExpanded(context, "income_entries", true)
+    var showAnalyticsDistributionSettings by rememberUiExpanded(context, "analytics_distribution_settings", true)
     var showMonthCategories by rememberUiExpanded(context, "month_categories")
     var showPeriodCategories by rememberUiExpanded(context, "period_categories")
     var showYearCategories by rememberUiExpanded(context, "year_categories")
@@ -968,6 +969,11 @@ private fun ThunBudgetApp() {
     )
     // Reporting-month income is the sum of the two complete reporting periods.
     val calculatedMonthlyIncome = analyticsCycleIncome.totalIncome.takeIf { it > 0.0 } ?: income
+    val analyticsIncomeForBudget = AnalyticsBudgetCalculator.analyticsBudgetIncome(
+        monthlyIncome = income,
+        twoPeriodIncome = calculatedMonthlyIncome,
+        useTwoPeriods = analyticsIncomeMode == 1
+    )
     val displayedMonthlyIncome = calculatedMonthlyIncome
     val analyticsCycleExpenseRange = AnalyticsBudgetCalculator.reportingCycleExpenseRange(
         analyticsMonth, today, firstPeriodStartDay, firstPeriodEndDay
@@ -1029,7 +1035,7 @@ private fun ThunBudgetApp() {
     )
     val analyticsCyclePlanAmounts = currentCategoryShares.associate { (name, _) ->
         name to (
-            calculatedMonthlyIncome.coerceAtLeast(0.0) *
+            analyticsIncomeForBudget.coerceAtLeast(0.0) *
                 (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0 +
                 (analyticsCycleLedgerAdjustments[name] ?: 0.0)
             ).coerceAtLeast(0.0)
@@ -2104,64 +2110,93 @@ private fun ThunBudgetApp() {
                 1 -> LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp),contentPadding=PaddingValues(bottom=24.dp)) {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface),
-                                shape = RoundedCornerShape(16.dp)
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(
+                                Modifier.fillMaxWidth().padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text("Автоматическая компенсация превышений", fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            "Компенсирует уже возникший перерасход с учётом внесённых будущих и регулярных платежей.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Switch(
-                                        checked = autoRedistributionEnabled,
-                                        onCheckedChange = { enabled ->
-                                            autoRedistributionEnabled = enabled
-                                            store.saveAutoRedistributionEnabled(enabled)
-                                        }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "Настройки распределения бюджета",
+                                        modifier = Modifier.weight(1f),
+                                        fontWeight = FontWeight.SemiBold
                                     )
+                                    TextButton(
+                                        onClick = {
+                                            showAnalyticsDistributionSettings = !showAnalyticsDistributionSettings
+                                            persistUiExpanded(
+                                                context,
+                                                "analytics_distribution_settings",
+                                                showAnalyticsDistributionSettings
+                                            )
+                                        }
+                                    ) {
+                                        Text(if (showAnalyticsDistributionSettings) "Скрыть ▲" else "Показать ▼")
+                                    }
                                 }
-                            }
-                            OutlinedButton(onClick = { showAllocationDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Рассчитать доли по истории расходов")
-                            }
-                            Card {
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text("Учитывать сохранённые доли каждого периода", fontWeight = FontWeight.SemiBold)
-                                        Text(
-                                            "Для периода с отдельным сохранённым планом применяются его проценты; иначе — текущие доли категорий.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                if (showAnalyticsDistributionSettings) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(
+                                            Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text("Автоматическая компенсация превышений", fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                "Компенсирует уже возникший перерасход с учётом внесённых будущих и регулярных платежей.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Switch(
+                                            checked = autoRedistributionEnabled,
+                                            onCheckedChange = { enabled ->
+                                                autoRedistributionEnabled = enabled
+                                                store.saveAutoRedistributionEnabled(enabled)
+                                            }
                                         )
                                     }
-                                    Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
-                                        if (enabled) {
-                                            val snapshot = categories.map { it.copy() }
-                                            manualAllocationSnapshot = snapshot
-                                            store.saveManualAllocationSnapshot(snapshot)
-                                            autoAllocationEnabled = true
-                                            store.saveAutoAllocationEnabled(true)
-                                            showAdvice = true
-                                            persistUiExpanded(context, "analytics_advice", true)
-                                        } else {
-                                            val restored = manualAllocationSnapshot.map { it.copy() }
-                                            store.restoreCategoriesExactly(restored, periodStart, periodEnd)
-                                            categories = restored
-                                            autoAllocationEnabled = false
-                                            store.saveAutoAllocationEnabled(false)
-                                            showAdvice = false
-                                            persistUiExpanded(context, "analytics_advice", false)
+                                    OutlinedButton(
+                                        onClick = { showAllocationDialog = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Рассчитать доли по истории расходов")
+                                    }
+                                    Divider()
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(
+                                            Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text("Учитывать сохранённые доли каждого периода", fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                "Для периода с отдельным сохранённым планом применяются его проценты; иначе — текущие доли категорий.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
-                                    })
+                                        Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
+                                            if (enabled) {
+                                                val snapshot = categories.map { it.copy() }
+                                                manualAllocationSnapshot = snapshot
+                                                store.saveManualAllocationSnapshot(snapshot)
+                                                autoAllocationEnabled = true
+                                                store.saveAutoAllocationEnabled(true)
+                                                showAdvice = true
+                                                persistUiExpanded(context, "analytics_advice", true)
+                                            } else {
+                                                val restored = manualAllocationSnapshot.map { it.copy() }
+                                                store.restoreCategoriesExactly(restored, periodStart, periodEnd)
+                                                categories = restored
+                                                autoAllocationEnabled = false
+                                                store.saveAutoAllocationEnabled(false)
+                                                showAdvice = false
+                                                persistUiExpanded(context, "analytics_advice", false)
+                                            }
+                                        })
+                                    }
                                 }
                             }
                         }
@@ -2414,16 +2449,16 @@ private fun ThunBudgetApp() {
                             }
                             if (analyticsIncomeMode == 0) {
                                 Text(
-                                    "Доход за отчётный месяц (2 периода): ${money(calculatedMonthlyIncome)}",
+                                    "Доход за месяц: ${money(analyticsIncomeForBudget)}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text("1-й период (${analyticsCycleIncome.firstStart.format(DateTimeFormatter.ofPattern("dd.MM"))}–${analyticsCycleIncome.firstEnd.format(DateTimeFormatter.ofPattern("dd.MM"))}): ${money(analyticsCycleIncome.firstIncome)}")
-                                    Text("2-й период (${analyticsCycleIncome.secondStart.format(DateTimeFormatter.ofPattern("dd.MM"))}–${analyticsCycleIncome.secondEnd.format(DateTimeFormatter.ofPattern("dd.MM"))}): ${money(analyticsCycleIncome.secondIncome)}")
-                                    Text("Итого за 2 периода: ${money(calculatedMonthlyIncome)}", fontWeight = FontWeight.SemiBold)
-                                }
+                                Text(
+                                    "Итого за 2 периода: ${money(analyticsIncomeForBudget)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -2550,7 +2585,7 @@ private fun ThunBudgetApp() {
                         }?.value ?: cat.percent
                         val basePlan = AnalyticsBudgetCalculator.periodCategoryBudget(
                             periodIncome = pEffectiveIncome,
-                            monthlyIncomeFallback = calculatedMonthlyIncome,
+                            monthlyIncomeFallback = analyticsIncomeForBudget,
                             categoryPercent = pPlanPercent,
                             start = pStart,
                             end = pEnd,
