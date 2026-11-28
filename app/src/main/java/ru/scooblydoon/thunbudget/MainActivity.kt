@@ -969,8 +969,25 @@ private fun ThunBudgetApp() {
     )
     // Reporting-month income is the sum of the two complete reporting periods.
     val calculatedMonthlyIncome = analyticsCycleIncome.totalIncome.takeIf { it > 0.0 } ?: income
+    // Calendar-month income must be allocated by the overlap of each reporting
+    // period with the 1st..last day of the selected calendar month. Do not use
+    // the fixed monthly setting here when reporting-period income history exists.
+    val calendarMonthIncomeEstimate = AnalyticsBudgetCalculator.calendarMonthIncome(
+        periodIncomes = periodIncomes,
+        month = analyticsMonth,
+        asOf = today,
+        firstStartDay = firstPeriodStartDay,
+        firstEndDay = firstPeriodEndDay,
+        incomeEntries = incomeEntries
+    )
+    val hasIncomeHistory = periodIncomes.isNotEmpty() || incomeEntries.any { !it.isCarryover }
+    val calculatedCalendarMonthIncome = if (hasIncomeHistory) {
+        calendarMonthIncomeEstimate.totalIncome
+    } else {
+        income.coerceAtLeast(0.0)
+    }
     val analyticsIncomeForBudget = AnalyticsBudgetCalculator.analyticsBudgetIncome(
-        monthlyIncome = income,
+        monthlyIncome = calculatedCalendarMonthIncome,
         twoPeriodIncome = calculatedMonthlyIncome,
         useTwoPeriods = analyticsIncomeMode == 1
     )
