@@ -61,6 +61,10 @@ internal data class PeriodIncome(
 )
 
 internal class BudgetStore(context: Context) {
+    companion object {
+        const val AUTO_REDISTRIBUTION_ENABLED_KEY = "budget_auto_redistribution_enabled"
+        const val REDISTRIBUTION_LEDGER_KEY = "budget_redistribution_ledger_v1"
+    }
     private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("thunbudget", Context.MODE_PRIVATE)
     private val incomeLedger = IncomeLedgerRepository(prefs)
@@ -234,22 +238,91 @@ internal class BudgetStore(context: Context) {
             BudgetCategory("Накопления", 10.0), BudgetCategory("Прочее", 10.0)
         )
         return runCatching {
-            val a = JSONArray(raw); (0 until a.length()).map { val o=a.getJSONObject(it); BudgetCategory(o.getString("name"),o.getDouble("percent")) }
+            val a = JSONArray(raw); (0 until a.length()).map { val o=a.getJSONObject(it)
+                BudgetCategory(
+                    o.getString("name"), o.getDouble("percent"),
+                    if (o.has("protectedFromRedistribution") && !o.isNull("protectedFromRedistribution"))
+                        o.getBoolean("protectedFromRedistribution") else null
+                )
+            }
         }.getOrDefault(emptyList())
     }
     fun loadAutoAllocationEnabled(): Boolean = prefs.getBoolean("analytics_auto_allocation", false)
     fun saveAutoAllocationEnabled(enabled: Boolean) { prefs.edit().putBoolean("analytics_auto_allocation", enabled).commit() }
+    fun loadAutoRedistributionEnabled(): Boolean = prefs.getBoolean(AUTO_REDISTRIBUTION_ENABLED_KEY, false)
+    fun saveAutoRedistributionEnabled(enabled: Boolean) {
+        check(prefs.edit().putBoolean(AUTO_REDISTRIBUTION_ENABLED_KEY, enabled).commit()) {
+            "Не удалось сохранить настройку автоматического перераспределения."
+        }
+        saveAutomaticBackup()
+    }
+    fun loadBudgetRedistributionLedger(): List<AppliedBudgetRedistributionTransfer> =
+        BudgetRedistributionLedgerCodec.decode(
+            prefs.getString(REDISTRIBUTION_LEDGER_KEY, null)
+                ?: BudgetRedistributionLedgerCodec.encode(emptyList())
+        )
+    fun removeBudgetRedistributionProposal(fingerprint: String): List<AppliedBudgetRedistributionTransfer> {
+        require(fingerprint.matches(Regex("[0-9a-f]{64}"))) { "Некорректный идентификатор переноса." }
+        val previous = loadBudgetRedistributionLedger()
+        val updated = previous.filterNot { it.proposalFingerprint == fingerprint }
+        check(updated.size < previous.size) { "Перенос уже отменён или не найден." }
+        val encoded = BudgetRedistributionLedgerCodec.encode(updated)
+        check(prefs.edit().putString(REDISTRIBUTION_LEDGER_KEY, encoded).commit()) {
+            "Не удалось отменить перенос бюджета."
+        }
+        saveAutomaticBackup()
+        return updated
+    }
+
+    fun renameBudgetRedistributionCategories(renameMap: Map<String, String>) {
+        if (renameMap.isEmpty()) return
+        val updated = loadBudgetRedistributionLedger().map { row ->
+            row.copy(
+                fromCategory = renameMap[row.fromCategory] ?: row.fromCategory,
+                toCategory = renameMap[row.toCategory] ?: row.toCategory
+            )
+        }
+        if (updated == loadBudgetRedistributionLedger()) return
+        val encoded = BudgetRedistributionLedgerCodec.encode(updated)
+        check(prefs.edit().putString(REDISTRIBUTION_LEDGER_KEY, encoded).commit()) {
+            "Не удалось обновить журнал переносов после переименования категории."
+        }
+        saveAutomaticBackup()
+    }
+
+    fun applyBudgetRedistribution(
+        proposal: BudgetRedistributionProposal,
+        appliedAt: String
+    ): List<AppliedBudgetRedistributionTransfer> {
+        val updated = BudgetRedistributionCalculator.appendAppliedTransfers(
+            proposal, loadBudgetRedistributionLedger(), appliedAt
+        )
+        val encoded = BudgetRedistributionLedgerCodec.encode(updated)
+        check(prefs.edit().putString(REDISTRIBUTION_LEDGER_KEY, encoded).commit()) {
+            "Не удалось сохранить переводы между категориями."
+        }
+        saveAutomaticBackup()
+        return updated
+    }
     fun loadManualAllocationSnapshot(): List<BudgetCategory>? = runCatching {
         val raw = prefs.getString("analytics_manual_allocation_snapshot", null) ?: return null
         val array = JSONArray(raw)
         (0 until array.length()).map { index ->
             val row = array.getJSONObject(index)
-            BudgetCategory(row.getString("name"), row.getDouble("percent"))
+            BudgetCategory(
+                row.getString("name"), row.getDouble("percent"),
+                if (row.has("protectedFromRedistribution") && !row.isNull("protectedFromRedistribution"))
+                    row.getBoolean("protectedFromRedistribution") else null
+            )
         }
     }.getOrNull()
     fun saveManualAllocationSnapshot(items: List<BudgetCategory>) {
         val array = JSONArray()
-        items.forEach { array.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+        items.forEach { item ->
+            val row = JSONObject().put("name", item.name).put("percent", item.percent)
+            item.protectedFromRedistribution?.let { row.put("protectedFromRedistribution", it) }
+            array.put(row)
+        }
         check(prefs.edit().putString("analytics_manual_allocation_snapshot", array.toString()).commit())
     }
     fun loadReportingPeriodCategoryPlans(): Map<Pair<String, String>, Map<String, Double>> = runCatching {
@@ -300,7 +373,10 @@ internal class BudgetStore(context: Context) {
     fun saveCategories(items: List<BudgetCategory>, planStart: String? = null, planEnd: String? = null) {
         val previous = loadCategories()
         val normalizedPairs = BudgetAllocationCalculator.withReserve(items.map { it.name to it.percent })
-        val normalized = normalizedPairs.map { BudgetCategory(it.first, it.second) }
+        val normalized = normalizedPairs.map { pair ->
+            val source = items.firstOrNull { it.name.trim().equals(pair.first.trim(), ignoreCase = true) }
+            BudgetCategory(pair.first, pair.second, source?.protectedFromRedistribution)
+        }
         fun planShares(categories: List<BudgetCategory>) = categories
             .filterNot { it.name.equals("Перенос средств", ignoreCase = true) }
             .associate { it.name.lowercase(Locale.ROOT) to it.percent }
@@ -339,7 +415,11 @@ internal class BudgetStore(context: Context) {
 
     private fun persistCategories(items: List<BudgetCategory>) {
         val a = JSONArray()
-        items.forEach { a.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+        items.forEach { item ->
+            val row = JSONObject().put("name", item.name).put("percent", item.percent)
+            item.protectedFromRedistribution?.let { row.put("protectedFromRedistribution", it) }
+            a.put(row)
+        }
         check(prefs.edit().putString("categories", a.toString()).commit()) {
             "Не удалось сохранить доли категорий."
         }
@@ -371,7 +451,7 @@ internal class BudgetStore(context: Context) {
     }
 
     fun prepareUndoSnapshot() {
-        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1")
+        val keys = listOf("expenses", "categories", "period_incomes", "income_entries", "income", "savings", "period_start", "period_end", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1", REDISTRIBUTION_LEDGER_KEY)
         val snapshot = JSONObject()
         keys.forEach { key ->
             val value = prefs.getString(key, null)
@@ -435,7 +515,9 @@ internal class BudgetStore(context: Context) {
         if (!data.has("period_incomes")) data.put("period_incomes", "[]")
         if (!data.has("categories")) {
             val defaults = JSONArray()
-            loadCategories().forEach { defaults.put(JSONObject().put("name", it.name).put("percent", it.percent)) }
+            loadCategories().forEach { defaults.put(JSONObject().put("name", it.name).put("percent", it.percent).apply {
+                it.protectedFromRedistribution?.let { protected -> put("protectedFromRedistribution", protected) }
+            }) }
             data.put("categories", defaults.toString())
         }
         return JSONObject()
@@ -499,13 +581,13 @@ internal class BudgetStore(context: Context) {
         val keys = data.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1")) {
+            require(key in setOf("expenses", "categories", "income", "savings", "period_start", "period_end", "period_incomes", "income_entries", "income_ledger_migration_v1", "dark_theme", "recurring_payments_v1", FlexiblePeriodRepository.KEY, "reporting_period_category_plans_v1", AUTO_REDISTRIBUTION_ENABLED_KEY, REDISTRIBUTION_LEDGER_KEY)) {
                 "В резервной копии обнаружено неизвестное поле."
             }
             val value = data.get(key)
             when (value) {
                 is String -> if (key != "_pre_restore_backup") editor.putString(key, value)
-                is Boolean -> if (key == "dark_theme" || key == IncomeLedgerRepository.MIGRATION_KEY) editor.putBoolean(key, value) else error("Некорректный формат данных резервной копии.")
+                is Boolean -> if (key == "dark_theme" || key == IncomeLedgerRepository.MIGRATION_KEY || key == AUTO_REDISTRIBUTION_ENABLED_KEY) editor.putBoolean(key, value) else error("Некорректный формат данных резервной копии.")
                 else -> error("Некорректный формат данных резервной копии.")
             }
         }
@@ -537,9 +619,20 @@ internal class BudgetStore(context: Context) {
             require(row.getString("name").isNotBlank() && categoryNames.add(row.getString("name").trim().lowercase()))
             val percent = row.getDouble("percent")
             require(percent.isFinite() && percent >= 0.0)
+            if (row.has("protectedFromRedistribution") && !row.isNull("protectedFromRedistribution")) {
+                require(row.get("protectedFromRedistribution") is Boolean)
+            }
             categoryPercentTotal += percent
         }
         require(categoryPercentTotal <= 100.0)
+        val ledgerRaw = data.optString(
+            BudgetStore.REDISTRIBUTION_LEDGER_KEY,
+            BudgetRedistributionLedgerCodec.encode(emptyList())
+        )
+        BudgetRedistributionLedgerCodec.decode(ledgerRaw)
+        if (data.has(BudgetStore.AUTO_REDISTRIBUTION_ENABLED_KEY)) {
+            require(data.get(BudgetStore.AUTO_REDISTRIBUTION_ENABLED_KEY) is Boolean)
+        }
         val recurringPayments = JSONArray(data.optString("recurring_payments_v1", "[]"))
         val recurringIds = mutableSetOf<String>()
         for (i in 0 until recurringPayments.length()) {
@@ -777,6 +870,8 @@ private fun ThunBudgetApp() {
     var showExpenseForecast by rememberSaveable { mutableStateOf(false) }
     var analyticsIncomeMode by rememberSaveable(key = "analytics_income_source_mode_v2") { mutableIntStateOf(0) }
     var autoAllocationEnabled by remember { mutableStateOf(store.loadAutoAllocationEnabled()) }
+    var autoRedistributionEnabled by remember { mutableStateOf(store.loadAutoRedistributionEnabled()) }
+    var redistributionLedger by remember { mutableStateOf(store.loadBudgetRedistributionLedger()) }
     var manualAllocationSnapshot by remember { mutableStateOf(store.loadManualAllocationSnapshot() ?: categories) }
     var editingCategory by remember { mutableStateOf<BudgetCategory?>(null) }
     var tab by remember { mutableIntStateOf(if ((context as? Activity)?.intent?.getBooleanExtra("open_recurring_payments", false) == true) 5 else 0) }
@@ -899,15 +994,23 @@ private fun ThunBudgetApp() {
             it.key.equals(categoryName, ignoreCase = true)
         }?.value ?: 0.0
     
-    fun overviewCategoryBudget(categoryName: String): Double =
+    val selectedOverviewPeriodStart = LocalDate.parse(periodStart)
+    val selectedOverviewPeriodEnd = LocalDate.parse(periodEnd)
+    val selectedPeriodRedistributionAdjustments = BudgetRedistributionCalculator.netAdjustments(
+        selectedOverviewPeriodStart, selectedOverviewPeriodEnd, redistributionLedger
+    )
+    fun overviewCategoryBaseBudget(categoryName: String): Double =
         AnalyticsBudgetCalculator.periodCategoryBudget(
             periodIncome = effectivePeriodIncome,
             monthlyIncomeFallback = calculatedMonthlyIncome,
             categoryPercent = overviewCategoryPercent(categoryName),
-            start = LocalDate.parse(periodStart),
-            end = LocalDate.parse(periodEnd),
+            start = selectedOverviewPeriodStart,
+            end = selectedOverviewPeriodEnd,
             periodIncomeIsDefined = periodIncomeRow != null || carryoverIncome != 0.0
         )
+    fun overviewCategoryBudget(categoryName: String): Double =
+        overviewCategoryBaseBudget(categoryName) +
+            (selectedPeriodRedistributionAdjustments[categoryName] ?: 0.0)
     val analyticsCycleCategoryPlan = ReportingPeriodCategoryPlanCalculator.cyclePlan(
         currentShares = currentCategoryShares,
         savedPlans = plansForAnalytics,
@@ -918,13 +1021,28 @@ private fun ThunBudgetApp() {
         firstIncome = analyticsCycleIncome.firstIncome,
         secondIncome = analyticsCycleIncome.secondIncome
     )
+    val analyticsCycleLedgerAdjustments = BudgetRedistributionCalculator.netAdjustmentsForPeriods(
+        listOf(
+            analyticsCycleIncome.firstStart to analyticsCycleIncome.firstEnd,
+            analyticsCycleIncome.secondStart to analyticsCycleIncome.secondEnd
+        ), redistributionLedger
+    )
     val analyticsCyclePlanAmounts = currentCategoryShares.associate { (name, _) ->
-        name to calculatedMonthlyIncome.coerceAtLeast(0.0) *
-            (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0
+        name to (
+            calculatedMonthlyIncome.coerceAtLeast(0.0) *
+                (analyticsCycleCategoryPlan.averagePercentages[name] ?: 0.0) / 100.0 +
+                (analyticsCycleLedgerAdjustments[name] ?: 0.0)
+            ).coerceAtLeast(0.0)
     }
     // All reporting-month category views use the same two-period plan.
     val analyticsMonthPlanAmounts = analyticsCyclePlanAmounts
-    val totalSpent=expenses.filter { it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
+    val totalActualSpent=expenses.filter {
+        it.date >= periodStart && it.date <= periodEnd && it.date <= today.toString()
+    }.sumOf { it.amount }
+    val futureEnteredPeriodExpenses=expenses.filter {
+        it.date >= periodStart && it.date <= periodEnd && it.date > today.toString()
+    }.sumOf { it.amount }
+    val totalSpent = totalActualSpent + futureEnteredPeriodExpenses
     val planned = AnalyticsBudgetCalculator.periodCategoryBudget(
         periodIncome = effectivePeriodIncome,
         monthlyIncomeFallback = calculatedMonthlyIncome,
@@ -942,6 +1060,125 @@ private fun ThunBudgetApp() {
         expenses, YearMonth.from(today), today, firstPeriodStartDay, firstPeriodEndDay
     )
     val monthTotal = monthExpenses.sumOf { it.amount }
+
+    // Reuse the calibrated variable-spend model that Analytics uses.
+    val redistributionForecastFrom = maxOf(today.plusDays(1), selectedOverviewPeriodStart)
+    val redistributionForecastDays = if (redistributionForecastFrom.isAfter(selectedOverviewPeriodEnd)) 0 else
+        (java.time.temporal.ChronoUnit.DAYS.between(redistributionForecastFrom, selectedOverviewPeriodEnd) + 1L).toInt()
+    val redistributionRecurringHistoryKeys = recurringPayments.map {
+        it.title.trim().lowercase(Locale.ROOT) to it.category.trim().lowercase(Locale.ROOT)
+    }.toSet()
+    val redistributionVariableHistoryExpenses = expenses.filterNot { row ->
+        row.category.equals("Перенос средств", true) ||
+            (row.title.trim().lowercase(Locale.ROOT) to row.category.trim().lowercase(Locale.ROOT)) in redistributionRecurringHistoryKeys
+    }
+    val redistributionForecastRows = redistributionVariableHistoryExpenses.mapNotNull { row ->
+        runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
+    }
+    val redistributionForecastBacktest = remember(
+        redistributionVariableHistoryExpenses, categories, today, firstPeriodStartDay, firstPeriodEndDay
+    ) {
+        BudgetForecastBacktester.evaluate(
+            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+            expenses = redistributionForecastRows,
+            asOf = today,
+            firstStartDay = firstPeriodStartDay,
+            firstEndDay = firstPeriodEndDay
+        )
+    }
+    val redistributionForecast = remember(
+        redistributionForecastRows, categories, today, firstPeriodStartDay, firstPeriodEndDay,
+        redistributionForecastDays, redistributionForecastBacktest.calibration, selectedOverviewPeriodEnd
+    ) {
+        BudgetForecastCalculator.calculate(
+            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
+            expenses = redistributionForecastRows,
+            asOf = today,
+            firstStartDay = firstPeriodStartDay,
+            firstEndDay = firstPeriodEndDay,
+            monthsToAnalyze = 6,
+            nextPeriodDays = redistributionForecastDays,
+            calibration = redistributionForecastBacktest.calibration,
+            forecastStartDate = redistributionForecastFrom.takeIf { redistributionForecastDays > 0 },
+            forecastEndDate = selectedOverviewPeriodEnd.takeIf { redistributionForecastDays > 0 }
+        )
+    }
+    val redistributionPeriodBudget =
+        if (periodIncomeRow != null || carryoverIncome != 0.0) effectivePeriodIncome else planned
+    val redistributionBasePlannedAmounts = categories
+        .filterNot { it.name.equals("Перенос средств", true) }
+        .associate { category -> category.name to overviewCategoryBaseBudget(category.name).coerceAtLeast(0.0) }
+    val redistributionPlannedAmounts = redistributionBasePlannedAmounts.mapValues { (name, baseAmount) ->
+        (baseAmount + (selectedPeriodRedistributionAdjustments[name] ?: 0.0)).coerceAtLeast(0.0)
+    }
+    val currentBudgetRedistributionProposal = remember(
+        selectedOverviewPeriodStart, selectedOverviewPeriodEnd, redistributionPeriodBudget,
+        categories, expenses, recurringPayments, redistributionForecast, redistributionPlannedAmounts, today
+    ) {
+        val inputs = BudgetRedistributionForecastAssembler.buildInputs(
+            periodStart = selectedOverviewPeriodStart,
+            periodEnd = selectedOverviewPeriodEnd,
+            today = today,
+            categories = categories,
+            expenses = expenses,
+            recurringPayments = recurringPayments,
+            forecasts = redistributionForecast.categories,
+            plannedAmounts = redistributionPlannedAmounts,
+            includeStatisticalForecast = false
+        )
+        BudgetRedistributionCalculator.calculate(
+            periodStart = selectedOverviewPeriodStart,
+            periodEnd = selectedOverviewPeriodEnd,
+            periodIncome = redistributionPeriodBudget,
+            categories = inputs,
+            // Calculate against the effective (already adjusted) budgets, but
+            // fingerprint the original period plan so a restart cannot apply
+            // the very same transfer proposal a second time.
+            fingerprintCategories = inputs.map { input ->
+                input.copy(
+                    plannedAmount = redistributionBasePlannedAmounts[input.name] ?: input.plannedAmount
+                )
+            }
+        )
+    }
+
+    LaunchedEffect(
+        autoRedistributionEnabled,
+        autoAllocationEnabled,
+        selectedOverviewPeriodCategoryPlan,
+        selectedOverviewPeriodStart,
+        selectedOverviewPeriodEnd,
+        redistributionPeriodBudget,
+        categories,
+        expenses,
+        recurringPayments,
+        redistributionForecast.categories,
+        today
+    ) {
+        if (!BudgetRedistributionCalculator.shouldApplyAutomatically(
+                enabled = autoRedistributionEnabled,
+                proposal = currentBudgetRedistributionProposal,
+                existingLedger = redistributionLedger
+            )
+        ) return@LaunchedEffect
+
+        runCatching {
+            store.prepareUndoSnapshot()
+            store.applyBudgetRedistribution(
+                currentBudgetRedistributionProposal,
+                java.time.Instant.now().toString()
+            )
+        }.onSuccess { updated ->
+            redistributionLedger = updated
+            canUndo = true
+        }.onFailure { error ->
+            Toast.makeText(
+                context,
+                error.message ?: "Не удалось автоматически перераспределить бюджет.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     fun handleAssistantPhrase(phrase: String) {
         val normalizedPhrase = phrase.lowercase(Locale("ru", "RU")).replace('ё', 'е')
@@ -1473,7 +1710,9 @@ private fun ThunBudgetApp() {
                     context, uri, expenses, categories, income, exportYear,
                     periodStart, periodEnd, effectivePeriodIncome,
                     exportMonthlyIncomes, incomeEntries, exportMonthlyCategoryPlans,
-                    firstPeriodStartDay, firstPeriodEndDay
+                    firstPeriodStartDay, firstPeriodEndDay,
+                    reportingPeriodCategoryPlan = selectedOverviewPeriodCategoryPlan,
+                    budgetRedistributionTransfers = redistributionLedger
                 )
                 "Excel-отчёт успешно сохранён."
             }.getOrElse { "Не удалось сохранить Excel-отчёт: ${it.message ?: "ошибка формирования файла"}" }
@@ -1535,6 +1774,8 @@ private fun ThunBudgetApp() {
                 income = store.loadIncome()
                 savingsGoal = store.loadSavingsGoal()
                 categories = store.loadCategories()
+                autoRedistributionEnabled = store.loadAutoRedistributionEnabled()
+                redistributionLedger = store.loadBudgetRedistributionLedger()
                 expenses = store.loadExpenses()
                 recurringPayments = store.loadRecurringPayments()
                 periodIncomes = store.loadPeriodIncomes()
@@ -1767,7 +2008,6 @@ private fun ThunBudgetApp() {
                                         Text("Доступно в бюджете",color=visualPalette.budgetCardContent.copy(alpha=.78f),style=MaterialTheme.typography.labelLarge)
                                         Text(money(remaining),style=MaterialTheme.typography.headlineLarge,fontWeight=FontWeight.Bold,color=visualPalette.budgetCardContent)
                                         Text("Потрачено ${money(totalSpent)} из ${money(planned)}",color=visualPalette.budgetCardContent.copy(alpha=.86f))
-                                         if (carryoverIncome > 0.0) Text("Перенос остатка с прошлых периодов: +${money(carryoverIncome)}", color = visualPalette.budgetCardContent.copy(alpha = .88f), style = MaterialTheme.typography.bodySmall)
                                         val periodEndDate=LocalDate.parse(periodEnd)
                                         val remainingDays=if(today.isAfter(periodEndDate)) 0L else java.time.temporal.ChronoUnit.DAYS.between(maxOf(today,LocalDate.parse(periodStart)),periodEndDate)+1
                                         val averageRemainingPerDay=if(remainingDays>0) remaining.coerceAtLeast(0.0)/remainingDays else 0.0
@@ -1815,9 +2055,19 @@ private fun ThunBudgetApp() {
                                     IconButton(onClick={showCategoryManager=true}) { Icon(Icons.Outlined.Add, contentDescription = "Управление категориями", tint = MaterialTheme.colorScheme.primary) }
                                 }
                                 categories.forEach { cat ->
-                                    val spent=expenses.filter{it.category==cat.name&&it.date>=periodStart&&it.date<=periodEnd}.sumOf{it.amount}
-                                    val planPercent = overviewCategoryPercent(cat.name)
+                                    val spent=expenses.filter {
+                                        it.category==cat.name && it.date>=periodStart && it.date<=periodEnd && it.date<=today.toString()
+                                    }.sumOf{it.amount}
+                                    val futurePlanned=expenses.filter {
+                                        it.category==cat.name && it.date>=periodStart && it.date<=periodEnd && it.date>today.toString()
+                                    }.sumOf{it.amount}
+                                    val committed = spent + futurePlanned
                                     val cap = overviewCategoryBudget(cat.name)
+                                    val planPercent = BudgetRedistributionCalculator.effectiveCategoryPercent(
+                                        adjustedCategoryBudget = cap,
+                                        totalPeriodBudget = planned,
+                                        fallbackPercent = overviewCategoryPercent(cat.name)
+                                    )
                                     Card(onClick={selectedCategory=cat.name}, colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface), shape=RoundedCornerShape(16.dp)) {
                                         Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                             if (cat.name.equals("Перенос средств", ignoreCase = true)) {
@@ -1827,14 +2077,22 @@ private fun ThunBudgetApp() {
                                                 Row(verticalAlignment=Alignment.CenterVertically) {
                                                     Column(Modifier.weight(1f)) {
                                                         Text(cat.name,fontWeight=FontWeight.SemiBold)
-                                                        val free=BudgetAllocationCalculator.freePercent(cap,spent)
-                                                        Text(free?.let{if(it>=0.0) "Свободный остаток: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                        val free=BudgetAllocationCalculator.freePercent(cap,committed)
+                                                        Text(free?.let{if(it>=0.0) "После будущих платежей свободно: ${String.format(Locale("ru","RU"),"%.1f",it)}%" else "Превышение с учётом будущих платежей: ${String.format(Locale("ru","RU"),"%.1f",-it)}%"} ?: "Нет бюджета на период",style=MaterialTheme.typography.labelSmall,color=if((free?:0.0)<0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                                                     }
                                                     IconButton(onClick={editingCategory=cat}) { Icon(Icons.Outlined.Edit, contentDescription = "Изменить категорию", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) }
-                                                    Text("${planPercent.toInt()}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurface,fontWeight=FontWeight.SemiBold)
+                                                    Text("${String.format(Locale("ru", "RU"), "%.1f", planPercent)}% · ${money(cap)}",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurface,fontWeight=FontWeight.SemiBold)
                                                 }
-                                                LinearProgressIndicator(progress={if(cap>0)(spent/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
-                                                Row { Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall); Spacer(Modifier.weight(1f)); Text(if(spent>cap) "Превышение: ${money(spent-cap)}" else "Осталось: ${money(cap-spent)}",style=MaterialTheme.typography.bodySmall,color=if(spent>cap) MaterialTheme.colorScheme.error else visualPalette.positive) }
+                                                LinearProgressIndicator(progress={if(cap>0)(committed/cap).coerceIn(0.0,1.0).toFloat() else 0f},modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),color=if(committed>cap) MaterialTheme.colorScheme.error else visualPalette.positive,trackColor=visualPalette.progressTrack)
+                                                Row {
+                                                    Text("Факт: ${money(spent)}",style=MaterialTheme.typography.bodySmall)
+                                                    Spacer(Modifier.weight(1f))
+                                                    Text("Будущие платежи: ${money(futurePlanned)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Row {
+                                                    Spacer(Modifier.weight(1f))
+                                                    Text(if(committed>cap) "Превышение: ${money(committed-cap)}" else "Осталось: ${money(cap-committed)}",style=MaterialTheme.typography.bodySmall,color=if(committed>cap) MaterialTheme.colorScheme.error else visualPalette.positive)
+                                                }
                                             }
                                         }
                                     }
@@ -1847,14 +2105,43 @@ private fun ThunBudgetApp() {
                     item { Text("Аналитика",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold) }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Автоматическая компенсация превышений", fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "Компенсирует уже возникший перерасход с учётом внесённых будущих и регулярных платежей.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(
+                                        checked = autoRedistributionEnabled,
+                                        onCheckedChange = { enabled ->
+                                            autoRedistributionEnabled = enabled
+                                            store.saveAutoRedistributionEnabled(enabled)
+                                        }
+                                    )
+                                }
+                            }
                             OutlinedButton(onClick = { showAllocationDialog = true }, modifier = Modifier.fillMaxWidth()) {
                                 Text("Рассчитать доли по истории расходов")
                             }
                             Card {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text("Использовать сохранённые доли периодов", fontWeight = FontWeight.SemiBold)
-                                        Text("План строится по сохранённой доле каждого отчётного периода с учётом дохода именно этого периода.", style = MaterialTheme.typography.bodySmall)
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text("Учитывать сохранённые доли каждого периода", fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "Для периода с отдельным сохранённым планом применяются его проценты; иначе — текущие доли категорий.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                     Switch(checked = autoAllocationEnabled, onCheckedChange = { enabled ->
                                         if (enabled) {
@@ -1871,6 +2158,8 @@ private fun ThunBudgetApp() {
                                             categories = restored
                                             autoAllocationEnabled = false
                                             store.saveAutoAllocationEnabled(false)
+                                            showAdvice = false
+                                            persistUiExpanded(context, "analytics_advice", false)
                                         }
                                     })
                                 }
@@ -2259,7 +2548,7 @@ private fun ThunBudgetApp() {
                         val pPlanPercent = selectedPeriodCategoryPlan.entries.firstOrNull {
                             it.key.equals(cat.name, ignoreCase = true)
                         }?.value ?: cat.percent
-                        val plan = AnalyticsBudgetCalculator.periodCategoryBudget(
+                        val basePlan = AnalyticsBudgetCalculator.periodCategoryBudget(
                             periodIncome = pEffectiveIncome,
                             monthlyIncomeFallback = calculatedMonthlyIncome,
                             categoryPercent = pPlanPercent,
@@ -2267,6 +2556,8 @@ private fun ThunBudgetApp() {
                             end = pEnd,
                             periodIncomeIsDefined = periodIncomes.any { it.start == pStart.toString() && it.end == pEnd.toString() } || pCarryover != 0.0
                         )
+                        val periodAdjustments = BudgetRedistributionCalculator.netAdjustments(pStart, pEnd, redistributionLedger)
+                        val plan = (basePlan + (periodAdjustments[cat.name] ?: 0.0)).coerceAtLeast(0.0)
                         Card(colors = CardDefaults.cardColors(containerColor = visualPalette.categoryCardSurface)) { Column(Modifier.padding(14.dp)) {
                             Row { Text(cat.name,modifier=Modifier.weight(1f),fontWeight=FontWeight.SemiBold); Text(money(fact),fontWeight=FontWeight.Bold) }
                             val metrics = AnalyticsBudgetCalculator.metrics(plan, fact)
@@ -2350,72 +2641,7 @@ private fun ThunBudgetApp() {
                             )
                         } }
                     }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { Text("Рекомендации по перераспределению",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f)); TextButton(onClick={showAdvice=!showAdvice; persistUiExpanded(context,"analytics_advice",showAdvice)}) { Text(if(showAdvice) "Скрыть" else "Показать") } } }
-                    if(showAdvice) item {
-                        val periodFacts = categories.filterNot { it.name.equals("Перенос средств", true) }.associate { cat ->
-                            cat.name to expenses.filter { it.category == cat.name && it.date >= periodStart && it.date <= periodEnd }.sumOf { it.amount }
-                        }
-                        val selectedStart = LocalDate.parse(periodStart)
-                        val selectedEnd = LocalDate.parse(periodEnd)
-                        // periodFacts already contains expenses dated today.
-                        val forecastFrom = maxOf(today.plusDays(1), selectedStart)
-                        val forecastDays = if (forecastFrom.isAfter(selectedEnd)) 0 else
-                            (java.time.temporal.ChronoUnit.DAYS.between(forecastFrom, selectedEnd) + 1L).toInt()
-                        val periodForecast = BudgetForecastCalculator.calculate(
-                            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name },
-                            expenses = expenses.filterNot { it.category.equals("Перенос средств", true) }.mapNotNull { row ->
-                                runCatching { ForecastExpense(row.category, row.amount, LocalDate.parse(row.date)) }.getOrNull()
-                            },
-                            asOf = today,
-                            firstStartDay = firstPeriodStartDay,
-                            firstEndDay = firstPeriodEndDay,
-                            monthsToAnalyze = 6,
-                            nextPeriodDays = forecastDays,
-                            forecastStartDate = forecastFrom.takeIf { forecastDays > 0 },
-                            forecastEndDate = selectedEnd.takeIf { forecastDays > 0 }
-                        )
-                        val projectedSpend = periodFacts.mapValues { (category, actual) ->
-                            actual + (periodForecast.categories.firstOrNull { it.category == category }?.forecastForPeriod ?: 0.0)
-                        }
-                        val budgetPerPercent = if (effectivePeriodIncome > 0.0) effectivePeriodIncome / 100.0
-                            else plannedForPeriod(income, 1.0, periodStart, periodEnd)
-                        val redistribution = BudgetAllocationCalculator.redistribute(
-                            categories = categories.filterNot { it.name.equals("Перенос средств", true) }.map { it.name to it.percent },
-                            spentByCategory = periodFacts,
-                            budgetPerPercent = budgetPerPercent,
-                            forecastSpentByCategory = projectedSpend,
-                            safetyBufferPercent = 2.0
-                        )
-                        if (redistribution.transfers.isEmpty()) {
-                            Text("Превышений, которые можно покрыть за счёт категорий с достаточным свободным остатком, нет.")
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Предлагаемое перераспределение бюджета:", fontWeight = FontWeight.SemiBold)
-                                redistribution.transfers.forEach { transfer ->
-                                    Text(
-                                        "«${transfer.toCategory}»: +${money(transfer.amount)} из «${transfer.fromCategory}» (свободный остаток до переноса: ${String.format(Locale("ru","RU"), "%.1f", transfer.donorFreePercent)}%).",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                                Text(
-                                    "Сначала используются резервные средства. Технический перенос между периодами не участвует в перераспределении. Затем учитывается прогноз: обычные категории сохраняют запас 2% дохода, а доноры выбираются по свободному остатку.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                FilledTonalButton(
-                                    onClick = {
-                                        store.prepareUndoSnapshot(); canUndo = true
-                                        categories = categories.map { cat ->
-                                            cat.copy(percent = redistribution.updatedPercents[cat.name] ?: cat.percent)
-                                        }
-                                        store.saveCategories(categories, periodStart, periodEnd)
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text("Применить перераспределение") }
-                            }
-                        }
-                    }
-                    item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
+                                        item { Row(verticalAlignment=Alignment.CenterVertically) { if(showSavingsInfo) Text("Цель накоплений: ${savingsGoal.toInt()}% от дохода — ${money(displayedMonthlyIncome*savingsGoal/100)}",style=MaterialTheme.typography.bodyLarge,modifier=Modifier.weight(1f)); TextButton(onClick={showSavingsInfo=!showSavingsInfo; persistUiExpanded(context,"savings_info",showSavingsInfo)}) { Text(if(showSavingsInfo) "Скрыть" else "Показать") } } }
                 }
                 2 -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(padding)) {
                     ChartsScreen(
@@ -2995,6 +3221,10 @@ private fun ThunBudgetApp() {
                 store.prepareUndoSnapshot(); canUndo=true
                 categories=categories.map{if(it.name==oldCat.name) it.copy(name=name,percent=percent) else it}
                 expenses=expenses.map{if(it.category==oldCat.name) it.copy(category=name) else it}
+                recurringPayments = renameRecurringPaymentCategories(recurringPayments, mapOf(oldCat.name to name))
+                store.saveRecurringPayments(recurringPayments)
+                store.renameBudgetRedistributionCategories(mapOf(oldCat.name to name))
+                redistributionLedger=store.loadBudgetRedistributionLedger()
                 store.saveCategories(categories, periodStart, periodEnd); store.saveExpenses(expenses)
             }
             editingCategory=null
@@ -3099,6 +3329,7 @@ private fun ThunBudgetApp() {
         val restored=store.restoreAutomaticBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
+            autoRedistributionEnabled=store.loadAutoRedistributionEnabled(); redistributionLedger=store.loadBudgetRedistributionLedger()
             expenses=store.loadExpenses(); recurringPayments=store.loadRecurringPayments(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1; store.saveSelectedPeriod(-1); backupMessage="Автоматическая резервная копия восстановлена."
@@ -3110,6 +3341,7 @@ private fun ThunBudgetApp() {
         val restored = store.restorePreviousBackup()
         if(restored) {
             income=store.loadIncome(); savingsGoal=store.loadSavingsGoal(); categories=store.loadCategories()
+            autoRedistributionEnabled=store.loadAutoRedistributionEnabled(); redistributionLedger=store.loadBudgetRedistributionLedger()
             expenses=store.loadExpenses(); periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods()
             periodStart=store.loadPeriodStart() ?: periodStart; periodEnd=store.loadPeriodEnd() ?: periodEnd
             selectedPeriod=-1
@@ -3121,6 +3353,10 @@ private fun ThunBudgetApp() {
         if (renameMap.isNotEmpty()) {
             expenses = expenses.map { expense -> expense.copy(category = renameMap[expense.category] ?: expense.category) }
             store.saveExpenses(expenses)
+            recurringPayments = renameRecurringPaymentCategories(recurringPayments, renameMap)
+            store.saveRecurringPayments(recurringPayments)
+            store.renameBudgetRedistributionCategories(renameMap)
+            redistributionLedger = store.loadBudgetRedistributionLedger()
         }
         income=newIncome; savingsGoal=newSavings; categories=newCats; periodStart=start; periodEnd=end; selectedPeriod=-1; store.saveSelectedPeriod(-1); store.savePeriod(start,end)
         store.saveIncome(income); store.saveSavingsGoal(savingsGoal); store.saveCategories(categories, periodStart, periodEnd); showSettings=false    })
@@ -3136,6 +3372,8 @@ private fun ThunBudgetApp() {
                     income=store.loadIncome()
                     savingsGoal=store.loadSavingsGoal()
                     categories=store.loadCategories()
+                    autoRedistributionEnabled=store.loadAutoRedistributionEnabled()
+                    redistributionLedger=store.loadBudgetRedistributionLedger()
                     expenses=store.loadExpenses()
                     periodIncomes=store.loadPeriodIncomes()
                     incomeEntries=store.loadIncomeEntries()
@@ -3182,6 +3420,8 @@ private fun ThunBudgetApp() {
                 expenses=store.loadExpenses(); categories=store.loadCategories(); recurringPayments=store.loadRecurringPayments()
                 periodIncomes=store.loadPeriodIncomes(); incomeEntries=store.loadIncomeEntries(); flexiblePeriods=store.loadFlexiblePeriods(); income=store.loadIncome()
                 savingsGoal=store.loadSavingsGoal()
+                autoRedistributionEnabled=store.loadAutoRedistributionEnabled()
+                redistributionLedger=store.loadBudgetRedistributionLedger()
                 periodStart=store.loadPeriodStart() ?: periodStart
                 periodEnd=store.loadPeriodEnd() ?: periodEnd
                 canUndo=false
@@ -4195,6 +4435,27 @@ private fun SettingsDialog(
                                         categoryPercentTexts=categoryPercentTexts.filterIndexed{idx,_->idx!=index}
                                         sourceNames=sourceNames.filterIndexed{idx,_->idx!=index}
                                     }) { Text("Удалить",color=MaterialTheme.colorScheme.error) }
+                                }
+                                val category = cats[index]
+                                val alwaysProtected = category.name.trim().lowercase(Locale.ROOT).contains("накоп")
+                                val isProtected = category.protectedFromRedistribution
+                                    ?: BudgetRedistributionProtectionDefaults.isProtectedByDefault(category.name)
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        if (alwaysProtected) "Накопления всегда защищены" else "Не использовать как источник средств",
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Switch(
+                                        checked = isProtected || alwaysProtected,
+                                        enabled = !alwaysProtected,
+                                        onCheckedChange = { checked ->
+                                            cats = cats.toMutableList().also {
+                                                it[index] = it[index].copy(protectedFromRedistribution = checked)
+                                            }
+                                        }
+                                    )
                                 }
                             }
                         }

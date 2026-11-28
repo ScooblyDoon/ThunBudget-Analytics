@@ -6,6 +6,7 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
+import java.util.Locale
 
 data class RecurringPayment(
     val id: String = UUID.randomUUID().toString(),
@@ -28,6 +29,17 @@ data class RecurringPayment(
 
     fun canConfirm(month: YearMonth, today: LocalDate): Boolean =
         active && !dueDate(month).isAfter(today) && !isCompleted(month)
+}
+
+internal fun renameRecurringPaymentCategories(
+    payments: List<RecurringPayment>,
+    renameMap: Map<String, String>
+): List<RecurringPayment> {
+    val normalized = renameMap.entries.associate { it.key.trim().lowercase(Locale.ROOT) to it.value }
+    return payments.map { payment ->
+        val renamed = normalized[payment.category.trim().lowercase(Locale.ROOT)] ?: payment.category
+        if (renamed == payment.category) payment else payment.copy(category = renamed)
+    }
 }
 
 class RecurringPaymentStore(context: Context) {

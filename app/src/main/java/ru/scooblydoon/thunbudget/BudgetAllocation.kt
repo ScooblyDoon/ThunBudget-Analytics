@@ -66,9 +66,22 @@ object BudgetAllocationCalculator {
     fun freePercent(cap: Double, spent: Double): Double? =
         if (cap > 0.0) (cap - spent) / cap * 100.0 else null
 
+    data class Deficit(
+        val category: String,
+        val actualSpend: Double,
+        val projectedSpend: Double,
+        val plannedAmount: Double,
+        val amount: Double
+    )
     data class Transfer(val fromCategory: String, val toCategory: String, val amount: Double, val donorFreePercent: Double)
-    data class Redistribution(val transfers: List<Transfer>, val updatedPercents: Map<String, Double>) {
+    data class Redistribution(
+        val transfers: List<Transfer>,
+        val updatedPercents: Map<String, Double>,
+        val deficits: List<Deficit> = emptyList(),
+        val uncoveredByCategory: Map<String, Double> = emptyMap()
+    ) {
         val totalTransferred: Double get() = transfers.sumOf { it.amount }
+        val totalUncovered: Double get() = uncoveredByCategory.values.sumOf { it.coerceAtLeast(0.0) }
     }
 
     /**
@@ -77,16 +90,24 @@ object BudgetAllocationCalculator {
      *
      * forecastSpentByCategory is the expected total spend for the selected period
      * (actual spend to date plus the forecast for its remaining days). Ordinary
-     * donors keep a safety margin of [safetyBufferPercent] percentage points.
+     * donors share one global safety buffer of [safetyBufferPercent] percent of period income.
+     * [protectedDonorCategories] and name-based critical categories are never used as donors.
+     * When [donorEvidenceAvailableCategories] is supplied, ordinary categories without usable history
+     * are excluded. [donorForecastSpentByCategory] should use the conservative upper forecast.
      */
     fun redistribute(
         categories: List<Pair<String, Double>>,
         spentByCategory: Map<String, Double>,
         budgetPerPercent: Double,
         forecastSpentByCategory: Map<String, Double> = emptyMap(),
-        safetyBufferPercent: Double = 2.0
+        safetyBufferPercent: Double = 2.0,
+        protectedDonorCategories: Set<String> = emptySet(),
+        donorEvidenceAvailableCategories: Set<String>? = null,
+        donorForecastSpentByCategory: Map<String, Double> = forecastSpentByCategory
     ): Redistribution {
-        if (budgetPerPercent <= 0.0) return Redistribution(emptyList(), categories.toMap())
+        if (!budgetPerPercent.isFinite() || budgetPerPercent < 0.0) {
+            return Redistribution(emptyList(), categories.toMap())
+        }
 
         // "Перенос средств" is a technical period-closing entry, never a
         // spending category, deficit, reserve or donor in redistribution.
@@ -97,6 +118,18 @@ object BudgetAllocationCalculator {
         fun isReserve(name: String): Boolean =
             name.equals(RESERVE_CATEGORY, ignoreCase = true) ||
                 name.equals("Непредвиденные расходы", ignoreCase = true)
+        val protectedNames = protectedDonorCategories.mapTo(mutableSetOf()) {
+            it.trim().lowercase(java.util.Locale.ROOT)
+        }
+        val evidenceNames = donorEvidenceAvailableCategories?.mapTo(mutableSetOf()) {
+            it.trim().lowercase(java.util.Locale.ROOT)
+        }
+        fun isProtected(name: String): Boolean =
+            name.equals("Накопления", ignoreCase = true) ||
+                name.trim().lowercase(java.util.Locale.ROOT) in protectedNames ||
+                BudgetRedistributionProtectionDefaults.isProtectedByDefault(name)
+        fun hasEvidence(name: String): Boolean =
+            evidenceNames == null || name.trim().lowercase(java.util.Locale.ROOT) in evidenceNames
 
         val updated = categories.toMap().toMutableMap()
         val caps = budgetCategories.associate { it.first to it.second.coerceAtLeast(0.0) * budgetPerPercent }
@@ -105,26 +138,34 @@ object BudgetAllocationCalculator {
             name to maxOf(actual[name] ?: 0.0, (forecastSpentByCategory[name] ?: actual[name] ?: 0.0).coerceAtLeast(0.0))
         }
 
+        // Cover both an existing overspend and a predicted end-of-period overspend.
+        // The current fact is retained for the proposal UI; the transfer amount is
+        // based on the forecasted total spend, not only the amount already spent.
         val deficits = budgetCategories.mapNotNull { (name, _) ->
-            val deficit = (actual[name] ?: 0.0) - (caps[name] ?: 0.0)
-            if (deficit > 0.0001 && !isReserve(name)) name to deficit else null
-        }.sortedByDescending { it.second }
+            val actualSpend = actual[name] ?: 0.0
+            val projectedSpend = projected[name] ?: actualSpend
+            val plannedAmount = caps[name] ?: 0.0
+            val deficit = projectedSpend - plannedAmount
+            if (deficit > 0.0001 && !isReserve(name)) {
+                Deficit(name, actualSpend, projectedSpend, plannedAmount, deficit)
+            } else {
+                null
+            }
+        }.sortedByDescending { it.amount }
 
-        val bufferAmount = safetyBufferPercent.coerceAtLeast(0.0) * budgetPerPercent
+        val globalOrdinaryBuffer = (safetyBufferPercent.takeIf { it.isFinite() } ?: 0.0)
+            .coerceAtLeast(0.0) * budgetPerPercent
         val donors = budgetCategories.mapNotNull { (name, _) ->
             val cap = caps[name] ?: 0.0
-            val actualSpent = actual[name] ?: 0.0
-            val projectedSpend = projected[name] ?: actualSpent
-            val effectiveFreePercent = freePercent(cap, projectedSpend)
+            val donorForecastSpend = donorForecastSpentByCategory[name]
+                ?: (projected[name] ?: (actual[name] ?: 0.0))
+            val conservativeSpend = maxOf(actual[name] ?: 0.0, donorForecastSpend.coerceAtLeast(0.0))
+            val effectiveFreePercent = freePercent(cap, conservativeSpend)
             val reserve = isReserve(name)
-            val available = if (reserve) {
-                (cap - actualSpent).coerceAtLeast(0.0)
-            } else {
-                (cap - projectedSpend - bufferAmount).coerceAtLeast(0.0)
-            }
+            val available = (cap - conservativeSpend).coerceAtLeast(0.0)
             val eligible = cap > 0.0 && available > 0.0001 &&
-                (reserve || (effectiveFreePercent != null && effectiveFreePercent > 5.0)) &&
-                !name.equals("Накопления", ignoreCase = true)
+                !isProtected(name) &&
+                (reserve || (hasEvidence(name) && effectiveFreePercent != null && effectiveFreePercent > 5.0))
             if (eligible) Triple(name, available, effectiveFreePercent ?: 100.0) else null
         }.sortedWith(
             compareByDescending<Triple<String, Double, Double>> { isReserve(it.first) }
@@ -132,28 +173,44 @@ object BudgetAllocationCalculator {
                 .thenByDescending { it.third }
                 .thenByDescending { it.second }
         )
+        // Hold one safety buffer across the combined ordinary-donor pool.
+        // Subtracting the same 2% from every donor multiplies the reserve by donor count.
+        var ordinaryDonorAvailable = (
+            donors.filterNot { isReserve(it.first) }.sumOf { it.second } - globalOrdinaryBuffer
+        ).coerceAtLeast(0.0)
 
         val transfers = mutableListOf<Transfer>()
+        val uncoveredByCategory = mutableMapOf<String, Double>()
         val donorRemaining = donors.associate { it.first to it.second }.toMutableMap()
-        deficits.forEach { (target, deficit) ->
-            var uncovered = deficit
+        deficits.forEach { deficit ->
+            var uncovered = deficit.amount
             donors.forEach donorLoop@ { donor ->
-                if (uncovered <= 0.0001 || donor.first == target) return@donorLoop
-                val available = donorRemaining[donor.first] ?: 0.0
+                if (uncovered <= 0.0001 || donor.first == deficit.category) return@donorLoop
+                val donorRemainingAmount = donorRemaining[donor.first] ?: 0.0
+                if (donorRemainingAmount <= 0.0) return@donorLoop
+                val available = if (isReserve(donor.first)) {
+                    donorRemainingAmount
+                } else {
+                    minOf(donorRemainingAmount, ordinaryDonorAvailable)
+                }
                 if (available <= 0.0) return@donorLoop
                 val amount = minOf(uncovered, available)
-                transfers += Transfer(donor.first, target, amount, donor.third)
-                donorRemaining[donor.first] = available - amount
+                transfers += Transfer(donor.first, deficit.category, amount, donor.third)
+                donorRemaining[donor.first] = donorRemainingAmount - amount
+                if (!isReserve(donor.first)) ordinaryDonorAvailable -= amount
                 uncovered -= amount
             }
+            if (uncovered > 0.0001) uncoveredByCategory[deficit.category] = uncovered
         }
 
-        transfers.forEach { transfer ->
-            val points = transfer.amount / budgetPerPercent
-            updated[transfer.toCategory] = (updated[transfer.toCategory] ?: 0.0) + points
-            updated[transfer.fromCategory] = ((updated[transfer.fromCategory] ?: 0.0) - points).coerceAtLeast(0.0)
+        if (budgetPerPercent > 0.0) {
+            transfers.forEach { transfer ->
+                val points = transfer.amount / budgetPerPercent
+                updated[transfer.toCategory] = (updated[transfer.toCategory] ?: 0.0) + points
+                updated[transfer.fromCategory] = ((updated[transfer.fromCategory] ?: 0.0) - points).coerceAtLeast(0.0)
+            }
         }
-        return Redistribution(transfers, updated)
+        return Redistribution(transfers, updated, deficits, uncoveredByCategory)
     }
 
     private fun donorTier(freePercent: Double): Int = when {
@@ -191,5 +248,24 @@ object BudgetAllocationCalculator {
         } else {
             result
         }
+    }
+}
+
+
+/**
+ * Existing categories with predictable essential obligations are conservatively
+ * protected when loading older backups that do not yet store a protection flag.
+ * A stored user choice takes precedence in the category repository.
+ */
+object BudgetRedistributionProtectionDefaults {
+    fun isProtectedByDefault(categoryName: String): Boolean {
+        val normalized = categoryName.trim()
+            .lowercase(java.util.Locale.ROOT)
+            .replace('ё', 'е')
+        val protectedTerms = listOf(
+            "жиль", "аренд", "коммун", "жкх", "ипотек", "кредит", "долг",
+            "страх", "налог", "накоп"
+        )
+        return protectedTerms.any(normalized::contains)
     }
 }
