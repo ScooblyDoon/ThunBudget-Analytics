@@ -259,11 +259,8 @@ object BudgetRedistributionCalculator {
     ): List<AppliedBudgetRedistributionTransfer> {
         require(proposal.transfers.isNotEmpty()) { "В предложении нет переводов для применения." }
         require(proposal.fingerprint.matches(Regex("[0-9a-f]{64}"))) { "Некорректный отпечаток предложения." }
-        require(existingLedger.none { it.proposalFingerprint == proposal.fingerprint }) {
+        check(existingLedger.none { it.proposalFingerprint == proposal.fingerprint }) {
             "Это предложение уже было применено."
-        }
-        require(existingLedger.all { it.proposalFingerprint != proposal.fingerprint }) {
-            "В журнале уже есть такое предложение."
         }
         val added = proposal.transfers.map { transfer ->
             AppliedBudgetRedistributionTransfer(
