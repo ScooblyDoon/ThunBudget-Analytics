@@ -84,7 +84,8 @@ object BudgetRedistributionCalculator {
         periodStart: LocalDate,
         periodEnd: LocalDate,
         periodIncome: Double,
-        categories: List<RedistributionCategoryInput>
+        categories: List<RedistributionCategoryInput>,
+        fingerprintCategories: List<RedistributionCategoryInput> = categories
     ): BudgetRedistributionProposal {
         require(!periodEnd.isBefore(periodStart)) { "Некорректные даты отчётного периода." }
         require(periodIncome.isFinite()) { "Доход периода должен быть конечным числом." }
@@ -92,8 +93,15 @@ object BudgetRedistributionCalculator {
             "Названия категорий должны быть уникальными."
         }
         categories.forEach(::validateInput)
+        require(fingerprintCategories.map { normalized(it.name) }.distinct().size == fingerprintCategories.size) {
+            "Названия категорий для отпечатка должны быть уникальными."
+        }
+        require(fingerprintCategories.map { normalized(it.name) }.toSet() == categories.map { normalized(it.name) }.toSet()) {
+            "Набор категорий для расчёта и отпечатка должен совпадать."
+        }
+        fingerprintCategories.forEach(::validateInput)
 
-        val inputFingerprint = fingerprint(periodStart, periodEnd, periodIncome, categories)
+        val inputFingerprint = fingerprint(periodStart, periodEnd, periodIncome, fingerprintCategories)
         val usableIncome = periodIncome.coerceAtLeast(0.0)
         val incomeAllowsTransfers = periodIncome > 0.0
 

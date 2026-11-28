@@ -228,6 +228,38 @@ class BudgetRedistributionEngineTest {
     }
 
     @Test
+    fun appliedTransferFingerprintRemainsStableWhenAdjustedPlanIsRecalculated() {
+        val baseInputs = listOf(
+            category("Транспорт", 100.0, actual = 300.0),
+            category("Резервные средства", 500.0)
+        )
+        val first = BudgetRedistributionCalculator.calculate(start, end, 1_000.0, baseInputs)
+        val ledger = BudgetRedistributionCalculator.appendAppliedTransfers(
+            first, emptyList(), "2026-11-28T10:00:00Z"
+        )
+        val adjustments = BudgetRedistributionCalculator.netAdjustments(start, end, ledger)
+        val adjustedInputs = baseInputs.map { input ->
+            input.copy(plannedAmount = input.plannedAmount + (adjustments[input.name] ?: 0.0))
+        }
+        val recalculated = BudgetRedistributionCalculator.calculate(
+            start,
+            end,
+            1_000.0,
+            adjustedInputs,
+            fingerprintCategories = baseInputs
+        )
+
+        assertEquals(first.fingerprint, recalculated.fingerprint)
+        assertFalse(
+            BudgetRedistributionCalculator.shouldApplyAutomatically(
+                enabled = true,
+                proposal = recalculated,
+                existingLedger = ledger
+            )
+        )
+    }
+
+    @Test
     fun proposalExposesTransferableAmountAfterGlobalSafetyBuffer() {
         val proposal = BudgetRedistributionCalculator.calculate(
             start, end, 10_000.0,

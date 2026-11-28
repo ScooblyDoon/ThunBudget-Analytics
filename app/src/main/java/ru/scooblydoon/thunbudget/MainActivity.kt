@@ -1105,14 +1105,12 @@ private fun ThunBudgetApp() {
     }
     val redistributionPeriodBudget =
         if (periodIncomeRow != null || carryoverIncome != 0.0) effectivePeriodIncome else planned
-    val redistributionPlannedAmounts = categories
+    val redistributionBasePlannedAmounts = categories
         .filterNot { it.name.equals("Перенос средств", true) }
-        .associate { category ->
-            category.name to (
-                overviewCategoryBaseBudget(category.name) +
-                    (selectedPeriodRedistributionAdjustments[category.name] ?: 0.0)
-                ).coerceAtLeast(0.0)
-        }
+        .associate { category -> category.name to overviewCategoryBaseBudget(category.name).coerceAtLeast(0.0) }
+    val redistributionPlannedAmounts = redistributionBasePlannedAmounts.mapValues { (name, baseAmount) ->
+        (baseAmount + (selectedPeriodRedistributionAdjustments[name] ?: 0.0)).coerceAtLeast(0.0)
+    }
     val currentBudgetRedistributionProposal = remember(
         selectedOverviewPeriodStart, selectedOverviewPeriodEnd, redistributionPeriodBudget,
         categories, expenses, recurringPayments, redistributionForecast, redistributionPlannedAmounts, today
@@ -1131,7 +1129,15 @@ private fun ThunBudgetApp() {
             periodStart = selectedOverviewPeriodStart,
             periodEnd = selectedOverviewPeriodEnd,
             periodIncome = redistributionPeriodBudget,
-            categories = inputs
+            categories = inputs,
+            // Calculate against the effective (already adjusted) budgets, but
+            // fingerprint the original period plan so a restart cannot apply
+            // the very same transfer proposal a second time.
+            fingerprintCategories = inputs.map { input ->
+                input.copy(
+                    plannedAmount = redistributionBasePlannedAmounts[input.name] ?: input.plannedAmount
+                )
+            }
         )
     }
 
